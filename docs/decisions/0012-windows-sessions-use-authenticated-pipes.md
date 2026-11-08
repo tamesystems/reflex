@@ -61,7 +61,9 @@ outgoing frame, including acknowledgement-only frames, consumes the byte/frame b
 until a cumulative, validated receipt arrives. Only data frames cause an acknowledgement;
 acknowledgements do not echo each other indefinitely. This bounds native buffers even
 for an authenticated peer sending notifications while refusing to read. A stalled
-JavaScript peer is tested in a separate real process.
+JavaScript peer is tested in a separate real process. Windows shutdown waits for the
+reply's validated receipt or peer disconnect before exiting, with a five-second
+fallback deadline; merely queueing a native write is not sufficient.
 
 Handshake time, line length, frame count, frame length, connections and write queues are
 bounded in protocol/limits.ts.

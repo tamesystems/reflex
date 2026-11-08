@@ -31,6 +31,13 @@ export class LocalCipher {
     private readonly incoming: Buffer,
   ) {}
 
+  get sentFrames(): number {
+    return this.sent
+  }
+  get acknowledgedFrames(): number {
+    return this.acknowledged
+  }
+
   encode(line: string | null, maximumBytes = WRITE_QUEUE_BYTES_MAX): string {
     const token = randomBytes(LOCAL_RECEIPT_BYTES).toString("hex")
     const header = `${this.received}:${this.receivedToken}:${line === null ? "a" : "d"}\n`

@@ -42,7 +42,9 @@ answers on its socket, or reports why it failed. The module must export an `AppH
   over its lifetime, with room reserved for the reason it failed, and removes the file after
   a clean run. A stdio session uses the same budget on stderr.
 - **Stopping.** `reflex stop` asks over the socket and never signals a process, because a
-  recorded pid may have been reused. A hung session must be killed by hand.
+  recorded pid may have been reused. A hung session must be killed by hand. Windows
+  waits for its shutdown reply receipt, peer disconnect, or a five-second deadline
+  before disposing the session and exiting.
 - **stdio.** `reflex serve --stdio` ends when stdin closes, once requests in flight are
   answered (up to 5 s). Losing stdout, or a peer that lets 32 MiB of replies queue, ends it
   at once. Either way the app is disposed.

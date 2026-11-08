@@ -984,7 +984,7 @@ test("authenticated transport admits JSON-RPC only after mutual authentication",
   cleanups.push(() => client.close())
   expect(await client.request("app.describe", {})).toMatchObject({ app: "inventory" })
   await client.request("session.shutdown", {})
-  expect(shutdowns).toBe(1)
+  await waitUntil(() => shutdowns === 1, "the shutdown reply is acknowledged")
 })
 
 /** Stop the peer's JS thread: native reads alone cannot return proof-of-read credits. */

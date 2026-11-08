@@ -71,7 +71,8 @@ packages/
               connection to a Controller; client.ts the other end; socket.ts the Unix socket, Windows pipe and stdio transports;
               local-auth.ts authenticates Windows pipe peers; local-cipher.ts encrypts
               frames and validates proof-of-read credits for bounded native buffers;
-              socket-writer.ts counts queued bytes until write callbacks complete; bridge-controller.ts a Controller that
+              socket-writer.ts counts queued bytes until write callbacks complete;
+              socket-shutdown.ts waits for the Windows shutdown reply receipt; bridge-controller.ts a Controller that
               forwards to whichever app is connected.
   effect/     How an Effect app becomes nodes. capability.ts (defineCapability, mount),
               navigation.ts (defineNavigation: the stack, a scope per screen),

@@ -17,6 +17,7 @@ import {
 } from "@reflex/runtime"
 import { type Client, createClient } from "./client.ts"
 import { authenticateLocal, type LocalCipher } from "./local-auth.ts"
+import { socketShutdown } from "./socket-shutdown.ts"
 import { socketWriter } from "./socket-writer.ts"
 import { FrameSink } from "./frame-sink.ts"
 import { createConnection, createEventEncoder } from "./server.ts"
@@ -116,6 +117,7 @@ export const serveSocket = (
     const encodeEvent = createEventEncoder(report)
     const attach = (socket: Socket, cipher?: LocalCipher): void => {
       const write = socketWriter(socket, writeQueueBytesMax)
+      const shutdown = socketShutdown(cipher, options.onShutdown)
       const connection = createConnection(
         controller,
         (line) => {
@@ -133,7 +135,7 @@ export const serveSocket = (
         },
         {
           encodeEvent,
-          ...(options.onShutdown === undefined ? {} : { onShutdown: options.onShutdown }),
+          ...(options.onShutdown === undefined ? {} : { onShutdown: shutdown.request }),
           ...(options.onBackgroundError === undefined
             ? {}
             : { onBackgroundError: options.onBackgroundError }),
@@ -143,6 +145,7 @@ export const serveSocket = (
         onLine: (line) => {
           try {
             const decoded = cipher === undefined ? line : cipher.decode(line)
+            shutdown.received()
             if (decoded !== null) {
               if (
                 cipher !== undefined &&
@@ -161,8 +164,14 @@ export const serveSocket = (
         onOverflow: () => socket.destroy(),
       })
       socket.on("data", read)
-      socket.on("close", () => connection.close())
-      socket.on("error", () => connection.close())
+      socket.on("close", () => {
+        connection.close()
+        shutdown.closed()
+      })
+      socket.on("error", () => {
+        connection.close()
+        shutdown.closed()
+      })
       socket.resume()
     }
     const server = createServer((socket) => {

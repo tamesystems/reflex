@@ -121,3 +121,5 @@ export const LOCAL_ENCRYPTED_FRAME_CHARACTERS_MAX = FRAME_CHARACTERS_MAX * 4 + 5
 /** Proof-of-read credits also bound Bun's native Windows pipe writer queue. */
 export const LOCAL_UNACKNOWLEDGED_FRAMES_MAX = 65_536
 export const LOCAL_RECEIPT_BYTES = 16
+
+export const LOCAL_SHUTDOWN_RECEIPT_TIMEOUT_MS = 5_000
