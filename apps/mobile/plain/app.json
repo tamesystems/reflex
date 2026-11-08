@@ -1,0 +1,7 @@
+{
+  "expo": {
+    "name": "reflex-plain",
+    "slug": "reflex-plain",
+    "web": { "bundler": "metro", "output": "single" }
+  }
+}

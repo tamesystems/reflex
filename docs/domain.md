@@ -53,7 +53,11 @@ returns `true` or why not, and a handler. Its input schema is published as JSON 
 **failed** (with a typed error, or a **defect** for a bug) or **cancelled**. Dispatch returns
 it as soon as it is **accepted**; that is not completion.
 
-**Focus.** The screen the user is on: the top of the navigation stack. Getting focus starts
+**Public projection.** The explicit JSON-only view of an existing store published by
+`mountStore`. It excludes secrets and internal machinery; the store remains application-owned.
+
+**Focus.** The screen the user is on: the top of the core navigation stack, or the screen
+reported by an existing router through `useNodeFocus`. With Effect navigation, getting focus starts
 the screen's `onFocus`, as a tracked operation.
 
 **Route**, **stack**, **entry**. A route is a kind of screen with a params schema; the stack

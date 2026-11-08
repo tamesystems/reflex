@@ -1,6 +1,6 @@
 import { LOW_STOCK_THRESHOLD_MAX } from "@reflex/example-inventory/domain.ts"
 import { Settings } from "@reflex/example-inventory/features/settings.ts"
-import { send, useNodeState, useRouteNode } from "@reflex/expo"
+import { send, useNodeState, useRouteNode } from "@reflex/expo/effect"
 import { Text } from "react-native"
 import { Action, Screen, styles } from "../src/ui.tsx"
 

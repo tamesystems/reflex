@@ -1,6 +1,11 @@
-import { type ActionsOf, type Capability, type LiveNode, liveNodeOf } from "@reflex/effect"
-import { assertNever, isRecord } from "@reflex/protocol"
-import { type AppHost, type AppSession, type Controller, systemTimers } from "@reflex/runtime"
+import { assertNever, isRecord, type NodeId } from "@reflex/protocol"
+import {
+  type AppHost,
+  type AppSession,
+  type Controller,
+  type Runtime,
+  systemTimers,
+} from "@reflex/runtime"
 import {
   router,
   useGlobalSearchParams,
@@ -9,6 +14,7 @@ import {
   useSegments,
 } from "expo-router"
 import * as React from "react"
+import { nodeSource, reportFocus } from "./node-source.ts"
 import { corePortOf, stackReader } from "./core-port.ts"
 import { type Destination, NODE_PARAM, type RouterLocation, type StackEntry } from "./projection.ts"
 import { ProjectionController } from "./projection-controller.ts"
@@ -135,15 +141,15 @@ export const routeParam = (value: string | ReadonlyArray<string> | undefined): s
  * an entry from a deep link is found by `params`, once the core has adopted it.
  * It keeps its last state after the core pops it, so a screen can animate out.
  */
-export const useRouteNode = <S, A extends ActionsOf<S>, R>(
-  capability: Capability<S, A, R>,
+export const useRouteNode = <N,>(
+  resolve: (runtime: Runtime, nodeId: NodeId) => N | undefined,
   params?: Record<string, unknown>,
-): LiveNode<S, A> | null => {
+): N | null => {
   const { runtime } = useSession()
   const stack = useCoreStack()
   const token = routeParam(useLocalSearchParams()[NODE_PARAM])
   const key = JSON.stringify([token, params])
-  const bound = React.useRef<{ key: string; node: LiveNode<S, A> } | null>(null)
+  const bound = React.useRef<{ key: string; node: N } | null>(null)
   const node =
     bound.current?.key === key
       ? bound.current.node
@@ -151,7 +157,7 @@ export const useRouteNode = <S, A extends ActionsOf<S>, R>(
           stack,
           token,
           params,
-          resolve: (nodeId) => liveNodeOf(runtime, nodeId, capability),
+          resolve: (nodeId) => resolve(runtime, nodeId),
         })
 
   // Kept across renders, so that a screen stays on its node after the core pops it.
@@ -167,7 +173,10 @@ export const useRouteNode = <S, A extends ActionsOf<S>, R>(
 const noSubscription = () => () => undefined
 
 /** The part of a node a subscriber needs. */
-type StateSource<S> = Pick<LiveNode<S, never>, "getSnapshot" | "subscribe">
+export interface StateSource<S> {
+  getSnapshot(): S
+  subscribe(listener: () => void): () => void
+}
 
 /** Subscribe to a node the way any external store is subscribed to. */
 export const useNodeState = <S,>(node: StateSource<S> | null): S | null =>
@@ -287,4 +296,21 @@ export const RouterProjection = ({
   React.useEffect(() => controller.onLocation(location), [controller, location])
 
   return null
+}
+
+/** Report focus from an existing router; cleanup never clears a newer screen's focus. */
+export const useNodeFocus = (nodeId: NodeId | null, focused: boolean): void => {
+  const { runtime } = useSession()
+  React.useEffect(() => {
+    if (!focused || nodeId === null) {
+      return undefined
+    }
+    return reportFocus(runtime, nodeId)
+  }, [runtime, nodeId, focused])
+}
+
+/** Bind a public node handle without assumptions about the adapter's live object. */
+export const useNode = (id: NodeId | null) => {
+  const { runtime } = useSession()
+  return React.useMemo(() => (id === null ? null : nodeSource(runtime, id)), [runtime, id])
 }

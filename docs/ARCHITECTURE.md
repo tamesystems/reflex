@@ -68,7 +68,9 @@ packages/
   runtime/    Node registry, operations, waits, event log (runtime.ts), the
               SessionController that starts, resets and closes sessions (controller.ts),
               and restrictController, which holds any controller to a policy.
-              No Effect, no platform APIs. Start: runtime.ts, then controller.ts.
+              store-node.ts wraps existing stores with public JSON projections, Standard Schema
+              validation and Promise operations. No Effect, no platform APIs.
+              Start: runtime.ts, then controller.ts.
   rpc/        JSON-RPC 2.0 over newline-delimited JSON. server.ts is one peer's
               connection to a Controller; client.ts the other end; socket.ts the Unix socket, Windows pipe and stdio transports;
               local-auth.ts authenticates Windows pipe peers; local-cipher.ts encrypts
@@ -83,16 +85,18 @@ packages/
   cli/        The reflex command. cli.ts parses; commands.ts does; session.ts runs and
               finds daemons; bridge-server.ts accepts apps; mcp.ts serves MCP tools.
               See packages/cli/README.md.
-  expo/       React bindings (react.tsx), the Expo Router projection (projection.ts,
+  expo/       Generic React bindings (react.tsx, node-source.ts), explicit Effect capability
+              bindings (effect.tsx), the Expo Router projection (projection.ts,
               projection-controller.ts), the app's side of the bridge (bridge.ts,
               live-sessions.ts, live-controller.ts). See packages/expo/README.md.
 examples/
   inventory/  A three-screen app core with fixture scenarios. Imports only Effect and
               @reflex/effect: no React, no Expo.
+  plain/      Real Zustand/Zod app core, no Effect; rendered by apps/mobile/plain.
 apps/
   mobile/     The same inventory core rendered by Expo Router. Own install. e2e/ holds
-              the browser journeys, hermes-smoke/ runs a journey on a Hermes VM.
-test/         Cross-package suites: conformance (Effect, plain store, XState, Effect live),
+              the browser journeys (including the isolated plain Expo entry), hermes-smoke/ runs a journey on a Hermes VM.
+test/         Cross-package suites: conformance (Effect, Zustand, XState, Effect/Zustand live),
               xstate-counter.ts (test-only NodeAdapter), xstate.test.ts (actor semantics),
               boundaries (the dependency rules), lifecycle, the bridge end to end.
 bench/        Wire and encoding costs.
@@ -106,13 +110,17 @@ experiments/  Prototypes kept as evidence for a decision: effect-rpc/ serves the
 protocol ◄── runtime ◄── rpc ◄── test
     ▲           ▲         ▲  ◄── cli
     │           │         │
-    └──── effect ◄────── expo (uses rpc/connection only) ◄── apps/mobile
-                ▲
-     examples/inventory
+    └──── effect ◄────── expo/effect ──► expo
+             ▲                           ▲
+    examples/inventory              apps/mobile
+
+runtime ◄── expo ──► rpc/connection
+runtime ◄── examples/plain (Zustand/Zod are example dev dependencies only)
 ```
 
 - `protocol` depends on nothing. `runtime` depends only on `protocol`.
 - Nothing below `effect` imports Effect; `test` and `cli` need no Effect and no app.
+- The generic `expo` entry imports no Effect. Only `expo/effect` does capability lookup.
 - `expo` reaches `rpc` only through `@reflex/rpc/connection`, which has no Node APIs.
 - An app core (`examples/inventory`) never imports React, Expo or a device API.
 - Only `packages/expo/src/router-actions.ts` imports Expo Router's private modules.
@@ -287,7 +295,8 @@ rotates its local secret only after obtaining its lock; the device bridge token 
 - **Identity.** Node handles name their session (`screen/InventoryDetail/session-ab12-1/4`),
   so a handle from before a reset cannot match anything after it. Revisions count changes;
   sequences count events; a cursor is a session id and a sequence.
-- **Secrets.** `Schema.Redacted` values are replaced before any state, error data or route
+- **Secrets.** Store nodes require an explicit safe projection; there is no automatic
+  redaction on that path. Effect `Schema.Redacted` values are replaced before any state, error data or route
   param is encoded. Unusual cases fail closed rather than leak
   ([ADR 0011](decisions/0011-secrets-fail-closed.md)).
 - **Errors.** Expected outcomes are `ProtocolError`s with a code from
@@ -304,23 +313,30 @@ rotates its local secret only after obtaining its lock; the device bridge token 
 
 What must stay true when you change things. Most have a test; the test names say which.
 
-- **The core is the source of truth.** Navigation lives in the `Navigation` node; the
-  router is a projection. App code navigates through actions, never `router.replace`.
-- **State is written only through `StateAccess`.** Action handlers and `onFocus` receive
+- **Core-owned navigation is authoritative when adopted.** Navigation lives in the `Navigation` node; the
+  router is a projection. App code in that mode navigates through actions, never `router.replace`.
+  Incremental adopters keep their router, report focus, and do not mount RouterProjection.
+- **Effect state is written only through `StateAccess`.** Action handlers and `onFocus` receive
   it; an owner that mounts with `mountWithAccess` holds it too. Nothing else can write a
   node's state.
-- **State is immutable.** An update returns a new value. Returning the same object is
+- **Effect state is immutable.** An update returns a new value. Returning the same object is
   taken as no change: no encoding, no event, no new revision. The UI reads the decoded
   value; the protocol reads its encoded, redacted copy, so mutating in place would
   silently separate the two.
+- **Store state has a public boundary.** mountStore requires a bounded, checked JSON
+  projection, retains a detached frozen copy, and emits no event for identical public
+  JSON. Application stores retain write ownership; invalid external writes cannot be
+  rolled back. Availability dependencies belong in that projection.
 - **Accepted is not completed.** `app.dispatch` answers once an operation is recorded.
   Its outcome is an `operation.finished` event or a wait.
 - **Screens are actionable only while focused.** Navigation, service and fixture nodes
   are ambient and actionable always. An action without a node goes to the focused screen
   first, then to the one ambient node that has it, else it is ambiguous.
-- **Popping a screen cancels its work.** Each screen owns a scope; popping it interrupts
+- **Popping a core-owned screen cancels its work.** Each screen owns a scope; popping it interrupts
   every running action and its `onFocus`. Pushing another screen on top only takes its
-  focus: it refuses new actions, but work already running carries on.
+  focus: it refuses new actions, but work already running carries on. Existing routers
+  report focus with useNodeFocus and must dispose their own popped nodes; store work
+  cancels cooperatively through AbortSignal.
 - **Nothing survives a reset.** Handles, operations and waits belong to one session.
   Pending waits reject with `SessionClosed`; a cursor from another session always gets
   `resync.required`.
@@ -357,6 +373,7 @@ What must stay true when you change things. Most have a test; the test names say
 | [0013](decisions/0013-access-policies.md)                           | Access policies: observe, an action allowlist, or control        |
 | [0014](decisions/0014-keep-the-hand-written-wire.md)                | Keep the hand-written wire rather than adopt Effect RPC          |
 | [0015](decisions/0015-xstate-fits-the-node-adapter.md)              | XState fits NodeAdapter with explicit event-completion semantics |
+| [0016](decisions/0016-adoption-without-effect.md)                   | Existing stores, public projections and generic Expo bindings    |
 
 ## 9. Influences
 

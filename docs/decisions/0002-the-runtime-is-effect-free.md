@@ -25,3 +25,6 @@ imports nothing but the protocol. `@reflex/effect` is one adapter, built on capa
 
 2026-11-08 follow-up: [ADR 0015](0015-xstate-fits-the-node-adapter.md) tests this boundary
 with XState actors and records event completion, asynchronous work and disposal semantics.
+
+2026-11-08 follow-up: [ADR 0016](0016-adoption-without-effect.md) adds generic Expo bindings
+and a store helper; capability bindings move to the explicit Effect entry.

@@ -57,6 +57,8 @@ jobs:
         working-directory: apps/mobile
       - run: bun run e2e
         working-directory: apps/mobile
+      - run: bun run e2e:plain
+        working-directory: apps/mobile
       - run: bun run e2e:live
         if: runner.os == 'Windows'
         working-directory: apps/mobile

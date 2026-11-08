@@ -7,7 +7,8 @@
   "exports": {
     ".": "./src/react.tsx",
     "./projection": "./src/projection.ts",
-    "./bridge": "./src/bridge.ts"
+    "./bridge": "./src/bridge.ts",
+    "./effect": "./src/effect.tsx"
   },
   "dependencies": {
     "@reflex/effect": "workspace:*",

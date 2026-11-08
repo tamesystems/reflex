@@ -1,5 +1,5 @@
 import { InventoryDetail } from "@reflex/example-inventory/features/inventory-detail.ts"
-import { routeParam, send, useNodeState, useRouteNode } from "@reflex/expo"
+import { routeParam, send, useNodeState, useRouteNode } from "@reflex/expo/effect"
 import { useLocalSearchParams } from "expo-router"
 import { Text } from "react-native"
 import { Action, Screen, styles } from "../../src/ui.tsx"

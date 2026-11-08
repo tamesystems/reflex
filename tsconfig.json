@@ -26,5 +26,5 @@
     "bench",
     "experiments"
   ],
-  "exclude": ["packages/expo/src/react.tsx"]
+  "exclude": ["packages/expo/src/react.tsx", "packages/expo/src/effect.tsx"]
 }

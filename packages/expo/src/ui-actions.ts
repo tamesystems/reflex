@@ -1,4 +1,3 @@
-import type { ActionsOf, LiveNode, SendArgs } from "@reflex/effect"
 import { boundedText, ErrorCode, type OperationInfo, ProtocolError } from "@reflex/protocol"
 import { reportToConsole } from "@reflex/runtime"
 
@@ -30,13 +29,12 @@ const reportOperationFailure = (operation: OperationInfo): void => {
  * Fire an action from a UI event. Expected stale taps are ignored; resource
  * refusals and defects are reported because app state may not explain them.
  */
-export const send = <S, A extends ActionsOf<S>, K extends keyof A & string>(
-  node: LiveNode<S, A>,
-  action: K,
-  ...args: SendArgs<A[K]>
+export const send = <Args extends unknown[]>(
+  node: { send(...args: Args): Promise<OperationInfo> },
+  ...args: Args
 ): void => {
   node
-    .send(action, ...args)
+    .send(...args)
     .then(reportOperationFailure)
     .catch(reportFailure)
 }

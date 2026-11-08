@@ -63,6 +63,7 @@ See [packages/cli/README.md](../packages/cli/README.md#mcp).
 | `bun run check`                                   | Biome format and lint, both typechecks, every `bun test` suite. What CI runs first                                                                                                                  |
 | `bun test path/to/file.test.ts`                   | One suite. `-t "name"` for one test                                                                                                                                                                 |
 | `bun run --cwd apps/mobile e2e`                   | Exports the web app and runs `e2e/journey.ts` in headless Chrome                                                                                                                                    |
+| `bun run --cwd apps/mobile e2e:plain`             | Isolated plain Zustand/Zod Expo screen driven by CLI/MCP, Metro module graph proves no Effect; runs on Linux and Windows                                                                            |
 | `bun run --cwd apps/mobile e2e:live`              | Runs the app under Metro with a bridge and drives it with CLI and MCP calls, comparing each answer with a headless session's; checks production exports hold no bridge or token. Runs in Windows CI |
 | `HERMES=… bun run --cwd apps/mobile hermes-smoke` | Runs a journey from a Metro bundle on a Hermes VM                                                                                                                                                   |
 | `bun run bench`                                   | Wire and encoding costs                                                                                                                                                                             |
@@ -80,7 +81,7 @@ The `bun test` suites, by kind:
 - **Process**, in `packages/cli/test`: each command is a real `reflex` process against a
   real daemon.
 - **Cross-package**, in `test/`: `conformance.test.ts` runs one suite against an Effect
-  app, a plain store, an XState actor, and the Effect app live through the real bridge daemon
+  app, a plain store, an XState actor, and the Effect and Zustand apps live through the real bridge daemon
   and a device in a worker. The same tests include access policies for every backend.
   `xstate.test.ts` checks invoked async work, event completion, validation and actor disposal
   on close/reset, with controlled promises and deadline-bounded state waits (ADR 0015).
@@ -119,6 +120,10 @@ When you add a test that guards a fix, check it fails without the fix.
 
 ## Common changes
 
+For incremental adoption with an existing store/router, see [adopting.md](adopting.md).
+The plain Expo fixture shares the mobile install: `cd apps/mobile/plain && bunx expo start`.
+Its exact Zustand/Zod dev dependencies are installed in apps/mobile; no third install.
+
 ### Add a screen
 
 1. Define its capability in `examples/inventory/src/features/`: a state `Schema`, actions,
@@ -127,7 +132,7 @@ When you add a test that guards a fix, check it fails without the fix.
 3. Add a journey test that reaches it through actions.
 4. For the app: add a route file under `apps/mobile/app/`, map it both ways in
    `apps/mobile/src/routes.ts` (`toHref`, `fromLocation`), and render it with
-   `useRouteNode`, `useNodeState` and `send`.
+   `useRouteNode`, `useNodeState` and `send` from `@reflex/expo/effect`.
 
 Navigate with actions that call `nav.push`; never with `router.push` from a component.
 

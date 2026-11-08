@@ -184,10 +184,39 @@ const runAll = async (): Promise<void> => {
       }
     })
     await page.goto(`${base}/`, { timeout: METRO_BUNDLE_TIMEOUT_MS })
-    // Metro compiles the bundle on first request, which takes far longer than a step.
-    await page.getByText("Blue T-Shirt").first().waitFor({ timeout: METRO_BUNDLE_TIMEOUT_MS })
-    check("the app renders", await visible(page, "Blue T-Shirt"))
-    await journey(page)
+    if (process.env.REFLEX_PLAIN === "1") {
+      await page
+        .getByText("Count: 0", { exact: true })
+        .waitFor({ timeout: METRO_BUNDLE_TIMEOUT_MS })
+      await reflex("device", "do", "Add", '{"by":4}')
+      check("CLI drives the plain screen through the bridge", await visible(page, "Count: 4"))
+      await page.getByText("Add one", { exact: true }).click()
+      await reflex("device", "wait", '{"match":{"count":5}}')
+      check("plain UI writes reach the CLI", await visible(page, "Count: 5"))
+      const result = await mcpCall("device", "reflex_dispatch", { action: "Add", input: { by: 2 } })
+      check(
+        "MCP drives the plain screen",
+        result.isError === false && (await visible(page, "Count: 7")),
+      )
+      const counter = (await reflex("device", "ls")) as { readonly id: string }
+      await page.getByText("Leave counter", { exact: true }).click()
+      check("the existing app opens an unexposed screen", await visible(page, "Unexposed screen"))
+      const refused = await reflex("device", "do", "Add", '{"by":10}', "--node", counter.id).then(
+        () => false,
+        (error: unknown) => String(error).includes("not focused"),
+      )
+      check("departed plain screens refuse CLI actions", refused)
+      await page.getByText("Return to counter", { exact: true }).click()
+      await reflex("device", "wait", '{"focus":"Counter"}')
+      await reflex("device", "do", "Add", '{"by":1}')
+      check("returning focus makes the screen actionable", await visible(page, "Count: 8"))
+      await reflex("device", "reset")
+      check("reset replaces the plain screen's session", await visible(page, "Count: 0"))
+    } else {
+      await page.getByText("Blue T-Shirt").first().waitFor({ timeout: METRO_BUNDLE_TIMEOUT_MS })
+      check("the app renders", await visible(page, "Blue T-Shirt"))
+      await journey(page)
+    }
   } finally {
     await browser.close()
   }

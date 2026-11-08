@@ -1,5 +1,5 @@
 import { InventoryList, isLowStock } from "@reflex/example-inventory/features/inventory-list.ts"
-import { send, useNodeState, useRouteNode } from "@reflex/expo"
+import { send, useNodeState, useRouteNode } from "@reflex/expo/effect"
 import { Pressable, Text } from "react-native"
 import { Action, Screen, styles } from "../src/ui.tsx"
 

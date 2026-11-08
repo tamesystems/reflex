@@ -18,6 +18,9 @@ const BUILD_TIMEOUT_MS = 240_000
 const JOURNEY_TIMEOUT_MS = 270_000
 const CLI = resolve(import.meta.dirname, "../../../packages/cli/src/cli.ts")
 
+const plain = process.env.REFLEX_PLAIN === "1"
+const appDirectory = resolve(import.meta.dirname, plain ? "../plain" : "..")
+
 const work = mkdtempSync(join(tmpdir(), "reflex-live-"))
 const reflexDirectory = join(work, "reflex")
 const devExport = join(work, "dev")
@@ -40,8 +43,10 @@ const build = (outputDirectory: string, setting: string, dev: boolean): boolean 
       "--output-dir",
       outputDirectory,
       ...(dev ? ["--dev"] : []),
+      ...(plain ? ["--source-maps"] : []),
     ],
     {
+      cwd: appDirectory,
       env: { ...process.env, EXPO_PUBLIC_REFLEX_BRIDGE: setting },
       stdout: "ignore",
       stderr: "inherit",
@@ -52,6 +57,15 @@ const build = (outputDirectory: string, setting: string, dev: boolean): boolean 
 }
 
 /** Every JavaScript file an export holds, as one string. */
+interface SourceMap {
+  readonly sources?: string[]
+  readonly sections?: { readonly map: SourceMap }[]
+}
+const mapSources = (map: SourceMap): string[] => [
+  ...(map.sources ?? []),
+  ...(map.sections ?? []).flatMap((section) => mapSources(section.map)),
+]
+
 const bundleText = (directory: string): string =>
   readdirSync(directory, { recursive: true, encoding: "utf8" })
     .filter((file) => file.endsWith(".js"))
@@ -61,7 +75,7 @@ const bundleText = (directory: string): string =>
 /** Metro, as `expo start` runs it in development: what an app under development talks to. */
 const startMetro = async (port: number, setting: string) => {
   const metro = Bun.spawn(["bunx", "expo", "start", "--web", "--port", String(port)], {
-    cwd: resolve(import.meta.dirname, ".."),
+    cwd: appDirectory,
     env: { ...process.env, CI: "1", EXPO_PUBLIC_REFLEX_BRIDGE: setting },
     stdout: "ignore",
     stderr: "inherit",
@@ -107,6 +121,24 @@ const run = async (): Promise<number> => {
     const { token } = parseBridgeSetting(appSetting)
     const production = bundleText(productionExport)
     const development = bundleText(devExport)
+    if (plain) {
+      const sources = readdirSync(devExport, { recursive: true, encoding: "utf8" })
+        .filter((file) => file.endsWith(".map"))
+        .flatMap((file) =>
+          mapSources(JSON.parse(readFileSync(join(devExport, file), "utf8")) as SourceMap),
+        )
+        .map((source) => source.replaceAll("\\", "/"))
+      if (
+        !check(
+          sources.some((source) => source.includes("runtime/src/store-node")) &&
+            sources.some((source) => source.includes("zod/")) &&
+            !sources.some((source) => /(?:node_modules|packages)\/effect\//.test(source)),
+          "plain Metro module graph includes the store helper and Zod, and no Effect",
+        )
+      ) {
+        return 1
+      }
+    }
     const excluded = check(
       !production.includes(DIALLER_MARKER),
       "a production build leaves the bridge out, even with its setting given",

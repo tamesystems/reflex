@@ -1,0 +1,5 @@
+{
+  "name": "reflex-plain-screen",
+  "private": true,
+  "main": "index.tsx"
+}

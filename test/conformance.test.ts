@@ -3,17 +3,12 @@
  * served live as a device serves it. If any needs a special case here, the abstraction
  * has leaked.
  */
+import { fileURLToPath } from "node:url"
 import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test"
-import { type AccessPolicy, ErrorCode, FULL_CONTROL, ProtocolError } from "@reflex/protocol"
-import {
-  type AppHost,
-  type Controller,
-  createController,
-  createRuntime,
-  type NodeAdapter,
-  restrictController,
-} from "@reflex/runtime"
+import { type AccessPolicy, ErrorCode, FULL_CONTROL } from "@reflex/protocol"
+import { type Controller, createController, restrictController } from "@reflex/runtime"
 import { createTestAppPool } from "@reflex/test"
+import { plainBackend } from "../examples/plain/src/app.ts"
 import effectBackend, { COUNTER_APP_MODULE } from "./counter-app.ts"
 import { openBridged } from "./live-bridge.ts"
 import { xstateBackend } from "./xstate-counter.ts"
@@ -25,83 +20,16 @@ if (process.platform === "win32") {
 const pool = createTestAppPool()
 afterEach(pool.disposeAll)
 
-/** The shape of a Zustand vanilla store, with no Effect anywhere. */
-const createStore = <S>(initial: S) => {
-  let state = initial
-  const listeners = new Set<() => void>()
-  return {
-    getState: () => state,
-    setState: (next: S) => {
-      state = next
-      for (const listener of listeners) {
-        listener()
-      }
-    },
-    subscribe: (listener: () => void) => {
-      listeners.add(listener)
-      return () => void listeners.delete(listener)
-    },
-  }
-}
-
-const isByInput = (input: unknown): input is { readonly by?: unknown } =>
-  typeof input === "object" && input !== null
-
-const plainBackend: AppHost = {
-  name: "counter",
-  defaultScenario: "default",
-  scenarios: [{ name: "default", virtualTime: false }],
-  async start(_, { sessionId }) {
-    const runtime = createRuntime({ sessionId })
-    const store = createStore({ count: 0 })
-    const adapter: NodeAdapter = {
-      id: runtime.nextId("screen", "Counter"),
-      type: "screen",
-      name: "Counter",
-      snapshot: store.getState,
-      subscribe: store.subscribe,
-      actions: () => ({
-        Add: {
-          available: true,
-          inputSchema: {
-            type: "object",
-            properties: { by: { type: "integer" } },
-            required: ["by"],
-            additionalProperties: false,
-          },
-        },
-        Reset:
-          store.getState().count === 0
-            ? {
-                available: false,
-                unavailableReason: "Already zero",
-                inputSchema: { type: "object" },
-              }
-            : { available: true, inputSchema: { type: "object" } },
-      }),
-      prepare(action, input) {
-        const by = isByInput(input) ? input.by : undefined
-        if (action === "Add" && !Number.isInteger(by)) {
-          throw new ProtocolError(ErrorCode.InvalidInput, "by must be an integer")
-        }
-        return () => {
-          store.setState({ count: action === "Add" ? store.getState().count + Number(by) : 0 })
-          return { done: Promise.resolve({ status: "completed" }), cancel: () => undefined }
-        }
-      },
-    }
-    const unregister = runtime.register(adapter)
-    runtime.setFocus(adapter.id)
-    return { runtime, dispose: async () => unregister() }
-  },
-}
-
 const BACKENDS = [
   ["Effect", () => createController(effectBackend)],
-  ["plain store", () => createController(plainBackend)],
+  ["Zustand + Standard Schema", () => createController(plainBackend)],
   ["XState", () => createController(xstateBackend)],
   // Served as a device serves it, over a real WebSocket bridge: what the CLI drives live.
   ["Effect, live through the bridge,", () => openBridged(COUNTER_APP_MODULE)],
+  [
+    "Zustand, live through the bridge",
+    () => openBridged(fileURLToPath(new URL("../examples/plain/src/app.ts", import.meta.url).href)),
+  ],
 ] as const
 
 const opener =

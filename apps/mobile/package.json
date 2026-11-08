@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "e2e": "bun e2e/run.ts",
     "hermes-smoke": "bun hermes-smoke/run.ts",
-    "e2e:live": "bun e2e/live-run.ts"
+    "e2e:live": "bun e2e/live-run.ts",
+    "e2e:plain": "bun e2e/plain-run.ts"
   },
   "dependencies": {
     "@expo/metro-runtime": "~58.0.17",
@@ -30,6 +31,8 @@
   "devDependencies": {
     "@types/react": "19.3.0",
     "playwright-core": "1.65.0",
-    "typescript": "~5.9.0"
+    "typescript": "~5.9.0",
+    "zod": "4.6.7",
+    "zustand": "5.1.0"
   }
 }

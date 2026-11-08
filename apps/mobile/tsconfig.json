@@ -17,7 +17,8 @@
       "effect/*": ["./node_modules/effect/dist/*"],
       "react": ["./node_modules/@types/react/index.d.ts"],
       "expo-router": ["./node_modules/expo-router"],
-      "react/jsx-runtime": ["./node_modules/@types/react/jsx-runtime.d.ts"]
+      "react/jsx-runtime": ["./node_modules/@types/react/jsx-runtime.d.ts"],
+      "@reflex/expo/effect": ["../../packages/expo/src/effect.tsx"]
     },
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
@@ -27,5 +28,5 @@
     "useUnknownInCatchVariables": true,
     "verbatimModuleSyntax": true
   },
-  "include": ["app", "src", "e2e/*.ts", "hermes-smoke/*.ts"]
+  "include": ["app", "src", "e2e/*.ts", "hermes-smoke/*.ts", "plain"]
 }

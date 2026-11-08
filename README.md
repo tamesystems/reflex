@@ -16,18 +16,19 @@ Agents and tests usually learn what an app does from screenshots and source code
 drive it through a simulator. Both are slow and lossy. If behavior lives in a headless
 core with an explicit control surface, an agent can run most checks with no UI at all,
 then confirm selected behavior against the real app through the same commands. Reflex is
-that control surface for Expo apps, built on [Effect](https://effect.website) v4.
+that control surface for Expo apps, with adapters for existing stores and [Effect](https://effect.website) v4.
 
 ## System at a glance
 
 ```text
- reflex CLI ─┐                          ┌─► headless session ──► app core (Effect)
+ reflex CLI ─┐                          ┌─► headless session ──► app core (store/Effect)
  MCP client ─┼─► session socket ─► CLI ─┤
  journeys ───┘   (JSON-RPC)    daemon   └─► device bridge ──WebSocket──► app on a device
                                                                          (Expo, same core)
 ```
 
-- **Protocol and runtime**: JSON contracts, and a registry of nodes, operations and events.
+- **Protocol and runtime**: JSON contracts, a registry of nodes, operations and events,
+  and `mountStore` for existing stores with Standard Schema inputs.
 - **Effect integration**: `defineCapability`, `defineNavigation`, `defineApp`.
 - **CLI**: background sessions, the device bridge and the MCP server.
 - **Expo binding**: React hooks, and Expo Router as a projection of the core's navigation.
@@ -61,6 +62,7 @@ expect(session.state).toMatchObject({ _tag: "editing", error: "Save timed out" }
 ## Start here
 
 - [Architecture](docs/ARCHITECTURE.md): the map, the runtime flows and the rules. Read this first.
+- [Adopting in an existing app](docs/adopting.md): Zustand, Standard Schema and selected screens without Effect.
 - [Development](docs/development.md): set up, run, test, debug and make common changes.
 - [Domain](docs/domain.md): what nodes, operations, sessions, cursors and the rest mean.
 - [Decisions](docs/decisions/): why it is built this way.

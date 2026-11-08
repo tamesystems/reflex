@@ -7,3 +7,5 @@ export * from "./restricted.ts"
 export * from "./runtime.ts"
 export * from "./session-lifecycle.ts"
 export * from "./timers.ts"
+
+export * from "./store-node.ts"

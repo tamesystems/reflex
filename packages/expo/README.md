@@ -36,13 +36,28 @@ Router as a projection of the core's navigation, and the app's side of the devic
 
 - `toHref` and `fromLocation` (see `apps/mobile/src/routes.ts`) map core routes to route
   files and back. They work on route files and decoded params; paths are never parsed.
-- A screen calls `useRouteNode(Capability, params)` for its node, `useNodeState(node)` for
+- An Effect screen imports from `@reflex/expo/effect` and calls `useRouteNode(Capability, params)` for its node, `useNodeState(node)` for
   its state, and `send(node, "Action", input)` from UI events. `send` ignores expected
   refusals (a tap on a closing screen, an action just made unavailable) and reports
   defects and `ResourceExhausted`; declared business failures are the app's to show in state.
 - `bridge` comes from `connectBridge(setting)` in `@reflex/expo/bridge`. Load that module
   only behind `__DEV__`, reading the setting inside the same branch, as
   `apps/mobile/app/_layout.tsx` does, so production bundles hold neither.
+
+## Existing stores and routers
+
+The default `@reflex/expo` entry imports no Effect. `useNode(id)` works with any adapter,
+including one without a live object; `useNodeState` takes a structural snapshot/subscription
+source and `send` takes its send method. Generic `useRouteNode` takes a resolver
+`(runtime, nodeId) => node | undefined` for the core stack. Only `@reflex/expo/effect`
+loads capability bindings and Effect.
+
+Keep an existing router and call `useNodeFocus(id, isFocused)` from selected screens;
+service nodes need no focus. Dispose popped screen nodes yourself. RouterProjection
+requires the core Navigation stack (defineNavigation), so omit it in this mode. See
+[the adoption guide](../../docs/adopting.md) and the isolated Expo screen in
+[apps/mobile/plain](../../apps/mobile/plain/index.tsx). `e2e:plain` tests its CLI/MCP bridge
+and checks Metro source maps contain no Effect modules in Linux and Windows CI.
 
 ## How the router is followed
 
@@ -74,7 +89,7 @@ Router as a projection of the core's navigation, and the app's side of the devic
 
 ## Important invariants
 
-- Components never call `router.push` or `router.replace`; they send actions.
+- With core-owned navigation, components never call `router.push` or `router.replace`; they send actions.
 - A session's subtree is keyed by its id, so nothing outlives the session holding a
   disposed node.
 - Only `router-actions.ts` imports Expo Router's private modules.

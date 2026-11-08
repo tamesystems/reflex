@@ -61,7 +61,7 @@ test("the CLI needs no Effect and no app", () => {
   expect(violations("packages/cli/src", (s) => permit(s) || isNodeBuiltin(s))).toEqual([])
 })
 
-test("the Expo binding reaches the core through the Effect integration, and serves it over rpc", () => {
+test("Expo uses generic runtime bindings and an explicit Effect entry", () => {
   const permit = allowing(
     "@reflex/effect",
     "@reflex/protocol",
@@ -93,5 +93,19 @@ test("router projection rules need no renderer", () => {
   for (const file of files) {
     const imports = importsOf(join(root, "packages/expo/src", file))
     expect(imports.filter((specifier) => !permit(specifier))).toEqual([])
+  }
+})
+
+test("plain example has no Effect or UI dependency", () => {
+  expect(
+    violations("examples/plain/src", allowing("@reflex/runtime", "zustand/vanilla", "zod")),
+  ).toEqual([])
+})
+test("only Expo's capability entry imports Effect at runtime", () => {
+  for (const file of sources("packages/expo/src")) {
+    if (file.endsWith("effect.tsx")) {
+      continue
+    }
+    expect(importsOf(file).filter((s) => s === "@reflex/effect" || isEffect(s))).toEqual([])
   }
 })
