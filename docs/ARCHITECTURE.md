@@ -92,7 +92,8 @@ examples/
 apps/
   mobile/     The same inventory core rendered by Expo Router. Own install. e2e/ holds
               the browser journeys, hermes-smoke/ runs a journey on a Hermes VM.
-test/         Cross-package suites: conformance (one suite, several backends),
+test/         Cross-package suites: conformance (Effect, plain store, XState, Effect live),
+              xstate-counter.ts (test-only NodeAdapter), xstate.test.ts (actor semantics),
               boundaries (the dependency rules), lifecycle, the bridge end to end.
 bench/        Wire and encoding costs.
 experiments/  Prototypes kept as evidence for a decision: effect-rpc/ serves the
@@ -339,22 +340,23 @@ What must stay true when you change things. Most have a test; the test names say
 
 ## 8. Decisions
 
-| ADR                                                                 | Decision                                                        |
-| ------------------------------------------------------------------- | --------------------------------------------------------------- |
-| [0001](decisions/0001-hand-written-json-rpc.md)                     | The wire is hand-written JSON-RPC over NDJSON                   |
-| [0002](decisions/0002-the-runtime-is-effect-free.md)                | The runtime is free of Effect; Effect is one way to build nodes |
-| [0003](decisions/0003-the-core-owns-navigation.md)                  | The core owns navigation; the router is a projection            |
-| [0004](decisions/0004-plain-state-with-listeners.md)                | Node state is a plain value with listeners                      |
-| [0005](decisions/0005-expo-router-private-actions.md)               | Read Expo Router's private action event, pinned                 |
-| [0006](decisions/0006-everything-is-bounded.md)                     | Everything a peer can reach is bounded, in one file             |
-| [0007](decisions/0007-socket-permissions-are-the-authentication.md) | Socket permissions are the authentication                       |
-| [0008](decisions/0008-the-device-dials-out.md)                      | The device dials out to a bridge                                |
-| [0009](decisions/0009-mcp-reuses-the-cli.md)                        | MCP tools reuse the CLI's commands                              |
-| [0010](decisions/0010-operations-and-interruption.md)               | Operations are accepted, then finish; back acts as return       |
-| [0011](decisions/0011-secrets-fail-closed.md)                       | Secrets are removed before encoding, failing closed             |
-| [0012](decisions/0012-windows-sessions-use-authenticated-pipes.md)  | Windows sessions use authenticated, encrypted pipes             |
-| [0013](decisions/0013-access-policies.md)                           | Access policies: observe, an action allowlist, or control       |
-| [0014](decisions/0014-keep-the-hand-written-wire.md)                | Keep the hand-written wire rather than adopt Effect RPC         |
+| ADR                                                                 | Decision                                                         |
+| ------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| [0001](decisions/0001-hand-written-json-rpc.md)                     | The wire is hand-written JSON-RPC over NDJSON                    |
+| [0002](decisions/0002-the-runtime-is-effect-free.md)                | The runtime is free of Effect; Effect is one way to build nodes  |
+| [0003](decisions/0003-the-core-owns-navigation.md)                  | The core owns navigation; the router is a projection             |
+| [0004](decisions/0004-plain-state-with-listeners.md)                | Node state is a plain value with listeners                       |
+| [0005](decisions/0005-expo-router-private-actions.md)               | Read Expo Router's private action event, pinned                  |
+| [0006](decisions/0006-everything-is-bounded.md)                     | Everything a peer can reach is bounded, in one file              |
+| [0007](decisions/0007-socket-permissions-are-the-authentication.md) | Socket permissions are the authentication                        |
+| [0008](decisions/0008-the-device-dials-out.md)                      | The device dials out to a bridge                                 |
+| [0009](decisions/0009-mcp-reuses-the-cli.md)                        | MCP tools reuse the CLI's commands                               |
+| [0010](decisions/0010-operations-and-interruption.md)               | Operations are accepted, then finish; back acts as return        |
+| [0011](decisions/0011-secrets-fail-closed.md)                       | Secrets are removed before encoding, failing closed              |
+| [0012](decisions/0012-windows-sessions-use-authenticated-pipes.md)  | Windows sessions use authenticated, encrypted pipes              |
+| [0013](decisions/0013-access-policies.md)                           | Access policies: observe, an action allowlist, or control        |
+| [0014](decisions/0014-keep-the-hand-written-wire.md)                | Keep the hand-written wire rather than adopt Effect RPC          |
+| [0015](decisions/0015-xstate-proves-the-node-adapter.md)            | XState fits NodeAdapter with explicit event-completion semantics |
 
 ## 9. Influences
 
@@ -370,7 +372,9 @@ decision is in its ADR; what is still to do is in [roadmap.md](roadmap.md).
 - **[XState](https://stately.ai/docs/inspection).** The actor contract (a stable identity
   while alive, events in, snapshots out, subscriptions, a lifecycle) is what a node is.
   XState also keeps inspection observational, separate from sending events; so can a
-  Reflex peer ([ADR 0013](decisions/0013-access-policies.md)).
+  Reflex peer ([ADR 0013](decisions/0013-access-policies.md)). A real XState actor now passes
+  the shared conformance suite; event completion and actor lifecycle have explicit mappings
+  ([ADR 0015](decisions/0015-xstate-proves-the-node-adapter.md)).
 - **[Redux DevTools](https://github.com/reduxjs/redux-devtools).** Transitions are actions,
   not state writes. A protocol that could set `cart.quantity` would bypass validation,
   business rules and effects, so clients can only dispatch named, validated actions.

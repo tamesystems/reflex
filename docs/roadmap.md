@@ -4,18 +4,7 @@ What the original design called for and is not built yet, in priority order. Eac
 says why it matters, where things stand, and what done looks like. When one ships, move
 what it decided into an ADR and delete its entry here.
 
-## 1. A second, unrelated backend: XState
-
-**Why.** The claim that the runtime is backend-agnostic is only as strong as the backends
-it has been tried against. An actor library with its own lifecycle is the hardest test.
-
-**Now.** `test/conformance.test.ts` runs against an Effect app and a plain store shaped like
-a Zustand vanilla store ([ADR 0002](decisions/0002-the-runtime-is-effect-free.md)).
-
-**Done when.** An XState-backed counter passes the conformance suite with no special case
-in the suite or the runtime.
-
-## 2. Adoption without Effect
+## 1. Adoption without Effect
 
 **Why.** Most existing Expo apps use Zustand, Redux or plain hooks. They should be able to
 expose behavior without rewriting their state in Effect.
@@ -31,7 +20,7 @@ expose behavior without rewriting their state in Effect.
   adapter, with JSON Schema still published.
 - An existing-app guide shows exposing an app incrementally: some screens, no core rewrite.
 
-## 3. Native end-to-end coverage
+## 2. Native end-to-end coverage
 
 **Why.** A headless session cannot check native gestures, layout, accessibility, animation
 or platform integrations. Those need a small set of native tests and visual checks.
@@ -43,7 +32,7 @@ has never launched (see [development.md](development.md#what-the-tests-prove)).
 Android emulator in CI, including a back gesture and the live bridge, plus a run on a
 physical phone.
 
-## 4. Real services in the Expo app
+## 3. Real services in the Expo app
 
 **Why.** The architecture's promise is the same logic against real services in the app and
 fixtures headless. Every run so far has used fixtures on both sides.
@@ -53,7 +42,7 @@ fixtures headless. Every run so far has used fixtures on both sides.
 **Done when.** The example app has a live scenario backed by a real (local) API and device
 storage, while the headless sessions keep using fixtures, and a journey passes against both.
 
-## 5. MCP extras
+## 4. MCP extras
 
 **Why.** Agents with a fixed set of frequent actions may work better with a tool per action,
 and running a whole journey from an agent saves many calls.

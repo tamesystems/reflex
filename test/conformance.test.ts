@@ -1,5 +1,5 @@
 /**
- * The reusability claim, tested: one suite, two unrelated backends, and the first again
+ * The reusability claim, tested: one suite, three unrelated backends, and the first again
  * served live as a device serves it. If any needs a special case here, the abstraction
  * has leaked.
  */
@@ -16,6 +16,7 @@ import {
 import { createTestAppPool } from "@reflex/test"
 import effectBackend, { COUNTER_APP_MODULE } from "./counter-app.ts"
 import { openBridged } from "./live-bridge.ts"
+import { xstateBackend } from "./xstate-counter.ts"
 
 if (process.platform === "win32") {
   setDefaultTimeout(30_000) // Real daemon startup includes Windows ACL verification.
@@ -98,6 +99,7 @@ const plainBackend: AppHost = {
 const BACKENDS = [
   ["Effect", () => createController(effectBackend)],
   ["plain store", () => createController(plainBackend)],
+  ["XState", () => createController(xstateBackend)],
   // Served as a device serves it, over a real WebSocket bridge: what the CLI drives live.
   ["Effect, live through the bridge,", () => openBridged(COUNTER_APP_MODULE)],
 ] as const

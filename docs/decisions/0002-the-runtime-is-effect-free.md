@@ -22,3 +22,6 @@ imports nothing but the protocol. `@reflex/effect` is one adapter, built on capa
 - The CLI, the test SDK and the RPC layer carry no Effect.
 - The Expo bindings are Effect-specific: `useRouteNode` and `send` take Effect capabilities.
   A plain store needs bindings of its own.
+
+2026-11-08 follow-up: [ADR 0015](0015-xstate-proves-the-node-adapter.md) tests this boundary
+with XState actors and records event completion, asynchronous work and disposal semantics.

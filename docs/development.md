@@ -80,8 +80,11 @@ The `bun test` suites, by kind:
 - **Process**, in `packages/cli/test`: each command is a real `reflex` process against a
   real daemon.
 - **Cross-package**, in `test/`: `conformance.test.ts` runs one suite against an Effect
-  app, a plain store, and the Effect app live through the real bridge daemon and a device
-  in a worker. `boundaries.test.ts` enforces the dependency rules.
+  app, a plain store, an XState actor, and the Effect app live through the real bridge daemon
+  and a device in a worker. The same tests include access policies for every backend.
+  `xstate.test.ts` checks invoked async work, event completion, validation and actor disposal
+  on close/reset, with controlled promises and deadline-bounded state waits (ADR 0015).
+  `boundaries.test.ts` enforces the dependency rules.
 
 A behavior test may not call `fetch`: the journey SDK replaces it while a test app is open.
 
