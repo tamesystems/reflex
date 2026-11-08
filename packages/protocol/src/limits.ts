@@ -26,6 +26,9 @@ export const HELD_EVENT_CHARACTERS_MAX = WRITE_QUEUE_BYTES_MAX / 3
 export const CLIENT_PENDING_REQUESTS_MAX = 256
 export const CLIENT_LISTENERS_MAX = 64
 export const ERROR_TEXT_CHARACTERS_MAX = 2048
+/** Actions one access policy may name, and how long each name may be. */
+export const ACCESS_ACTIONS_MAX = 256
+export const ACCESS_ACTION_CHARACTERS_MAX = 256
 
 // Live bridge
 /** A WebSocket counts bytes, and a frame's characters can take three each. */

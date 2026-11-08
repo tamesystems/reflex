@@ -1,3 +1,4 @@
+import { type AccessPolicy, accessPolicy, FULL_CONTROL } from "@reflex/protocol"
 import { createHash } from "node:crypto"
 import { existsSync, realpathSync } from "node:fs"
 import { basename, dirname, resolve } from "node:path"
@@ -13,6 +14,8 @@ export type Target = "headless" | "device"
 
 export interface Config {
   readonly target: Target
+  /** What this CLI process allows itself: a guard for agents, not a boundary. */
+  readonly access: AccessPolicy
   readonly directory: string
   readonly socketPath: string
   readonly authPath: string
@@ -41,9 +44,31 @@ const parseTarget = (value: string | undefined): Target => {
  * The environment is read here, once, and nowhere else. `--target` wins over
  * `REFLEX_TARGET`. Each target has its own files, so both can run at once.
  */
+/**
+ * `control` (the default), `observe`, or `actions:A,B` for observing plus running only
+ * the actions named. The CLI and MCP server hold themselves to it; see `restrictClient`.
+ */
+export const parseAccess = (text: string | undefined): AccessPolicy => {
+  if (text === undefined || text === "control") {
+    return FULL_CONTROL
+  }
+  if (text === "observe") {
+    return { kind: "observe" }
+  }
+  if (text.startsWith("actions:")) {
+    const actions = text
+      .slice("actions:".length)
+      .split(",")
+      .map((name) => name.trim())
+    return accessPolicy({ kind: "actions", actions: actions.filter((name) => name !== "") })
+  }
+  throw new Error('Access must be "control", "observe" or "actions:<name>,<name>"')
+}
+
 export const loadConfig = (
   environment: NodeJS.ProcessEnv,
   targetFlag: string | undefined = undefined,
+  accessFlag: string | undefined = undefined,
 ): Config => {
   if (environment.REFLEX_DIR === "") {
     throw new Error("REFLEX_DIR must not be empty")
@@ -53,6 +78,7 @@ export const loadConfig = (
   const base = target === "device" ? "device" : "session"
   return {
     target,
+    access: parseAccess(accessFlag ?? environment.REFLEX_ACCESS),
     directory,
     socketPath: sessionEndpoint(directory, target),
     authPath: resolve(directory, `${base}.auth`),

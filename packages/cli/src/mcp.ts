@@ -8,7 +8,10 @@
  * closes its connection, which ends its waits on the session as any departing peer does.
  */
 import {
+  type AccessPolicy,
+  accessPolicy,
   boundedText,
+  FULL_CONTROL,
   ErrorCode,
   isRecord,
   type Json,
@@ -20,7 +23,7 @@ import {
   WAIT_TIMEOUT_MS_MAX,
   ADVANCE_TIME_MS_MAX,
 } from "@reflex/protocol"
-import type { Client } from "@reflex/rpc"
+import { type Client, restrictClient } from "@reflex/rpc"
 import { reportToConsole } from "@reflex/runtime"
 import * as commands from "./commands.ts"
 import type { Target } from "./config.ts"
@@ -321,10 +324,21 @@ export const TOOLS: ReadonlyArray<Tool> = [
 
 const toolsByName = new Map(TOOLS.map((tool) => [tool.name, tool]))
 
-const describeTool = (tool: Tool) => ({
+/** Whether a policy leaves a tool anything to do. Hidden tools are refused as unknown. */
+const offers = (access: AccessPolicy, tool: Tool): boolean => {
+  if (tool.readOnly || access.kind === "control") {
+    return true
+  }
+  return access.kind === "actions" && tool.name === "reflex_dispatch"
+}
+
+const describeTool = (access: AccessPolicy) => (tool: Tool) => ({
   name: tool.name,
   title: tool.title,
-  description: tool.description,
+  description:
+    access.kind === "actions" && tool.name === "reflex_dispatch"
+      ? `${tool.description} This server may run only: ${access.actions.join(", ")}.`
+      : tool.description,
   inputSchema: {
     type: "object",
     properties: { ...tool.properties, target: TARGET_PROPERTY },
@@ -344,6 +358,11 @@ type Id = string | number
 
 export interface McpServerOptions {
   readonly target: Target
+  /**
+   * What the agent may do through this server. Every call's connection is held to it,
+   * and tools it leaves nothing to do are not offered. Full control unless given.
+   */
+  readonly access?: AccessPolicy
   readonly version: string
   /** A fresh connection to a target's session, as the CLI makes one. */
   readonly connect: (target: Target) => Promise<Client>
@@ -369,12 +388,15 @@ const isId = (value: unknown): value is Id =>
   (typeof value === "number" && Number.isFinite(value))
 
 class Server implements McpServer {
+  private readonly access: AccessPolicy
   private protocolVersion: string = MCP_PROTOCOL_VERSIONS[0] ?? ""
   private readonly calls = new Map<Id, AbortController>()
   private readonly drainWaiters: Array<() => void> = []
   private closed = false
 
-  constructor(private readonly options: McpServerOptions) {}
+  constructor(private readonly options: McpServerOptions) {
+    this.access = accessPolicy(options.access ?? FULL_CONTROL)
+  }
 
   receive(line: string): void {
     if (line.trim() === "") {
@@ -434,7 +456,11 @@ class Server implements McpServer {
         this.send(reply(id, {}))
         return
       case "tools/list":
-        this.send(reply(id, { tools: TOOLS.map(describeTool) }))
+        this.send(
+          reply(id, {
+            tools: TOOLS.filter((tool) => offers(this.access, tool)).map(describeTool(this.access)),
+          }),
+        )
         return
       case "tools/call":
         this.call(id, params)
@@ -464,7 +490,7 @@ class Server implements McpServer {
       return
     }
     const tool = toolsByName.get(params.name)
-    if (tool === undefined) {
+    if (tool === undefined || !offers(this.access, tool)) {
       this.send(failure(id, ErrorCode.InvalidParams, `Unknown tool "${params.name.slice(0, 64)}"`))
       return
     }
@@ -511,7 +537,7 @@ class Server implements McpServer {
       const args = new Arguments(values, [...Object.keys(tool.properties), "target"])
       const target = this.targetOf(args)
       const work = tool.prepare(args)
-      client = await this.options.connect(target)
+      client = restrictClient(await this.options.connect(target), this.access)
       if (signal.aborted) {
         client.close()
       }

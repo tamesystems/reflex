@@ -148,7 +148,9 @@ before connecting. Add a process test in `cli.test.ts` and an MCP test in `mcp.t
 2. Handle it in **both** controllers: `SessionController` (`runtime/src/controller.ts`)
    and `LiveController` (`expo/src/live-controller.ts`). The bridge forwards it unchanged.
 3. If it can take long, give it a reply budget in `replyTimeoutMs` (`rpc/src/client.ts`).
-4. Add it to the conformance suite, which then runs it headless and live.
+4. Classify it in `packages/protocol/src/access.ts`, as observing or controlling, or
+   restricted peers will be refused it.
+5. Add it to the conformance suite, which then runs it headless and live.
 
 ### Add or change a limit
 

@@ -153,6 +153,17 @@ $ claude mcp add reflex -- bun run /path/to/reflex/packages/cli/src/cli.ts mcp
   do whatever the app's actions can. The marks are hints; the session is the authority.
 - Only tools are served. Protocol versions 2024-11-05 to 2025-11-25 are accepted, with
   `structuredContent` from 2025-06-18. At most 16 calls run at once.
+- `reflex --access observe mcp` offers only the tools that change nothing;
+  `--access actions:OpenProduct,Save` adds `reflex_dispatch` for those actions alone, and
+  says so in its description. Every call's connection is held to the policy, so a refused
+  action is a tool error with `NotPermitted`, and `reflex_inspect` shows it unavailable.
+
+## Access
+
+`--access` (or `REFLEX_ACCESS`) limits what a command may do: `control` (the default),
+`observe`, or `actions:<name>,<name>`. `start`, `serve` and `stop` need `control`. It is a
+guard for agents and scripts, not a boundary; see
+[ADR 0013](../../docs/decisions/0013-access-policies.md).
 
 ## Important invariants
 

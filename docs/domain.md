@@ -86,6 +86,9 @@ fails with `WaitTimeout`, carrying the state at the time, if the condition does 
 **Controller.** What serves the protocol for one app: requests, subscriptions, close. The
 three kinds above all speak the same protocol, so a client cannot tell them apart.
 
+**Access policy.** What a peer may do: `control` (everything), `observe` (read, wait and
+subscribe), or an allowlist of actions it may also run. Refusals are `NotPermitted`.
+
 **Target.** Which session a CLI command reaches: **headless** (the app running in a daemon
 on this machine, with no UI) or **device** (the app running somewhere else, through a
 bridge). Each target has its own socket, so both can run at once.

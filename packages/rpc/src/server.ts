@@ -1,5 +1,8 @@
 import {
+  type AccessPolicy,
   assert,
+  FULL_CONTROL,
+  requirePermitted,
   BATCH_LARGE_REPLY_CHARACTERS_MAX,
   BATCH_REQUESTS_MAX,
   boundedText,
@@ -26,6 +29,7 @@ import {
   type Controller,
   type ControllerMethod,
   reportToConsole,
+  restrictController,
 } from "@reflex/runtime"
 
 /** Room for the envelope around an event. */
@@ -68,13 +72,16 @@ export interface ConnectionOptions {
   readonly onBackgroundError?: BackgroundReporter
   /** Share one between connections, to encode each event once. */
   readonly encodeEvent?: (event: RuntimeEvent) => string | null
+  /** What this peer may do. Full control unless given; `session.shutdown` needs it too. */
+  readonly access?: AccessPolicy
 }
 
 export const createConnection = (
   controller: Controller,
   send: (line: string) => void,
   options: ConnectionOptions = {},
-): Connection => new PeerConnection(controller, send, options)
+): Connection =>
+  new PeerConnection(restrictController(controller, options.access ?? FULL_CONTROL), send, options)
 
 type Id = string | number | null
 
@@ -445,6 +452,8 @@ class PeerConnection implements Connection {
   /** Not in a batch: its reply waits on siblings the shutdown would abandon. */
   private shutdown(reply: Reply): { readonly ok: true } {
     const { onShutdown } = this.options
+    // The connection's own option and any restriction on the controller both apply.
+    requirePermitted(this.controller.access ?? FULL_CONTROL, "session.shutdown")
     if (onShutdown === undefined || reply.delivery === "batched") {
       throw new ProtocolError(ErrorCode.MethodNotFound, `Unknown method "session.shutdown"`)
     }

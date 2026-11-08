@@ -19,6 +19,7 @@ export const serveMcp = async (config: Config, environment: NodeJS.ProcessEnv): 
   console.debug = write
   const server = createMcpServer({
     target: config.target,
+    access: config.access,
     version: SERVER_VERSION,
     connect: (target) => connectToSession(loadConfig(environment, target)),
     send: (line) => {

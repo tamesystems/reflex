@@ -1,3 +1,4 @@
+import { type AccessPolicy, accessPolicy } from "./access.ts"
 /**
  * Everything arriving from a peer starts as `unknown` and is parsed here, once,
  * into the contract types. The rest of the system does not re-check it.
@@ -491,14 +492,34 @@ export const scenarioDescriptor: Parser<ScenarioDescriptor> = object(
   { description: string },
 )
 
-const describeResult: Parser<DescribeResult> = object({
-  protocolVersion: string,
-  app: string,
-  sessionId: string,
-  scenario: string,
-  scenarios: array(scenarioDescriptor),
-  capabilities: object({ virtualTime: boolean }),
+const accessPolicyShape: Parser<AccessPolicy> = discriminated<AccessPolicy>("kind", {
+  control: object({ kind: literal("control") }),
+  observe: object({ kind: literal("observe") }),
+  actions: object({ kind: literal("actions"), actions: array(string) }),
 })
+
+/** A policy from the wire is held to the same bounds as one made here. */
+const accessPolicyResult: Parser<AccessPolicy> = (value, path) => {
+  const shape = accessPolicyShape(value, path)
+  try {
+    return accessPolicy(shape)
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error)
+    throw new ProtocolError(ErrorCode.InvalidParams, `"${path}": ${message}`)
+  }
+}
+
+const describeResult: Parser<DescribeResult> = object(
+  {
+    protocolVersion: string,
+    app: string,
+    sessionId: string,
+    scenario: string,
+    scenarios: array(scenarioDescriptor),
+    capabilities: object({ virtualTime: boolean }),
+  },
+  { access: accessPolicyResult },
+)
 
 const subscribeResult: Parser<SubscribeResult> = object({
   subscriptionId: string,

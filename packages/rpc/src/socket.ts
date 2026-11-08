@@ -1,6 +1,7 @@
 import { chmodSync, rmSync } from "node:fs"
 import { connect, createServer, type Server, type Socket } from "node:net"
 import {
+  type AccessPolicy,
   ErrorCode,
   LOCAL_ENCRYPTED_FRAME_CHARACTERS_MAX,
   FRAME_CHARACTERS_MAX,
@@ -86,6 +87,8 @@ export const createLineReader = (options: LineReaderOptions) => {
 }
 
 export interface ServeSocketOptions {
+  /** What every peer of this socket may do. Full control unless given. */
+  readonly access?: AccessPolicy
   readonly localSecret?: string | undefined
   readonly onShutdown?: () => void
   readonly writeQueueBytesMax?: number
@@ -135,6 +138,7 @@ export const serveSocket = (
         },
         {
           encodeEvent,
+          ...(options.access === undefined ? {} : { access: options.access }),
           ...(options.onShutdown === undefined ? {} : { onShutdown: shutdown.request }),
           ...(options.onBackgroundError === undefined
             ? {}

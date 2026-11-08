@@ -1,6 +1,6 @@
 /** The MCP server, against a real headless session reached through the real protocol. */
 import { afterEach, expect, test } from "bun:test"
-import { ErrorCode } from "@reflex/protocol"
+import { type AccessPolicy, ErrorCode } from "@reflex/protocol"
 import { type Client, createLoopbackClient } from "@reflex/rpc"
 import { type Controller, createController } from "@reflex/runtime"
 import { nextTurn, waitUntil } from "@reflex/test"
@@ -27,7 +27,12 @@ interface Message {
   readonly error?: { readonly code: number; readonly message: string }
 }
 
-const setup = async (options: { readonly connect?: (target: Target) => Promise<Client> } = {}) => {
+const setup = async (
+  options: {
+    readonly connect?: (target: Target) => Promise<Client>
+    readonly access?: AccessPolicy
+  } = {},
+) => {
   const controller: Controller = await createController(app)
   cleanups.push(() => controller.close())
   const clients: Array<Client> = []
@@ -36,6 +41,7 @@ const setup = async (options: { readonly connect?: (target: Target) => Promise<C
   const server = createMcpServer({
     target: "headless",
     version: "test",
+    ...(options.access === undefined ? {} : { access: options.access }),
     connect:
       options.connect ??
       (async (target) => {
@@ -227,4 +233,52 @@ test("unknown tools and methods, and malformed messages, are protocol errors", a
   expect((await answer(request("ping"))).result).toEqual({})
   server.receive("{not json")
   expect(sent.at(-1)?.error?.code).toBe(ErrorCode.ParseError)
+})
+
+const toolNames = async (setupResult: Awaited<ReturnType<typeof setup>>) => {
+  const { request, answer } = setupResult
+  const { result } = await answer(request("tools/list"))
+  const tools = (result?.tools ?? []) as ReadonlyArray<{ name: string }>
+  return tools.map(({ name }) => name)
+}
+
+test("an observing server offers only tools that change nothing", async () => {
+  const observing = await setup({ access: { kind: "observe" } })
+  expect(await toolNames(observing)).toEqual([
+    "reflex_status",
+    "reflex_inspect",
+    "reflex_tree",
+    "reflex_wait",
+    "reflex_sample",
+  ])
+  const refused = await observing.call("reflex_dispatch", { action: "OpenProduct" })
+  expect(refused.error?.code).toBe(ErrorCode.InvalidParams)
+  const { result } = await observing.call("reflex_status")
+  expect(JSON.parse(result?.content?.[0]?.text ?? "").access).toEqual({ kind: "observe" })
+})
+
+test("an allowlist server dispatches only the actions it names, and says which", async () => {
+  const limited = await setup({ access: { kind: "actions", actions: ["OpenProduct"] } })
+  const { request, answer } = limited
+  const { result: listed } = await answer(request("tools/list"))
+  const tools = listed?.tools as ReadonlyArray<{ name: string; description: string }>
+  expect(tools.map(({ name }) => name)).toContain("reflex_dispatch")
+  expect(tools.map(({ name }) => name)).not.toContain("reflex_reset")
+  expect(tools.find(({ name }) => name === "reflex_dispatch")?.description).toContain(
+    "may run only: OpenProduct",
+  )
+  const opened = await limited.call("reflex_dispatch", {
+    action: "OpenProduct",
+    input: { productId: "product-123" },
+  })
+  expect(opened.result?.isError).toBe(false)
+  const refused = await limited.call("reflex_dispatch", { action: "Increment" })
+  expect(refused.result?.isError).toBe(true)
+  expect(JSON.parse(refused.result?.content?.[0]?.text ?? "").error.code).toBe(
+    ErrorCode.NotPermitted,
+  )
+  const inspected = await limited.call("reflex_inspect")
+  expect(JSON.parse(inspected.result?.content?.[0]?.text ?? "").actions).toContainEqual(
+    expect.objectContaining({ name: "Increment", unavailable: "Not permitted on this connection" }),
+  )
 })

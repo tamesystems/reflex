@@ -1,4 +1,5 @@
 import {
+  type AccessPolicy,
   assert,
   type DescribeResult,
   ErrorCode,
@@ -71,6 +72,11 @@ export interface Controller {
     options?: { readonly since?: EventCursor },
   ): Promise<ControllerSubscription>
   close(): Promise<void>
+  /**
+   * The policy this controller holds its peers to, if less than full control. Whatever
+   * serves it applies this to the methods it handles itself, such as `session.shutdown`.
+   */
+  readonly access?: AccessPolicy
 }
 
 export interface ControllerOptions {

@@ -5,6 +5,8 @@
  * Carried as JSON-RPC 2.0; see `@reflex/rpc` for the transports.
  */
 
+import type { AccessPolicy } from "./access.ts"
+
 export const PROTOCOL_VERSION = "0.2"
 
 /** Sent by the server for each event on a subscription. */
@@ -164,6 +166,8 @@ export interface DescribeResult {
   readonly capabilities: {
     readonly virtualTime: boolean
   }
+  /** What this connection may do, when it is less than full control. */
+  readonly access?: AccessPolicy
 }
 
 export interface ResetParams {
@@ -268,6 +272,8 @@ export const ErrorCode = {
   StaleSession: -32012,
   ResourceExhausted: -32013,
   AmbiguousName: -32014,
+  /** The connection's access policy does not allow this request. */
+  NotPermitted: -32015,
 } as const
 
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode]

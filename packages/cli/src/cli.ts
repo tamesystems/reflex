@@ -10,7 +10,7 @@ import {
   WAIT_TIMEOUT_MS_DEFAULT,
   WAIT_TIMEOUT_MS_MAX,
 } from "@reflex/protocol"
-import type { Client } from "@reflex/rpc"
+import { type Client, restrictClient } from "@reflex/rpc"
 import {
   type Config,
   loadConfig,
@@ -26,11 +26,15 @@ const BRIDGE_PORT_DEFAULT_TEXT = "8790"
 
 const USAGE = `reflex: inspect and drive an application, headless or live on a device
 
-Usage: reflex [--target headless|device] <command>
+Usage: reflex [--target headless|device] [--access <access>] <command>
 
   headless (the default) runs an app module here, with no UI.
   device bridges to an app running in development, which dials in.
   Each target has its own session, so both can run at once.
+
+  --access limits what this command may do: control (the default), observe
+  (read, wait and watch only), or actions:<name>,<name> (observe, and run only
+  those actions). A guard for agents, not a boundary: see SECURITY.md.
 
 Session
   reflex start <app-module> [--scenario <name>]   Start a background session
@@ -57,6 +61,7 @@ Act
 
 Environment
   REFLEX_TARGET             headless or device, as --target
+  REFLEX_ACCESS             control, observe or actions:<name>,<name>, as --access
   REFLEX_APP_WAIT_MS        How long a device session holds a command for an app (default 15000)
   REFLEX_DIR                Session directory, private to its owner (default ./.reflex)
   REFLEX_START_TIMEOUT_MS     How long start waits (default ${START_TIMEOUT_MS_DEFAULT})
@@ -68,13 +73,16 @@ export async function main(
   argv: ReadonlyArray<string>,
   environment: NodeJS.ProcessEnv,
 ): Promise<void> {
-  const { targetFlag, remaining } = takeTarget(argv)
+  const { targetFlag, accessFlag, remaining } = takeGlobals(argv)
   const [command, ...rest] = remaining
   if (command === undefined || command === "help" || command === "--help") {
     console.log(USAGE)
     return
   }
-  const config = loadConfig(environment, targetFlag)
+  const config = loadConfig(environment, targetFlag, accessFlag)
+  if (SESSION_LIFECYCLE.has(command) && config.access.kind !== "control") {
+    throw new Error(`reflex ${command} needs full control; it was run with restricted access`)
+  }
   switch (command) {
     case "serve":
       return runServe(config, rest)
@@ -200,18 +208,38 @@ function parseJsonArgument(what: string, text: string): Json {
 }
 
 /** `--target` comes before the command, so that every command takes it the same way. */
-function takeTarget(argv: ReadonlyArray<string>): {
+/** Starting and stopping sessions belongs to their owner. */
+const SESSION_LIFECYCLE: ReadonlySet<string> = new Set(["start", "serve", "stop"])
+
+/** `--target` and `--access` come before the command, so every command takes them alike. */
+function takeGlobals(argv: ReadonlyArray<string>): {
   readonly targetFlag: string | undefined
+  readonly accessFlag: string | undefined
   readonly remaining: ReadonlyArray<string>
 } {
-  if (argv[0] !== "--target") {
-    return { targetFlag: undefined, remaining: argv }
+  const values = new Map<string, string>()
+  let index = 0
+  while (argv[index] === "--target" || argv[index] === "--access") {
+    const flag = argv[index] ?? ""
+    const value = argv[index + 1]
+    if (value === undefined) {
+      throw new Error(
+        flag === "--target"
+          ? "--target needs a value: headless or device"
+          : "--access needs a value: control, observe or actions:<name>,<name>",
+      )
+    }
+    if (values.has(flag)) {
+      throw new Error(`${flag} was given twice`)
+    }
+    values.set(flag, value)
+    index += 2
   }
-  const targetFlag = argv[1]
-  if (targetFlag === undefined) {
-    throw new Error("--target needs a value: headless or device")
+  return {
+    targetFlag: values.get("--target"),
+    accessFlag: values.get("--access"),
+    remaining: argv.slice(index),
   }
-  return { targetFlag, remaining: argv.slice(2) }
 }
 
 async function runServe(config: Config, argv: ReadonlyArray<string>): Promise<void> {
@@ -276,7 +304,7 @@ function transportOf(switches: ReadonlySet<string>): ServeOptions["transport"] {
 }
 
 async function withClient(config: Config, run: (client: Client) => Promise<void>): Promise<void> {
-  const client = await connectToSession(config)
+  const client = restrictClient(await connectToSession(config), config.access)
   try {
     await run(client)
   } finally {
@@ -285,7 +313,7 @@ async function withClient(config: Config, run: (client: Client) => Promise<void>
 }
 
 async function watch(config: Config): Promise<void> {
-  const client = await connectToSession(config)
+  const client = restrictClient(await connectToSession(config), config.access)
   try {
     client.onEvent((event) => console.log(JSON.stringify(event)))
     await client.request("app.subscribe", {})

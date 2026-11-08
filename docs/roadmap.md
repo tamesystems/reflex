@@ -4,22 +4,7 @@ What the original design called for and is not built yet, in priority order. Eac
 says why it matters, where things stand, and what done looks like. When one ships, move
 what it decided into an ADR and delete its entry here.
 
-## 1. Read-only access, and authorized dispatch
-
-**Why.** Observing an app and changing it are different powers. An agent asked to
-diagnose a bug, a dashboard, or a log recorder should be able to watch a session without
-being able to act on it, and a client that may act should be limited to the actions it
-needs. XState keeps inspection observational for this reason.
-
-**Now.** Anyone who can open a session's socket, or holds the bridge token, can call every
-method. There is no read-only mode and no per-action allowlist. The MCP server marks
-`reflex_dispatch` and `reflex_reset` destructive, but those marks are hints for the client.
-
-**Done when.** A session can grant a peer read-only access (`describe`, `inspect`, `wait`,
-`subscribe`), or dispatch limited to named actions, enforced by the controller and covered
-by the conformance suite. The CLI and MCP server can be started read-only.
-
-## 2. Compare with Effect RPC
+## 1. Compare with Effect RPC
 
 **Why.** Effect v4's RPC can speak JSON-RPC 2.0 over NDJSON with schema-derived clients and
 servers. It might replace much of `@reflex/rpc`'s hand-written framing, parsing and client.
@@ -31,7 +16,7 @@ APIs were marked unstable.
 (with control messages off) passes `packages/rpc/test/wire.test.ts` against it, and an ADR
 records whether to switch, with the limits work in mind.
 
-## 3. A second, unrelated backend: XState
+## 2. A second, unrelated backend: XState
 
 **Why.** The claim that the runtime is backend-agnostic is only as strong as the backends
 it has been tried against. An actor library with its own lifecycle is the hardest test.
@@ -42,7 +27,7 @@ a Zustand vanilla store ([ADR 0002](decisions/0002-the-runtime-is-effect-free.md
 **Done when.** An XState-backed counter passes the conformance suite with no special case
 in the suite or the runtime.
 
-## 4. Adoption without Effect
+## 3. Adoption without Effect
 
 **Why.** Most existing Expo apps use Zustand, Redux or plain hooks. They should be able to
 expose behavior without rewriting their state in Effect.
@@ -58,7 +43,7 @@ expose behavior without rewriting their state in Effect.
   adapter, with JSON Schema still published.
 - An existing-app guide shows exposing an app incrementally: some screens, no core rewrite.
 
-## 5. Native end-to-end coverage
+## 4. Native end-to-end coverage
 
 **Why.** A headless session cannot check native gestures, layout, accessibility, animation
 or platform integrations. Those need a small set of native tests and visual checks.
@@ -70,7 +55,7 @@ has never launched (see [development.md](development.md#what-the-tests-prove)).
 Android emulator in CI, including a back gesture and the live bridge, plus a run on a
 physical phone.
 
-## 6. Real services in the Expo app
+## 5. Real services in the Expo app
 
 **Why.** The architecture's promise is the same logic against real services in the app and
 fixtures headless. Every run so far has used fixtures on both sides.
@@ -80,7 +65,7 @@ fixtures headless. Every run so far has used fixtures on both sides.
 **Done when.** The example app has a live scenario backed by a real (local) API and device
 storage, while the headless sessions keep using fixtures, and a journey passes against both.
 
-## 7. MCP extras
+## 6. MCP extras
 
 **Why.** Agents with a fixed set of frequent actions may work better with a tool per action,
 and running a whole journey from an agent saves many calls.

@@ -4,8 +4,15 @@
  * has leaked.
  */
 import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test"
-import { ErrorCode, ProtocolError } from "@reflex/protocol"
-import { type AppHost, createRuntime, type NodeAdapter } from "@reflex/runtime"
+import { type AccessPolicy, ErrorCode, FULL_CONTROL, ProtocolError } from "@reflex/protocol"
+import {
+  type AppHost,
+  type Controller,
+  createController,
+  createRuntime,
+  type NodeAdapter,
+  restrictController,
+} from "@reflex/runtime"
 import { createTestAppPool } from "@reflex/test"
 import effectBackend, { COUNTER_APP_MODULE } from "./counter-app.ts"
 import { openBridged } from "./live-bridge.ts"
@@ -88,12 +95,21 @@ const plainBackend: AppHost = {
   },
 }
 
-describe.each([
-  ["Effect", () => pool.open(effectBackend)],
-  ["plain store", () => pool.open(plainBackend)],
+const BACKENDS = [
+  ["Effect", () => createController(effectBackend)],
+  ["plain store", () => createController(plainBackend)],
   // Served as a device serves it, over a real WebSocket bridge: what the CLI drives live.
-  ["Effect, live through the bridge,", () => pool.openOn(() => openBridged(COUNTER_APP_MODULE))],
-] as const)("%s backend", (_, open) => {
+  ["Effect, live through the bridge,", () => openBridged(COUNTER_APP_MODULE)],
+] as const
+
+const opener =
+  (controllerOf: () => Promise<Controller>) =>
+  (access: AccessPolicy = FULL_CONTROL) =>
+    pool.openOn(async () => restrictController(await controllerOf(), access))
+
+describe.each(BACKENDS)("%s backend", (_, controllerOf) => {
+  const open = opener(controllerOf)
+
   test("inspect exposes state and a JSON Schema per action", async () => {
     const app = await open()
     const { node } = await app.inspect()
@@ -164,5 +180,42 @@ describe.each([
       code: ErrorCode.WaitTimeout,
       data: { state: { count: 7 } },
     })
+  })
+})
+
+describe.each(BACKENDS)("%s backend, held to an access policy,", (_, controllerOf) => {
+  const open = opener(controllerOf)
+
+  test("an observer reads, waits and watches, and changes nothing", async () => {
+    const app = await open({ kind: "observe" })
+    const { node } = await app.inspect()
+    expect(node?.actions.Add).toMatchObject({
+      available: false,
+      unavailableReason: "Not permitted on this connection",
+    })
+    expect(await app.client.request("app.describe", {})).toMatchObject({
+      access: { kind: "observe" },
+    })
+    await expect(app.do("Add", { by: 1 })).rejects.toMatchObject({
+      code: ErrorCode.NotPermitted,
+    })
+    await expect(app.reset()).rejects.toMatchObject({ code: ErrorCode.NotPermitted })
+    await app.inspect()
+    expect(app.state).toEqual({ count: 0 })
+    await expect(app.waitFor({ match: { count: 1 }, timeoutMs: 10 })).rejects.toMatchObject({
+      code: ErrorCode.WaitTimeout,
+    })
+  })
+
+  test("an allowlist runs the actions it names, and only those", async () => {
+    const app = await open({ kind: "actions", actions: ["Add"] })
+    await app.do("Add", { by: 2 })
+    expect(app.state).toEqual({ count: 2 })
+    await expect(app.do("Reset")).rejects.toMatchObject({ code: ErrorCode.NotPermitted })
+    await expect(app.client.request("app.advanceTime", { durationMs: 1 })).rejects.toMatchObject({
+      code: ErrorCode.NotPermitted,
+    })
+    await app.inspect()
+    expect(app.state).toEqual({ count: 2 })
   })
 })

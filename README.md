@@ -90,7 +90,7 @@ package is private, at version 0.0.0, and exports its TypeScript sources directl
 The original design's milestones are built: the headless core, introspection and the
 CLI, navigation and journey tests, the live Expo bridge, and the MCP adapter. Evidence and
 its limits are in [Development](docs/development.md#what-the-tests-prove); what is still
-to do, starting with read-only access, is in the [roadmap](docs/roadmap.md). It has not
+to do is in the [roadmap](docs/roadmap.md). It has not
 run on iOS or on a physical phone.
 
 ## License

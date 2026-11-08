@@ -21,7 +21,13 @@ Reflex is development tooling. Its trust model:
   only in development builds, behind `__DEV__`, as `apps/mobile/app/_layout.tsx` does;
   production builds then contain neither the bridge nor the token.
 - **The MCP server** runs only when started, over stdio, and opens no listener. A client
-  given its tools can run any action the app exposes.
+  given its tools can run any action the app exposes, unless the server was started with
+  a narrower `--access`.
+- **Access policies.** A connection can be limited to observing, or to named actions
+  (ADR 0013). Sessions enforce a connection's `access` option themselves. The CLI's
+  `--access` and the MCP server's are guards for the process that runs them, not
+  boundaries: anything that can open the session's socket can connect with full control.
+  To hold an agent to a policy, give it the MCP server and not a shell.
 
 ## Reporting a vulnerability
 

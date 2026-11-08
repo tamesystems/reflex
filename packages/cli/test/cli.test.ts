@@ -1304,3 +1304,34 @@ test("reflex mcp drives the same session as the CLI, and answers as it does", as
   expect(replies[2]?.result.structuredContent).toEqual(json("ls", "--schema") as never)
   expect(json("ls").name).toBe("InventoryDetail")
 })
+
+test("--access observe reads the session but cannot change it", () => {
+  const listed = reflex("--access", "observe", "ls")
+  expect(listed.code).toBe(0)
+  expect(JSON.parse(listed.out).actions).toContainEqual(
+    expect.objectContaining({
+      name: "OpenProduct",
+      unavailable: "Not permitted on this connection",
+    }),
+  )
+  const refused = reflex("--access", "observe", "do", "OpenProduct", '{"productId":"product-123"}')
+  expect(refused.code).toBe(1)
+  expect(refused.err).toContain("not permitted")
+  expect(json("ls").name).toBe("InventoryList")
+  expect(reflex("--access", "observe", "reset").code).toBe(1)
+  expect(reflex("--access", "observe", "stop").err).toContain("needs full control")
+})
+
+test("an action allowlist, from the flag or REFLEX_ACCESS, runs only what it names", () => {
+  const opened = Bun.spawnSync(["bun", CLI, "do", "OpenProduct", '{"productId":"product-123"}'], {
+    cwd: root,
+    env: { ...process.env, REFLEX_DIR: directory, REFLEX_ACCESS: "actions:OpenProduct" },
+    timeout: COMMAND_TIMEOUT_MS,
+  })
+  expect(opened.exitCode).toBe(0)
+  const refused = reflex("--access", "actions:OpenProduct", "do", "Increment")
+  expect(refused.code).toBe(1)
+  expect(json("ls").state).toMatchObject({ quantity: 5 })
+  expect(reflex("--access", "actions:", "ls").err).toContain("names 1 to")
+  expect(reflex("--access", "everything", "ls").err).toContain("Access must be")
+})

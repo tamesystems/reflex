@@ -62,10 +62,12 @@ The app always dials out to the bridge; it never listens
 
 ```text
 packages/
-  protocol/   The contract. Types, parsers for every message, error codes, limits.ts.
-              Depends on nothing. Start: contracts.ts, limits.ts.
-  runtime/    Node registry, operations, waits, event log (runtime.ts), and the
-              SessionController that starts, resets and closes sessions (controller.ts).
+  protocol/   The contract. Types, parsers for every message, error codes, limits.ts,
+              and access.ts: what each access policy allows. Depends on nothing.
+              Start: contracts.ts, limits.ts.
+  runtime/    Node registry, operations, waits, event log (runtime.ts), the
+              SessionController that starts, resets and closes sessions (controller.ts),
+              and restrictController, which holds any controller to a policy.
               No Effect, no platform APIs. Start: runtime.ts, then controller.ts.
   rpc/        JSON-RPC 2.0 over newline-delimited JSON. server.ts is one peer's
               connection to a Controller; client.ts the other end; socket.ts the Unix socket, Windows pipe and stdio transports;
@@ -288,6 +290,10 @@ rotates its local secret only after obtaining its lock; the device bridge token 
 - **Errors.** Expected outcomes are `ProtocolError`s with a code from
   `packages/protocol/src/contracts.ts`, or a failed operation. Failures with nobody to
   answer go to the session's `onBackgroundError` reporter.
+- **Access.** A peer has a policy: `control` (the default), `observe`, or an allowlist of
+  actions. `restrictController` enforces it for a connection before a request reaches the
+  session; the CLI's `--access` and the MCP server hold themselves to one as a guard
+  ([ADR 0013](decisions/0013-access-policies.md)).
 - **Cancellation.** A peer that disconnects aborts its waits. A client can cancel one
   request with `$/cancelRequest`; the bridge forwards it to the app.
 
@@ -326,6 +332,8 @@ What must stay true when you change things. Most have a test; the test names say
   request; frames have confidentiality, integrity and replay protection. Pipe names are
   discovery, never authentication.
 - **One implementation per command.** The CLI and the MCP tools both call `commands.ts`.
+- **A restricted peer changes only what its policy allows**, and a refused request has no
+  effect. Every protocol method is classified in `access.ts`; an unclassified one is refused.
 
 ## 8. Decisions
 
@@ -343,6 +351,7 @@ What must stay true when you change things. Most have a test; the test names say
 | [0010](decisions/0010-operations-and-interruption.md)               | Operations are accepted, then finish; back acts as return       |
 | [0011](decisions/0011-secrets-fail-closed.md)                       | Secrets are removed before encoding, failing closed             |
 | [0012](decisions/0012-windows-sessions-use-authenticated-pipes.md)  | Windows sessions use authenticated, encrypted pipes             |
+| [0013](decisions/0013-access-policies.md)                           | Access policies: observe, an action allowlist, or control       |
 
 ## 9. Influences
 
@@ -357,8 +366,8 @@ decision is in its ADR; what is still to do is in [roadmap.md](roadmap.md).
   app's state architecture, business logic and fixtures stay the app's own.
 - **[XState](https://stately.ai/docs/inspection).** The actor contract (a stable identity
   while alive, events in, snapshots out, subscriptions, a lifecycle) is what a node is.
-  XState also keeps inspection observational, separate from sending events; Reflex does
-  not yet (roadmap item 1).
+  XState also keeps inspection observational, separate from sending events; so can a
+  Reflex peer ([ADR 0013](decisions/0013-access-policies.md)).
 - **[Redux DevTools](https://github.com/reduxjs/redux-devtools).** Transitions are actions,
   not state writes. A protocol that could set `cart.quantity` would bypass validation,
   business rules and effects, so clients can only dispatch named, validated actions.
