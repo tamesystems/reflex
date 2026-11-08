@@ -202,9 +202,8 @@ describe.each(BACKENDS)("%s backend, held to an access policy,", (_, controllerO
     await expect(app.reset()).rejects.toMatchObject({ code: ErrorCode.NotPermitted })
     await app.inspect()
     expect(app.state).toEqual({ count: 0 })
-    await expect(app.waitFor({ match: { count: 1 }, timeoutMs: 10 })).rejects.toMatchObject({
-      code: ErrorCode.WaitTimeout,
-    })
+    // Observers may wait. One that is already satisfied keeps this free of timing.
+    await app.waitFor({ match: { count: 0 } })
   })
 
   test("an allowlist runs the actions it names, and only those", async () => {
