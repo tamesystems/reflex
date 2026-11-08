@@ -23,7 +23,8 @@
     "examples/*/src",
     "examples/*/test",
     "test",
-    "bench"
+    "bench",
+    "experiments"
   ],
   "exclude": ["packages/expo/src/react.tsx"]
 }

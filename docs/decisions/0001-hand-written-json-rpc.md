@@ -24,3 +24,6 @@ in `@reflex/rpc` are written by hand.
   [ADR 0012](0012-windows-sessions-use-authenticated-pipes.md) describes.
 - Every parser, limit and batch rule is ours to maintain and test.
 - The comparison with Effect RPC was skipped, not run. It could still win.
+
+Follow-up, 2026-11-08: [ADR 0014](0014-keep-the-hand-written-wire.md) ran the comparison
+and kept this wire.

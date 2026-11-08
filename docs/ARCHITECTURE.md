@@ -95,6 +95,8 @@ apps/
 test/         Cross-package suites: conformance (one suite, several backends),
               boundaries (the dependency rules), lifecycle, the bridge end to end.
 bench/        Wire and encoding costs.
+experiments/  Prototypes kept as evidence for a decision: effect-rpc/ serves the
+              protocol through Effect RPC and compares it with ours (ADR 0014).
 ```
 
 ### Dependency rules
@@ -352,6 +354,7 @@ What must stay true when you change things. Most have a test; the test names say
 | [0011](decisions/0011-secrets-fail-closed.md)                       | Secrets are removed before encoding, failing closed             |
 | [0012](decisions/0012-windows-sessions-use-authenticated-pipes.md)  | Windows sessions use authenticated, encrypted pipes             |
 | [0013](decisions/0013-access-policies.md)                           | Access policies: observe, an action allowlist, or control       |
+| [0014](decisions/0014-keep-the-hand-written-wire.md)                | Keep the hand-written wire rather than adopt Effect RPC         |
 
 ## 9. Influences
 
