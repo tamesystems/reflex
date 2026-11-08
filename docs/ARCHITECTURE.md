@@ -69,7 +69,8 @@ packages/
               No Effect, no platform APIs. Start: runtime.ts, then controller.ts.
   rpc/        JSON-RPC 2.0 over newline-delimited JSON. server.ts is one peer's
               connection to a Controller; client.ts the other end; socket.ts the Unix socket, Windows pipe and stdio transports;
-              local-auth.ts authenticates and encrypts Windows pipe frames;
+              local-auth.ts authenticates Windows pipe peers; local-cipher.ts encrypts
+              frames and validates proof-of-read credits for bounded native buffers;
               socket-writer.ts counts queued bytes until write callbacks complete; bridge-controller.ts a Controller that
               forwards to whichever app is connected.
   effect/     How an Effect app becomes nodes. capability.ts (defineCapability, mount),
@@ -267,7 +268,8 @@ rotates its local secret only after obtaining its lock; the device bridge token 
 ## 6. Cross-cutting concepts
 
 - **Local authentication.** Unix permissions remain the boundary; Windows peers mutually
-  authenticate and encrypt traffic using an ACL-protected secret (ADR 0012). Same-user
+  authenticate and encrypt traffic using an ACL-protected secret (ADR 0012). Random
+  receipt challenges bound native queues independently of Bun's write completion API. Same-user
   processes, SYSTEM and administrators are trusted. StdIO has its parent as the boundary.
 - **Limits.** Every resource a peer can make a session spend is bounded in
   `packages/protocol/src/limits.ts`. Past a limit, a request is generally refused with

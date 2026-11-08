@@ -51,8 +51,10 @@ answers on its socket, or reports why it failed. The module must export an `AppH
 
 ## Windows sessions and raw peers
 
-On Windows the endpoint is `\\.\pipe\reflex-<sha256>`: hash the lowercase resolved
-REFLEX_DIR, a NUL, then `headless` or `device`. `loadConfig` exposes `socketPath` and
+On Windows the endpoint is `\\.\pipe\reflex-<sha256>`: hash the canonical resolved
+REFLEX_DIR, a NUL, then `headless` or `device`. Existing ancestors are canonicalized
+before directory creation too, preserving identity across case aliases without
+collapsing distinct Windows case-sensitive directories. `loadConfig` exposes `socketPath` and
 `authPath`. There is no `.sock` file. The daemon rotates `<target>.auth` after taking the
 lock. Windows PowerShell 5.1 checks directory/file ACLs; mode bits do not protect secrets.
 Existing storage granting another ordinary principal access is refused. See
@@ -70,14 +72,32 @@ A raw Windows peer reads the hex secret from authPath and opens the pipe. Before
 4. Server checks and replies `ok` plus LF. Both sides now use encrypted NDJSON frames.
 
 Each direction derives its 32-byte AES key using the same HMAC with role `key-client`
-or `key-server`. Each JSON-RPC line is encrypted with AES-256-GCM; its 12-byte IV is
+or `key-server`. Before encryption, prefix each payload with the ASCII header
+`<receivedCount>:<receivedToken>:<kind>` and LF, then append a fresh random token
+after the payload. Counts start at zero;
+receivedToken starts empty. Each new token is 16 random bytes as 32 lowercase hex
+characters. Its placement after the payload makes credit depend on reading through
+the payload, even for a peer that decrypts without verifying the GCM tag. `kind` is `d` for a JSON-RPC line or `a` for an empty acknowledgement-only
+payload. receivedCount counts all successfully decoded peer frames, including acks;
+receivedToken is the token on that last frame. Receipt counts must never decrease or
+exceed frames sent, and their token must match the sent frame. Release all outstanding
+credit through that frame only after validating the token. Every sent frame consumes
+credit (encoded bytes including LF), including acks; at most 32 MiB and 65,536 frames
+may await receipt. This protects Bun's native Windows queue, whose write completion
+does not prove delivery. On each data frame, send an ack before forwarding JSON-RPC;
+do not reply to ack-only frames. The exported codec performs receipt validation and
+budget accounting. Encryption's base64 overhead counts against the byte budget.
+
+Each prefixed payload is encrypted with AES-256-GCM; its 12-byte IV is
 zero-filled with the direction's zero-based sequence in the last four bytes, big endian.
 Send base64(ciphertext concatenated with the 16-byte authentication tag), then LF.
 Sequence increases for every frame; reconnect before 2^32 frames. Both fresh nonces make
 keys unique per connection. Invalid proofs/frames close the connection. Handshakes get
 5 seconds and 256 characters per line. Protocol limits also bound encrypted frames.
 The exported `authenticateLocal(socket, secret, false)` returns `{ encode, decode }`
-and pauses the socket; attach a bounded reader, then resume. This helper also supports
+and pauses the socket; attach a bounded reader, then resume. `decode` returns a
+JSON-RPC line or `null` for an ack. On a non-null result, write `encode(null)` plus LF
+to acknowledge it before dispatching the line. Never forward ack frames to JSON-RPC. This helper also supports
 raw peers that build their own JSON-RPC envelopes. Never send the secret on the wire.
 
 ## The device bridge

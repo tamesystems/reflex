@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto"
-import { resolve } from "node:path"
+import { existsSync, realpathSync } from "node:fs"
+import { basename, dirname, resolve } from "node:path"
 import { BRIDGE_APP_WAIT_MS, SESSION_START_TIMEOUT_MS_MAX } from "@reflex/protocol"
 export { SESSION_LOG_BYTES_MAX } from "@reflex/protocol"
 
@@ -115,6 +116,15 @@ export const sessionEndpoint = (
 ): string =>
   platform === "win32"
     ? `\\\\.\\pipe\\reflex-${createHash("sha256")
-        .update(`${resolve(directory).toLowerCase()}\0${target}`)
+        .update(`${canonicalDirectory(resolve(directory))}\0${target}`)
         .digest("hex")}`
     : resolve(directory, `${target === "device" ? "device" : "session"}.sock`)
+
+/** Resolve existing ancestors too, so the name is stable before and after directory creation. */
+const canonicalDirectory = (directory: string): string => {
+  if (existsSync(directory)) {
+    return realpathSync.native(directory)
+  }
+  const parent = dirname(directory)
+  return parent === directory ? directory : resolve(canonicalDirectory(parent), basename(directory))
+}

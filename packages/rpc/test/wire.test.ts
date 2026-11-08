@@ -45,11 +45,11 @@ afterEach(async () => {
   }
 })
 
-const serve = async () => {
+const serve = async (localSecret?: string) => {
   const directory = mkdtempSync(join(tmpdir(), "reflex-"))
   const path = endpoint(directory)
   const controller = await createController(app)
-  const server = await serveSocket(controller, path)
+  const server = await serveSocket(controller, path, { localSecret })
   cleanups.push(async () => {
     server.close()
     await controller.close()
@@ -405,7 +405,7 @@ test("a server that stops reading cannot fill the client's memory", async () => 
     await silent.exited
     rmSync(directory, { recursive: true, force: true })
   })
-  const client = await connectSocket(path)
+  const client = await connectSocket(path, undefined, "stalled-secret")
   cleanups.push(() => client.close())
   const input = "x".repeat(4 * 1024 * 1024)
   const outcomes: Array<unknown> = []
@@ -438,14 +438,14 @@ test("a peer that sends an endless frame is disconnected", async () => {
 }, 20_000)
 
 test("a subscriber that stops reading is cut off, not buffered without limit", async () => {
-  const { path, server } = await serve()
+  const { path, server } = await serve("stalled-secret")
   const peer = await stalledPeer(path, false)
   cleanups.push(async () => {
     peer.kill()
     await peer.exited
   })
 
-  const client = await connectSocket(path)
+  const client = await connectSocket(path, undefined, "stalled-secret")
   cleanups.push(() => client.close())
   await client.request("app.wait", { idle: true })
   await client.request("app.dispatch", {
@@ -987,22 +987,23 @@ test("authenticated transport admits JSON-RPC only after mutual authentication",
   expect(shutdowns).toBe(1)
 })
 
-/** Socket.pause on Bun/Windows can keep native pipe reads active. Stop a real peer's event loop instead. */
+/** Stop the peer's JS thread: native reads alone cannot return proof-of-read credits. */
 const stalledPeer = async (path: string, listen: boolean) => {
   const child = Bun.spawn(
     [
       process.execPath,
       "-e",
       `
-    const net = require("node:net");
+    import { connectSocket, serveSocket } from "@reflex/rpc";
     const block = () => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0);
     if (${listen}) {
-      net.createServer(() => block()).listen(${JSON.stringify(path)}, () => console.log("ready"));
+      await serveSocket({request: () => block(), subscribe: () => block(), close: async () => {}}, ${JSON.stringify(path)}, {localSecret:"stalled-secret"});
+      console.log("ready");
     } else {
-      const peer = net.connect(${JSON.stringify(path)});
-      peer.on("error", () => {});
-      peer.once("connect", () => peer.write(JSON.stringify({jsonrpc:"2.0",id:1,method:"app.subscribe"}) + "\\n"));
-      peer.once("data", () => { console.log("ready"); block() });
+      const peer = await connectSocket(${JSON.stringify(path)}, undefined, "stalled-secret");
+      await peer.request("app.subscribe", {});
+      console.log("ready");
+      block();
     }
   `,
     ],

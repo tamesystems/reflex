@@ -116,4 +116,8 @@ export const LOCAL_AUTH_SECRET_BYTES = 32
 
 export const LOCAL_AUTH_FRAMES_MAX = 2 ** 32
 /** UTF-8 (at most 3 bytes per JS character), then base64, plus a GCM tag. */
-export const LOCAL_ENCRYPTED_FRAME_CHARACTERS_MAX = FRAME_CHARACTERS_MAX * 4 + 64
+export const LOCAL_ENCRYPTED_FRAME_CHARACTERS_MAX = FRAME_CHARACTERS_MAX * 4 + 512
+
+/** Proof-of-read credits also bound Bun's native Windows pipe writer queue. */
+export const LOCAL_UNACKNOWLEDGED_FRAMES_MAX = 65_536
+export const LOCAL_RECEIPT_BYTES = 16

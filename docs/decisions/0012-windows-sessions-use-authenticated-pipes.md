@@ -21,13 +21,14 @@ Sources:
 - [Node: IPC and listen options](https://nodejs.org/api/net.html#ipc-support)
 - [libuv Windows pipes](https://github.com/libuv/libuv/blob/v1.x/src/win/pipe.c)
 - [Microsoft: pipe impersonation requirements](https://learn.microsoft.com/en-us/windows/win32/api/namedpipeapi/nf-namedpipeapi-impersonatenamedpipeclient)
+- [Bun 1.4.4 Windows pipe writer](https://github.com/oven-sh/bun/blob/bun-v1.4.4/src/runtime/socket/WindowsNamedPipe.rs)
 - [Bun: net connections](https://bun.com/reference/node/net/createConnection)
 - [Microsoft: creating a directory with DirectorySecurity](https://learn.microsoft.com/en-us/dotnet/api/system.io.directoryinfo.create?view=netframework-4.8.1)
 
 ## Decision
 
 macOS/Linux keep ADR 0007's model unchanged. Windows sessions listen at
-`\\.\pipe\reflex-<sha256>`, hashing the lowercase resolved REFLEX_DIR, a NUL, and the
+`\\.\pipe\reflex-<sha256>`, hashing the canonical resolved REFLEX_DIR, a NUL, and the
 target (`headless` or `device`). Pipes are probed by connecting and disappear when their
 last handle closes; no filesystem operation tests or removes a pipe.
 
@@ -52,6 +53,16 @@ sequence as the nonce. This prevents a squatting/relaying pipe process reading s
 changing commands, reflecting frames or replaying an earlier connection. A relay can
 still forward the authorized client's exact traffic or deny service. The secret never
 crosses the pipe. No controller request, including shutdown, is admitted before auth.
+Bun 1.4.4's Windows pipe write function queues bytes natively and returns their length,
+so neither writableLength nor a write callback proves delivery. Each encrypted frame
+therefore carries a random 128-bit receipt challenge after its payload and the last received frame's
+sequence/challenge. A peer cannot return credit without reading the challenge. Every
+outgoing frame, including acknowledgement-only frames, consumes the byte/frame budget
+until a cumulative, validated receipt arrives. Only data frames cause an acknowledgement;
+acknowledgements do not echo each other indefinitely. This bounds native buffers even
+for an authenticated peer sending notifications while refusing to read. A stalled
+JavaScript peer is tested in a separate real process.
+
 Handshake time, line length, frame count, frame length, connections and write queues are
 bounded in protocol/limits.ts.
 

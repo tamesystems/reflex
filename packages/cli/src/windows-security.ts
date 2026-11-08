@@ -13,6 +13,7 @@ export const checkWindowsAcl = (path: string, createDirectory = false): void => 
   const encodedPath = Buffer.from(path).toString("base64")
   const script = `
 $ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
 $p = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${encodedPath}'))
 $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User
 if (${createDirectory ? "$true" : "$false"} -and -not [IO.Directory]::Exists($p)) {
@@ -24,9 +25,9 @@ if (${createDirectory ? "$true" : "$false"} -and -not [IO.Directory]::Exists($p)
   $dir = [IO.DirectoryInfo]::new($p)
   $dir.Create($acl)
 }
-$item = Get-Item -LiteralPath $p -Force
-if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Reparse points are not private storage' }
-$acl = Get-Acl -LiteralPath $p
+$attributes = [IO.File]::GetAttributes($p)
+if ($attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Reparse points are not private storage' }
+$acl = if ([IO.Directory]::Exists($p)) { [IO.Directory]::GetAccessControl($p) } else { [IO.File]::GetAccessControl($p) }
 $raw = [Security.AccessControl.RawSecurityDescriptor]::new($acl.GetSecurityDescriptorBinaryForm(), 0)
 if ($null -eq $raw.DiscretionaryAcl) { throw 'Null DACL' }
 $allowed = @($sid.Value, 'S-1-5-18', 'S-1-5-32-544')
@@ -44,6 +45,8 @@ if (-not $acl.AreAccessRulesCanonical) { throw 'Noncanonical ACL' }
       [
         "-NoProfile",
         "-NonInteractive",
+        "-OutputFormat",
+        "Text",
         "-EncodedCommand",
         Buffer.from(script, "utf16le").toString("base64"),
       ],

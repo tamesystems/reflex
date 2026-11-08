@@ -1,10 +1,11 @@
 import { afterEach, expect, test } from "bun:test"
-import { randomUUID } from "node:crypto"
+import { createCipheriv, randomUUID } from "node:crypto"
 import { mkdtempSync, rmSync } from "node:fs"
 import { connect, createServer } from "node:net"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { authenticateLocal, type LocalCipher } from "../src/local-auth.ts"
+import { LocalCipher } from "../src/local-cipher.ts"
+import { authenticateLocal } from "../src/local-auth.ts"
 
 const cleanups: Array<() => void> = []
 afterEach(() => {
@@ -68,4 +69,32 @@ test("modified authenticated frames are rejected and CRLF frames are accepted", 
   const next = client.value.encode("tamper")
   const changed = `${next[0] === "A" ? "B" : "A"}${next.slice(1)}`
   expect(() => server.value.decode(changed)).toThrow()
+})
+
+test("write credit is released only by an unpredictable proof of reading", async () => {
+  const [server, client] = await pair("secret", "secret")
+  if (server?.status !== "fulfilled" || client?.status !== "fulfilled") {
+    throw new Error("Handshake failed")
+  }
+  const first = client.value.encode("x".repeat(100), 400)
+  expect(() => client.value.encode("x".repeat(100), 400)).toThrow("not reading")
+  // A peer sending without reading cannot return any credit.
+  expect(client.value.decode(server.value.encode(null))).toBeNull()
+  expect(() => client.value.encode("x".repeat(100), 400)).toThrow("not reading")
+  expect(server.value.decode(first)).toBe("x".repeat(100))
+  expect(client.value.decode(server.value.encode(null))).toBeNull()
+  expect(() => client.value.encode("x".repeat(100), 400)).not.toThrow()
+})
+
+test("a peer knowing the encryption key cannot invent unread receipt challenges", () => {
+  const key = Buffer.alloc(32, 1)
+  const sender = new LocalCipher(key, key)
+  sender.encode("unread")
+  const cipher = createCipheriv("aes-256-gcm", key, Buffer.alloc(12))
+  const forged = Buffer.concat([
+    cipher.update(`1:${"0".repeat(32)}:a\n${"1".repeat(32)}`),
+    cipher.final(),
+    cipher.getAuthTag(),
+  ]).toString("base64")
+  expect(() => sender.decode(forged)).toThrow("receipt proof")
 })

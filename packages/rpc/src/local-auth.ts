@@ -1,18 +1,13 @@
-import {
-  createCipheriv,
-  createDecipheriv,
-  createHmac,
-  randomBytes,
-  timingSafeEqual,
-} from "node:crypto"
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto"
 import type { Socket } from "node:net"
 import {
   LOCAL_AUTH_LINE_CHARACTERS_MAX,
   LOCAL_AUTH_SECRET_BYTES,
   LOCAL_AUTH_TIMEOUT_MS,
-  LOCAL_AUTH_FRAMES_MAX,
-  LOCAL_ENCRYPTED_FRAME_CHARACTERS_MAX,
 } from "@reflex/protocol"
+
+import { LocalCipher } from "./local-cipher.ts"
+export type { LocalCipher } from "./local-cipher.ts"
 
 const nonce = (): string => randomBytes(LOCAL_AUTH_SECRET_BYTES).toString("hex")
 const validHex = (value: string): boolean => /^[a-f0-9]{64}$/.test(value)
@@ -49,7 +44,14 @@ export const authenticateLocal = (
         if (buffer.length > 0) {
           socket.unshift(Buffer.from(buffer))
         }
-        resolve(localCipher(secret, client, server, serverSide))
+        const key = (role: string) =>
+          Buffer.from(proof(secret, `key-${role}`, client, server), "hex")
+        resolve(
+          new LocalCipher(
+            key(serverSide ? "server" : "client"),
+            key(serverSide ? "client" : "server"),
+          ),
+        )
       }
     }
     const failed = (error: Error): void => finish(error)
@@ -57,8 +59,6 @@ export const authenticateLocal = (
     const timer = setTimeout(
       () => finish(new Error("Local authentication timed out")),
       LOCAL_AUTH_TIMEOUT_MS,
-      LOCAL_AUTH_FRAMES_MAX,
-      LOCAL_ENCRYPTED_FRAME_CHARACTERS_MAX,
     )
     const read = (chunk: Buffer): void => {
       buffer += chunk.toString("utf8")
@@ -110,57 +110,3 @@ export const authenticateLocal = (
     }
     socket.resume()
   })
-
-export interface LocalCipher {
-  encode(line: string): string
-  decode(line: string): string
-}
-
-/** Per-direction, per-connection keys prevent a relaying pipe owner reading or injecting frames. */
-const localCipher = (
-  secret: string,
-  client: string,
-  server: string,
-  serverSide: boolean,
-): LocalCipher => {
-  const key = (role: string): Buffer =>
-    Buffer.from(proof(secret, `key-${role}`, client, server), "hex")
-  const outgoing = key(serverSide ? "server" : "client")
-  const incoming = key(serverSide ? "client" : "server")
-  let sent = 0
-  let received = 0
-  const iv = (sequence: number): Buffer => {
-    if (sequence >= LOCAL_AUTH_FRAMES_MAX) {
-      throw new Error("Local session frame budget exhausted")
-    }
-    const value = Buffer.alloc(12)
-    value.writeUInt32BE(sequence, 8)
-    return value
-  }
-  return {
-    encode(line) {
-      const cipher = createCipheriv("aes-256-gcm", outgoing, iv(sent++))
-      return Buffer.concat([
-        cipher.update(line, "utf8"),
-        cipher.final(),
-        cipher.getAuthTag(),
-      ]).toString("base64")
-    },
-    decode(line) {
-      line = line.replace(/\r$/, "")
-      if (
-        line.length > LOCAL_ENCRYPTED_FRAME_CHARACTERS_MAX ||
-        !/^[A-Za-z0-9+/]*={0,2}$/.test(line)
-      ) {
-        throw new Error("Invalid encrypted frame")
-      }
-      const bytes = Buffer.from(line, "base64")
-      if (bytes.length < 16) {
-        throw new Error("Invalid encrypted frame")
-      }
-      const cipher = createDecipheriv("aes-256-gcm", incoming, iv(received++))
-      cipher.setAuthTag(bytes.subarray(-16))
-      return Buffer.concat([cipher.update(bytes.subarray(0, -16)), cipher.final()]).toString("utf8")
-    },
-  }
-}

@@ -119,7 +119,13 @@ export const serveSocket = (
       const connection = createConnection(
         controller,
         (line) => {
-          const frame = frameOf(cipher === undefined ? line : cipher.encode(line))
+          let frame: Buffer
+          try {
+            frame = frameOf(cipher === undefined ? line : cipher.encode(line, writeQueueBytesMax))
+          } catch {
+            socket.destroy()
+            return
+          }
           // Once a peer is this far behind, disconnecting is the only signal left.
           if (!write(frame)) {
             socket.destroy()
@@ -136,7 +142,16 @@ export const serveSocket = (
       const read = createLineReader({
         onLine: (line) => {
           try {
-            connection.receive(cipher === undefined ? line : cipher.decode(line))
+            const decoded = cipher === undefined ? line : cipher.decode(line)
+            if (decoded !== null) {
+              if (
+                cipher !== undefined &&
+                !write(frameOf(cipher.encode(null, writeQueueBytesMax)))
+              ) {
+                throw new Error("Peer is not reading")
+              }
+              connection.receive(decoded)
+            }
           } catch {
             socket.destroy()
           }
@@ -229,7 +244,12 @@ export const connectSocket = (
     let cipher: LocalCipher | undefined
     const client = createClient({
       send: (line) => {
-        const frame = frameOf(cipher === undefined ? line : cipher.encode(line))
+        let frame: Buffer
+        try {
+          frame = frameOf(cipher === undefined ? line : cipher.encode(line))
+        } catch {
+          throw new ProtocolError(ErrorCode.ResourceExhausted, "The server is not reading")
+        }
         // A server that stops reading must not fill this process's memory instead.
         if (!write(frame)) {
           throw new ProtocolError(ErrorCode.ResourceExhausted, "The server is not reading")
@@ -241,7 +261,13 @@ export const connectSocket = (
     const read = createLineReader({
       onLine: (line) => {
         try {
-          client.receive(cipher === undefined ? line : cipher.decode(line))
+          const decoded = cipher === undefined ? line : cipher.decode(line)
+          if (decoded !== null) {
+            if (cipher !== undefined && !write(frameOf(cipher.encode(null)))) {
+              throw new Error("Server is not reading")
+            }
+            client.receive(decoded)
+          }
         } catch {
           client.fail(new Error("Invalid authenticated frame"))
           socket.destroy()
