@@ -6,7 +6,7 @@ Status: Accepted
 
 Effect v4 gives schemas, structured concurrency and virtual time, which suit app cores
 well. But a control protocol tied to one state library would not fit apps built on
-reducers, Zustand or XState, and IDEA.md's research argued the runtime should be smaller
+reducers, Zustand or XState, and the original design research argued the runtime should be smaller
 than the protocol.
 
 ## Decision

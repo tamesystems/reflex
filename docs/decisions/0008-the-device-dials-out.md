@@ -4,7 +4,9 @@ Status: Accepted
 
 ## Context
 
-IDEA.md's milestone 4 asks for the same CLI actions against a live app. React Native
+The original design's fourth milestone asked for a development-only, authenticated bridge
+to the running app, with a CLI target switch, so that the same CLI actions work against
+headless and live sessions. React Native
 cannot reliably run a general socket server, a phone's address is often unreachable, and
 the bridge must never ship in a production build.
 

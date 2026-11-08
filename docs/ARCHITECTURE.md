@@ -343,3 +343,39 @@ What must stay true when you change things. Most have a test; the test names say
 | [0010](decisions/0010-operations-and-interruption.md)               | Operations are accepted, then finish; back acts as return       |
 | [0011](decisions/0011-secrets-fail-closed.md)                       | Secrets are removed before encoding, failing closed             |
 | [0012](decisions/0012-windows-sessions-use-authenticated-pipes.md)  | Windows sessions use authenticated, encrypted pipes             |
+
+## 9. Influences
+
+Where the design comes from, and what each source taught. The reasoning that became a
+decision is in its ADR; what is still to do is in [roadmap.md](roadmap.md).
+
+- **[Shopify Reflex](https://shopify.engineering/reflex).** Behavior lives in a core with a
+  strict boundary from the UI, runs headless, and is driven by fixtures and a CLI. Shopify
+  argued against publishing it as a library, because it was coupled to their navigation,
+  sessions and fixtures. Reflex draws the reusable line lower: the protocol, the runtime,
+  transports, the CLI and the test SDK are reusable; the navigation model is optional; an
+  app's state architecture, business logic and fixtures stay the app's own.
+- **[XState](https://stately.ai/docs/inspection).** The actor contract (a stable identity
+  while alive, events in, snapshots out, subscriptions, a lifecycle) is what a node is.
+  XState also keeps inspection observational, separate from sending events; Reflex does
+  not yet (roadmap item 1).
+- **[Redux DevTools](https://github.com/reduxjs/redux-devtools).** Transitions are actions,
+  not state writes. A protocol that could set `cart.quantity` would bypass validation,
+  business rules and effects, so clients can only dispatch named, validated actions.
+- **[Chrome DevTools Protocol](https://chromedevtools.github.io/devtools-protocol/) and the
+  [Dart VM Service](https://github.com/dart-lang/sdk/blob/main/runtime/vm/service/service.md).**
+  Never send live objects across a process boundary; refer to them by handle. Reflex's
+  handles are semantic (`screen/InventoryDetail/<session>/4`), name their session, and exist
+  only for explicitly registered nodes. Versioned RPC and ordered event streams come from
+  here too.
+- **[Playwright MCP snapshots](https://playwright.dev/mcp/snapshots).** Give agents a
+  compact, semantic observation, not a dump: which screen is active, what it shows, what can
+  be done and with what input, and what changed. That is `reflex ls`.
+- **[MCP](https://modelcontextprotocol.io).** An external interface for agents, not the
+  internal contract: revisions, node lifecycle, event order and resets need semantics of
+  their own ([ADR 0009](decisions/0009-mcp-reuses-the-cli.md)).
+- **[Effect](https://effect.website) v4.** Schemas that yield validation, JSON Schema and
+  generators from one definition; services as Layers, so scenarios swap fixtures in;
+  scopes and fibers, so popping a screen interrupts its work; `TestClock` for virtual time.
+  Effect is how the example app is built, not what the protocol requires
+  ([ADR 0002](decisions/0002-the-runtime-is-effect-free.md)).

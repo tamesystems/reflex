@@ -17,7 +17,6 @@ drive it through a simulator. Both are slow and lossy. If behavior lives in a he
 core with an explicit control surface, an agent can run most checks with no UI at all,
 then confirm selected behavior against the real app through the same commands. Reflex is
 that control surface for Expo apps, built on [Effect](https://effect.website) v4.
-[IDEA.md](IDEA.md) is the original design research, kept as written.
 
 ## System at a glance
 
@@ -65,6 +64,7 @@ expect(session.state).toMatchObject({ _tag: "editing", error: "Save timed out" }
 - [Development](docs/development.md): set up, run, test, debug and make common changes.
 - [Domain](docs/domain.md): what nodes, operations, sessions, cursors and the rest mean.
 - [Decisions](docs/decisions/): why it is built this way.
+- [Roadmap](docs/roadmap.md): what is not built yet.
 - [Security](SECURITY.md): the trust model.
 
 ## Quick start
@@ -87,10 +87,11 @@ package is private, at version 0.0.0, and exports its TypeScript sources directl
 
 ## Status
 
-Every milestone in IDEA.md is built: the headless core, introspection and the CLI,
-navigation and journey tests, the live Expo bridge, and the MCP adapter. Evidence and
-its limits are in [Development](docs/development.md#what-the-tests-prove). It has not run
-on iOS or on a physical phone.
+The original design's milestones are built: the headless core, introspection and the
+CLI, navigation and journey tests, the live Expo bridge, and the MCP adapter. Evidence and
+its limits are in [Development](docs/development.md#what-the-tests-prove); what is still
+to do, starting with read-only access, is in the [roadmap](docs/roadmap.md). It has not
+run on iOS or on a physical phone.
 
 ## License
 

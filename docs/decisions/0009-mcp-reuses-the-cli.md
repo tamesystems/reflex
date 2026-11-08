@@ -4,7 +4,7 @@ Status: Accepted
 
 ## Context
 
-IDEA.md asks for MCP support that uses "the same underlying session and introspection
+The original design asked for MCP support that uses "the same underlying session and introspection
 system as the CLI" and does not "create a separate application-control API". Agents with
 a shell can already run the CLI; MCP is for clients that speak only MCP.
 
