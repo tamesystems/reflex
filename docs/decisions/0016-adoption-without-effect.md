@@ -23,13 +23,17 @@ Every mount requires an explicit public JSON projection. Copy and freeze it, rej
 non-JSON/accessors and enforce the protocol's state depth and escaped-character limits
 before retaining it. Only changed projected JSON emits a state notification. Availability
 reads the current store; the projection must include its dependencies to give availability
-changes revisions. External invalid writes cannot be rolled back; throw and retain the
-last valid public snapshot. There is no automatic Effect Redacted scan on this path.
+changes revisions. External invalid writes cannot be rolled back. The check runs inside
+the application's own store write, so it never throws there: that would fail a write
+unrelated to Reflex and skip the store's other subscribers, such as its UI. It reports once
+until the state recovers, retains the last valid public snapshot, and fails any operation
+that finishes meanwhile. There is no automatic Effect Redacted scan on this path.
 Error messages and declared tags must also be safe for publication.
 
 Standard Schema supplies validation, not JSON Schema. Accept an explicit input schema,
 including converter output, and reject async validation before acceptance because
-NodeAdapter.prepare is synchronous. Observe any returned rejected Promise. Do not widen
+NodeAdapter.prepare is synchronous. Observe any returned rejected Promise. A refusal names
+the first few issues and their paths, so a client can correct itself. Do not widen
 the runtime dispatch contract or run validators as operations. Test the example's
 published input schema against the real validator with valid and invalid inputs.
 

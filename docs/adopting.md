@@ -58,8 +58,11 @@ serialization or automatic secret detection happens. Error tags and messages are
 too; never include credentials in them.
 
 An invalid external write has already happened in your store: Reflex cannot roll it back.
-The store notification throws, leaves the last valid public snapshot unchanged, and emits
-no change. If it happened inside a handler, that operation fails. Validate your own writes
+Your write still succeeds and your store's other subscribers still run: Reflex reports the
+problem to the session's background reporter, once until the state is publishable again,
+keeps the last valid public snapshot, and emits no change. Clients see stale state until
+then, so treat a report as a bug to fix. An operation that finishes while the state is
+unpublishable fails, though its work ran. Validate your own writes
 before committing them when you need atomic store/public-state updates.
 
 ## 2. Own session lifetime, without rewriting the core

@@ -31,12 +31,27 @@ export interface StandardValidator<T> {
       value: unknown,
     ):
       | { readonly value: T; readonly issues?: undefined }
-      | { readonly issues: ReadonlyArray<{ readonly message: string }> }
+      | { readonly issues: ReadonlyArray<StandardIssue> }
       | Promise<
           | { readonly value: T; readonly issues?: undefined }
-          | { readonly issues: ReadonlyArray<{ readonly message: string }> }
+          | { readonly issues: ReadonlyArray<StandardIssue> }
         >
   }
+}
+
+interface StandardIssue {
+  readonly message: string
+  readonly path?: ReadonlyArray<PropertyKey | { readonly key: PropertyKey }> | undefined
+}
+
+/** Enough for a client to correct itself. Bounded, because a peer chose the input. */
+const INPUT_ISSUES_SHOWN_MAX = 5
+
+const issueText = ({ message, path }: StandardIssue): string => {
+  const keys = (path ?? []).map((part) =>
+    String(typeof part === "object" && part !== null ? part.key : part),
+  )
+  return keys.length === 0 ? message : `${keys.join(".")}: ${message}`
 }
 
 export interface StoreInput<T> {
@@ -63,7 +78,8 @@ export const standardInput = <T>(
       )
     }
     if (result.issues !== undefined) {
-      throw new ProtocolError(ErrorCode.InvalidInput, "Input does not match its Standard Schema")
+      const shown = result.issues.slice(0, INPUT_ISSUES_SHOWN_MAX).map(issueText).join("; ")
+      throw new ProtocolError(ErrorCode.InvalidInput, boundedText(`Invalid input: ${shown}`))
     }
     return result.value
   },
@@ -218,6 +234,8 @@ class StoreNode<S> implements NodeAdapter {
   private readonly running = new Set<Invocation>()
   private readonly listeners = new Set<() => void>()
   private disposed = false
+  /** Why the store's current state cannot be published, while that lasts. */
+  private unpublishable: { readonly error: unknown } | null = null
   private readonly unregister: () => void
   private readonly stop: () => void
 
@@ -292,7 +310,13 @@ class StoreNode<S> implements NodeAdapter {
     const input = decodeInput(action.input, raw)
     return () => {
       const work = invoke((signal) =>
-        action.handler(input, { store: this.definition.store, signal }),
+        Promise.resolve(action.handler(input, { store: this.definition.store, signal })).then(
+          () => {
+            if (this.unpublishable !== null) {
+              throw this.unpublishable.error
+            }
+          },
+        ),
       )
       this.running.add(work)
       void work.done.then(() => this.running.delete(work))
@@ -313,11 +337,27 @@ class StoreNode<S> implements NodeAdapter {
     this.listeners.clear()
   }
 
+  /**
+   * Runs inside the application's own store write, so it must not throw: that would fail a
+   * write that has nothing to do with Reflex and skip the store's other subscribers, such
+   * as its UI. State that cannot be published is reported, once until it recovers, and the
+   * last valid snapshot stands. An operation that finishes meanwhile fails instead.
+   */
   private refresh(): void {
     if (this.disposed) {
       return
     }
-    const next = publicState(this.definition.project(this.definition.store.getState()))
+    let next: Json
+    try {
+      next = publicState(this.definition.project(this.definition.store.getState()))
+    } catch (error) {
+      if (this.unpublishable === null) {
+        this.runtime.report(error)
+      }
+      this.unpublishable = { error }
+      return
+    }
+    this.unpublishable = null
     const encoded = JSON.stringify(next)
     if (encoded === this.previous) {
       return

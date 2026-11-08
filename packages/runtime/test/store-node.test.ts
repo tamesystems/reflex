@@ -226,7 +226,7 @@ test("JSON, depth, size and escaped size are checked before registration and eac
     "x".repeat(NODE_STATE_CHARACTERS_MAX),
     "\\".repeat(NODE_STATE_CHARACTERS_MAX * 0.75),
   ]) {
-    const runtime = createRuntime({ sessionId: "limits" })
+    const runtime = createRuntime({ sessionId: "limits", onBackgroundError: () => undefined })
     const store = createStore<unknown>(() => invalid)
     expect(() =>
       mountStore(runtime, { name: "Invalid", store, project: (s) => s, actions: {} }),
@@ -235,7 +235,7 @@ test("JSON, depth, size and escaped size are checked before registration and eac
     store.setState("valid")
     const node = mountStore(runtime, { name: "Valid", store, project: (s) => s, actions: {} })
     const sequence = runtime.sequence
-    expect(() => store.setState(invalid, true)).toThrow()
+    store.setState(invalid, true)
     expect(node.getSnapshot()).toBe("valid")
     expect(runtime.sequence).toBe(sequence)
     node.dispose()
@@ -274,7 +274,10 @@ test("structural Redux-style store needs no Zustand adapter", async () => {
 })
 
 test("projection accessors are rejected without invoking them and invalid writes fail as limits", async () => {
-  const runtime = createRuntime({ sessionId: "public-boundary" })
+  const runtime = createRuntime({
+    sessionId: "public-boundary",
+    onBackgroundError: () => undefined,
+  })
   let read = false
   const accessor = {
     get token() {
@@ -381,4 +384,83 @@ test("public arrays cannot execute a custom JSON encoder", () => {
     }),
   ).toThrow("named properties")
   expect(encoded).toBe(false)
+})
+
+test("state that cannot be published never breaks the application's own store write", async () => {
+  const reported: Array<unknown> = []
+  const runtime = createRuntime({
+    sessionId: "app-write",
+    onBackgroundError: (error) => reported.push(error),
+  })
+  const store = createStore<{ count: number; extra?: unknown }>(() => ({ count: 0 }))
+  const node = mountStore(runtime, {
+    name: "Counter",
+    store,
+    project: (state) => state,
+    actions: { Add: { handler: () => store.setState(({ count }) => ({ count: count + 1 })) } },
+  })
+  // Subscribed after Reflex, as an app's UI usually is.
+  let uiNotified = 0
+  store.subscribe(() => {
+    uiNotified++
+  })
+
+  expect(() => store.setState({ extra: () => "not JSON" })).not.toThrow()
+  store.setState({ extra: () => "still not JSON" })
+  expect(uiNotified).toBe(2)
+  expect(node.getSnapshot()).toEqual({ count: 0 })
+  expect(reported).toHaveLength(1)
+
+  // An operation that ends with the state unpublishable says so, though its work ran.
+  expect(await node.send("Add")).toMatchObject({ status: "failed" })
+
+  store.setState({ extra: undefined, count: 5 }, false)
+  store.setState({ count: 5 }, true)
+  expect(node.getSnapshot()).toEqual({ count: 5 })
+  expect((await node.send("Add")).status).toBe("completed")
+  expect(node.getSnapshot()).toEqual({ count: 6 })
+
+  // Recovered, so a later failure is reported again rather than staying silent.
+  store.setState({ extra: () => "not JSON again" })
+  expect(reported).toHaveLength(2)
+  node.dispose()
+})
+
+test("a refused input says what is wrong, within a bound", async () => {
+  const { node } = setup()
+  const refused = await node.send("Add", { by: "3" }).catch((error: unknown) => error)
+  expect(refused).toMatchObject({ code: ErrorCode.InvalidInput })
+  expect(String(refused)).toContain("by:")
+  node.dispose()
+
+  const runtime = createRuntime({ sessionId: "many-issues" })
+  const many = mountStore(runtime, {
+    name: "Many",
+    store: createStore(() => 0),
+    project: (state) => state,
+    actions: {
+      Run: {
+        input: standardInput(
+          {
+            "~standard": {
+              version: 1,
+              vendor: "test",
+              validate: () => ({
+                issues: Array.from({ length: 1000 }, (_, index) => ({
+                  message: "m".repeat(100),
+                  path: [{ key: `field${index}` }],
+                })),
+              }),
+            },
+          },
+          { type: "object" },
+        ),
+        handler: () => undefined,
+      },
+    },
+  })
+  const bounded = (await many.send("Run", {}).catch((error: unknown) => error)) as Error
+  expect(bounded.message).toContain("field0: ")
+  expect(bounded.message).not.toContain("field5: ")
+  many.dispose()
 })
