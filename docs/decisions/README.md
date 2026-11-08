@@ -1,0 +1,25 @@
+# Decisions
+
+Architecture decision records: why Reflex is built the way it is. Each records the
+context, the decision and what it costs. A decision that is reversed gets a new record
+that supersedes it; the old one stays, marked superseded, so the reasoning is not lost.
+
+Copy this shape for a new one, numbered next:
+
+```md
+# NNNN. Title, as the decision
+
+Status: Accepted
+
+## Context
+
+What forced a choice, and what else was possible.
+
+## Decision
+
+What we do.
+
+## Consequences
+
+What follows, good and bad.
+```

@@ -1,0 +1,115 @@
+# @reflex/cli
+
+The `reflex` command: background sessions, the device bridge, and the MCP server. Every
+command reaches a session the same way, through its socket, so the CLI holds no app state.
+
+## Responsibilities
+
+- Start, find and stop session daemons, one per target per `REFLEX_DIR`.
+- Run each command once, in `commands.ts`, for both the terminal and MCP.
+- Accept apps on the device bridge and admit them by token.
+- Serve the commands as MCP tools.
+
+## Does not own
+
+- What a session does with a request: that is the controller's (`@reflex/runtime`, or the
+  app's own through the bridge).
+- The wire format: `@reflex/rpc` and `@reflex/protocol`.
+
+## Start reading
+
+1. `cli.ts`: argument parsing, and which command runs.
+2. `commands.ts`: what each command does over a client.
+3. `session.ts`: `start` spawns a daemon and waits until it answers; `serve` runs one.
+4. `bridge-server.ts`, then `mcp.ts`.
+
+## Sessions
+
+`reflex start <module>` spawns `reflex serve <module> --daemon` and returns once the daemon
+answers on its socket, or reports why it failed. The module must export an `AppHost` as
+`default` or `app`.
+
+- **Targets.** `--target device` (or `REFLEX_TARGET=device`) selects the device session's
+  files instead of the headless one's, so both can run at once. For the device target,
+  `start` takes `--host` (default `127.0.0.1`) and `--port` (default 8790) instead of a module.
+- **One per directory.** The lock file holds the daemon's pid and is created atomically;
+  a second start is refused. A stale lock is reclaimed only once its owner is gone.
+- **Startup budget.** `REFLEX_START_TIMEOUT_MS` (default 10 s, at most 10 minutes) covers the
+  whole start of a headless session, module loading included, and each reset's new
+  session. It does not reach apps behind the bridge, whose starts use the runtime's 30 s
+  default.
+- **Logs.** A daemon logs to `<target>.log.<pid>` in the session directory, up to 1 MiB
+  over its lifetime, with room reserved for the reason it failed, and removes the file after
+  a clean run. A stdio session uses the same budget on stderr.
+- **Stopping.** `reflex stop` asks over the socket and never signals a process, because a
+  recorded pid may have been reused. A hung session must be killed by hand.
+- **stdio.** `reflex serve --stdio` ends when stdin closes, once requests in flight are
+  answered (up to 5 s). Losing stdout, or a peer that lets 32 MiB of replies queue, ends it
+  at once. Either way the app is disposed.
+- **`reflex watch`** exits non-zero whenever its session goes away, a clean stop included:
+  it cannot tell the two apart.
+
+## The device bridge
+
+`reflex --target device start` prints the setting an app needs:
+
+```json
+{
+  "target": "device",
+  "listening": "ws://127.0.0.1:8790",
+  "appSetting": "ws://127.0.0.1:8790#<token>",
+  "androidEmulatorSetting": "ws://10.0.2.2:8790#<token>",
+  "tokenFile": ".../.reflex/device.token"
+}
+```
+
+- An app must send a hello with the token within 5 s. A wrong token or protocol version
+  closes the connection with a code the app treats as final.
+- At most 32 connections may be waiting to say hello.
+- The newest app to connect is driven; the one it replaced is told so.
+- A request with no app connected waits `REFLEX_APP_WAIT_MS` (default 15 s) for one.
+- `--host 0.0.0.0` exposes plain `ws://` to the network; use it only where you trust the
+  network. An IPv6 host is printed in brackets, and the emulator setting only when the
+  emulator can reach it.
+
+## MCP
+
+`reflex mcp` serves MCP over stdio. With Claude Code:
+
+```console
+$ claude mcp add reflex -- bun run /path/to/reflex/packages/cli/src/cli.ts mcp
+```
+
+| Tool                  | CLI command                                             |
+| --------------------- | ------------------------------------------------------- |
+| `reflex_status`       | `reflex status`                                         |
+| `reflex_inspect`      | `reflex ls --schema`, or one node by `name` or `nodeId` |
+| `reflex_tree`         | `reflex tree`                                           |
+| `reflex_dispatch`     | `reflex do`                                             |
+| `reflex_wait`         | `reflex wait`                                           |
+| `reflex_reset`        | `reflex reset`                                          |
+| `reflex_sample`       | `reflex sample`                                         |
+| `reflex_advance_time` | `reflex advance`                                        |
+
+- Every tool takes `target: "headless" | "device"`, defaulting to the server's own.
+  Sessions are still started with `reflex start`.
+- Arguments are all checked before a call connects. A bad argument, a refusal from the
+  session, or an action that fails is a tool error (`isError`) with the session's detail;
+  an unknown tool or method is a protocol error.
+- `reflex_dispatch` and `reflex_reset` are marked destructive: a client with these tools can
+  do whatever the app's actions can. The marks are hints; the session is the authority.
+- Only tools are served. Protocol versions 2024-11-05 to 2025-11-25 are accepted, with
+  `structuredContent` from 2025-06-18. At most 16 calls run at once.
+
+## Important invariants
+
+- A command's behavior lives in `commands.ts` only; the CLI and MCP must not diverge.
+- Every argument is checked before anything is sent: an action must not run on a bad
+  command line.
+- Stdout belongs to the protocol in `serve --stdio` and `mcp`; logging goes to stderr.
+
+## Related
+
+[ADR 0007](../../docs/decisions/0007-socket-permissions-are-the-authentication.md),
+[ADR 0008](../../docs/decisions/0008-the-device-dials-out.md),
+[ADR 0009](../../docs/decisions/0009-mcp-reuses-the-cli.md).
