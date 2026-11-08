@@ -195,7 +195,9 @@ Existing shared directories are refused. Use a new directory under a trusted par
 security check. See [ADR 0012](decisions/0012-windows-sessions-use-authenticated-pipes.md).
 `reflex stop` is the portable graceful shutdown; Windows process termination may leave
 stale files, reclaimed after the pid is gone. Ctrl+C is supported for foreground serving.
-NDJSON accepts CRLF as well as LF; paths containing spaces are supported. Git checkouts
+Write queues count bytes through completion callbacks; slow-reader tests stall a
+separate process because Bun/Windows named pipes may continue native reads under
+`Socket.pause()`. NDJSON accepts CRLF as well as LF; paths containing spaces are supported. Git checkouts
 use LF through `.gitattributes`, so formatting checks also pass with `core.autocrlf`.
 
 CI runs `check` on Linux and a real `windows-latest` runner. The browser journey also

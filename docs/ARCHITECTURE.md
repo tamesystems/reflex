@@ -69,7 +69,8 @@ packages/
               No Effect, no platform APIs. Start: runtime.ts, then controller.ts.
   rpc/        JSON-RPC 2.0 over newline-delimited JSON. server.ts is one peer's
               connection to a Controller; client.ts the other end; socket.ts the Unix socket, Windows pipe and stdio transports;
-              local-auth.ts authenticates and encrypts Windows pipe frames; bridge-controller.ts a Controller that
+              local-auth.ts authenticates and encrypts Windows pipe frames;
+              socket-writer.ts counts queued bytes until write callbacks complete; bridge-controller.ts a Controller that
               forwards to whichever app is connected.
   effect/     How an Effect app becomes nodes. capability.ts (defineCapability, mount),
               navigation.ts (defineNavigation: the stack, a scope per screen),

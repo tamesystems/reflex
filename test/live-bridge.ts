@@ -15,7 +15,7 @@ import { loadConfig } from "../packages/cli/src/config.ts"
 import { connectToSession } from "../packages/cli/src/session.ts"
 
 const CLI = resolve(import.meta.dirname, "../packages/cli/src/cli.ts")
-const BRIDGE_READY_TIMEOUT_MS = 10_000
+const BRIDGE_READY_TIMEOUT_MS = process.platform === "win32" ? 30_000 : 10_000
 
 export interface Device {
   readonly reports: ReadonlyArray<DeviceReport>
@@ -74,7 +74,7 @@ export const openBridged = async (
   const daemon = spawn(
     process.execPath,
     [CLI, "--target", "device", "serve", "--port", String(port)],
-    { env: { ...process.env, REFLEX_DIR: directory }, stdio: "ignore" },
+    { env: { ...process.env, REFLEX_DIR: directory }, stdio: ["ignore", "ignore", "inherit"] },
   )
   const worker = new Worker(new URL("./live-device.ts", import.meta.url))
   const release = () => {
@@ -85,7 +85,12 @@ export const openBridged = async (
   try {
     const config = loadConfig({ ...process.env, REFLEX_DIR: directory }, "device")
     const socketPath = process.platform === "win32" ? config.authPath : config.socketPath
-    await until(() => existsSync(socketPath), "the bridge's socket")
+    await until(() => {
+      if (daemon.exitCode !== null) {
+        throw new Error("Bridge daemon exited before listening")
+      }
+      return existsSync(socketPath)
+    }, "the bridge's socket")
     let client: Client
     const deadline = Date.now() + BRIDGE_READY_TIMEOUT_MS
     for (;;) {

@@ -17,6 +17,7 @@ import {
 } from "@reflex/runtime"
 import { type Client, createClient } from "./client.ts"
 import { authenticateLocal, type LocalCipher } from "./local-auth.ts"
+import { socketWriter } from "./socket-writer.ts"
 import { FrameSink } from "./frame-sink.ts"
 import { createConnection, createEventEncoder } from "./server.ts"
 
@@ -114,15 +115,14 @@ export const serveSocket = (
     const writeQueueBytesMax = options.writeQueueBytesMax ?? WRITE_QUEUE_BYTES_MAX
     const encodeEvent = createEventEncoder(report)
     const attach = (socket: Socket, cipher?: LocalCipher): void => {
+      const write = socketWriter(socket, writeQueueBytesMax)
       const connection = createConnection(
         controller,
         (line) => {
           const frame = frameOf(cipher === undefined ? line : cipher.encode(line))
           // Once a peer is this far behind, disconnecting is the only signal left.
-          if (socket.writableLength + frame.length > writeQueueBytesMax) {
+          if (!write(frame)) {
             socket.destroy()
-          } else {
-            socket.write(frame)
           }
         },
         {
@@ -225,15 +225,15 @@ export const connectSocket = (
       socket.destroy()
       reject(new Error(`Could not connect within ${SOCKET_CONNECT_TIMEOUT_MS}ms`))
     }, SOCKET_CONNECT_TIMEOUT_MS)
+    const write = socketWriter(socket, WRITE_QUEUE_BYTES_MAX)
     let cipher: LocalCipher | undefined
     const client = createClient({
       send: (line) => {
         const frame = frameOf(cipher === undefined ? line : cipher.encode(line))
         // A server that stops reading must not fill this process's memory instead.
-        if (socket.writableLength + frame.length > WRITE_QUEUE_BYTES_MAX) {
+        if (!write(frame)) {
           throw new ProtocolError(ErrorCode.ResourceExhausted, "The server is not reading")
         }
-        socket.write(frame)
       },
       close: () => socket.destroy(),
       timers,

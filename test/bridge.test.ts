@@ -3,7 +3,7 @@
  * and this process driving them as the CLI does. What a device adds over a headless
  * session is that it comes and goes; these are about that.
  */
-import { afterEach, expect, test } from "bun:test"
+import { afterEach, expect, setDefaultTimeout, test } from "bun:test"
 import { BridgeCloseCode, ErrorCode, type RuntimeEvent } from "@reflex/protocol"
 import { type Client, createLoopbackClient } from "@reflex/rpc"
 import type { Controller } from "@reflex/runtime"
@@ -12,6 +12,10 @@ import { type BridgedOptions, type Device, openBridged, openDevice } from "./liv
 import type { DeviceReport } from "./live-device.ts"
 
 const CONDITION_TIMEOUT_MS = 5_000
+
+if (process.platform === "win32") {
+  setDefaultTimeout(30_000) // Real daemon startup includes Windows ACL verification.
+}
 
 const cleanups: Array<() => void | Promise<void>> = []
 afterEach(async () => {

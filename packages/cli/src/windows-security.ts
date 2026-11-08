@@ -16,18 +16,18 @@ $ErrorActionPreference = 'Stop'
 $p = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${encodedPath}'))
 $sid = [Security.Principal.WindowsIdentity]::GetCurrent().User
 if (${createDirectory ? "$true" : "$false"} -and -not [IO.Directory]::Exists($p)) {
-  $acl = New-Object Security.AccessControl.DirectorySecurity
+  $acl = [Security.AccessControl.DirectorySecurity]::new()
   $acl.SetOwner($sid)
   $acl.SetAccessRuleProtection($true, $false)
-  $rule = New-Object Security.AccessControl.FileSystemAccessRule($sid, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')
+  $rule = [Security.AccessControl.FileSystemAccessRule]::new($sid, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')
   $acl.AddAccessRule($rule)
-  $dir = New-Object IO.DirectoryInfo($p)
+  $dir = [IO.DirectoryInfo]::new($p)
   $dir.Create($acl)
 }
 $item = Get-Item -LiteralPath $p -Force
 if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Reparse points are not private storage' }
 $acl = Get-Acl -LiteralPath $p
-$raw = New-Object Security.AccessControl.RawSecurityDescriptor($acl.GetSecurityDescriptorBinaryForm(), 0)
+$raw = [Security.AccessControl.RawSecurityDescriptor]::new($acl.GetSecurityDescriptorBinaryForm(), 0)
 if ($null -eq $raw.DiscretionaryAcl) { throw 'Null DACL' }
 $allowed = @($sid.Value, 'S-1-5-18', 'S-1-5-32-544')
 if ($acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -notin $allowed) { throw 'Untrusted owner' }
@@ -49,9 +49,13 @@ if (-not $acl.AreAccessRulesCanonical) { throw 'Noncanonical ACL' }
       ],
       { stdio: "pipe", windowsHide: true },
     )
-  } catch {
+  } catch (error: unknown) {
+    const detail =
+      error instanceof Error && "stderr" in error && Buffer.isBuffer(error.stderr)
+        ? error.stderr.toString().replace(/\s+/g, " ").slice(0, 1000)
+        : "ACL verification failed"
     throw new Error(
-      `${path} must be accessible only to its owner (Windows ACL; SYSTEM and Administrators allowed)`,
+      `${path} must be accessible only to its owner (Windows ACL; SYSTEM and Administrators allowed): ${detail}`,
     )
   }
 }

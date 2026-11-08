@@ -3,12 +3,16 @@
  * served live as a device serves it. If any needs a special case here, the abstraction
  * has leaked.
  */
-import { afterEach, describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test"
 import { ErrorCode, ProtocolError } from "@reflex/protocol"
 import { type AppHost, createRuntime, type NodeAdapter } from "@reflex/runtime"
 import { createTestAppPool } from "@reflex/test"
 import effectBackend, { COUNTER_APP_MODULE } from "./counter-app.ts"
 import { openBridged } from "./live-bridge.ts"
+
+if (process.platform === "win32") {
+  setDefaultTimeout(30_000) // Real daemon startup includes Windows ACL verification.
+}
 
 const pool = createTestAppPool()
 afterEach(pool.disposeAll)

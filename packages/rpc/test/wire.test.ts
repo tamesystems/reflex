@@ -2,7 +2,7 @@ import { createHash } from "node:crypto"
 /** Peers here speak raw JSON over a socket: no client library, no Effect. */
 import { afterEach, expect, test } from "bun:test"
 import { mkdtempSync, rmSync, statSync } from "node:fs"
-import { connect, createServer } from "node:net"
+import { connect } from "node:net"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { defineApp, defineCapability, mount, Registry } from "@reflex/effect"
@@ -55,7 +55,7 @@ const serve = async () => {
     await controller.close()
     rmSync(directory, { recursive: true, force: true })
   })
-  return { path }
+  return { path, server }
 }
 
 interface RawPeer {
@@ -399,17 +399,10 @@ test("the write queue is counted in bytes, whatever the characters", async () =>
 test("a server that stops reading cannot fill the client's memory", async () => {
   const directory = mkdtempSync(join(tmpdir(), "reflex-"))
   const path = endpoint(directory)
-  const peers: Array<{ destroy(): void }> = []
-  const silent = createServer((socket) => {
-    socket.pause()
-    peers.push(socket)
-  })
-  await new Promise<void>((resolve) => silent.listen(path, resolve))
-  cleanups.push(() => {
-    for (const peer of peers) {
-      peer.destroy()
-    }
-    silent.close()
+  const silent = await stalledPeer(path, true)
+  cleanups.push(async () => {
+    silent.kill()
+    await silent.exited
     rmSync(directory, { recursive: true, force: true })
   })
   const client = await connectSocket(path)
@@ -445,16 +438,12 @@ test("a peer that sends an endless frame is disconnected", async () => {
 }, 20_000)
 
 test("a subscriber that stops reading is cut off, not buffered without limit", async () => {
-  const { path } = await serve()
-  const peer = connect(path)
-  cleanups.push(() => void peer.destroy())
-  await new Promise((resolve) => peer.once("connect", resolve))
-  peer.on("error", () => {})
-  const closed = new Promise((resolve) => peer.once("close", resolve))
-  const subscribed = new Promise((resolve) => peer.once("data", resolve))
-  peer.write(`${JSON.stringify({ jsonrpc: "2.0", id: 1, method: "app.subscribe" })}\n`)
-  await subscribed
-  peer.pause()
+  const { path, server } = await serve()
+  const peer = await stalledPeer(path, false)
+  cleanups.push(async () => {
+    peer.kill()
+    await peer.exited
+  })
 
   const client = await connectSocket(path)
   cleanups.push(() => client.close())
@@ -477,9 +466,20 @@ test("a subscriber that stops reading is cut off, not buffered without limit", a
     })
     await client.request("app.wait", { idle: true })
   }
-  // A paused socket reports nothing. Had the server kept it, this would hang.
-  peer.resume()
-  await closed
+  // The fixture's event loop is stopped, so it cannot read an EOF either.
+  const deadline = Date.now() + 5_000
+  for (;;) {
+    const count = await new Promise<number>((resolve, reject) =>
+      server.getConnections((error, count) => (error ? reject(error) : resolve(count))),
+    )
+    if (count === 1) {
+      break // Only the command client remains.
+    }
+    if (Date.now() >= deadline) {
+      throw new Error("Slow subscriber was retained")
+    }
+    await Bun.sleep(10)
+  }
 }, 20_000)
 
 test("one reply larger than the queue limit disconnects a slow peer", async () => {
@@ -986,3 +986,39 @@ test("authenticated transport admits JSON-RPC only after mutual authentication",
   await client.request("session.shutdown", {})
   expect(shutdowns).toBe(1)
 })
+
+/** Socket.pause on Bun/Windows can keep native pipe reads active. Stop a real peer's event loop instead. */
+const stalledPeer = async (path: string, listen: boolean) => {
+  const child = Bun.spawn(
+    [
+      process.execPath,
+      "-e",
+      `
+    const net = require("node:net");
+    const block = () => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0);
+    if (${listen}) {
+      net.createServer(() => block()).listen(${JSON.stringify(path)}, () => console.log("ready"));
+    } else {
+      const peer = net.connect(${JSON.stringify(path)});
+      peer.on("error", () => {});
+      peer.once("connect", () => peer.write(JSON.stringify({jsonrpc:"2.0",id:1,method:"app.subscribe"}) + "\\n"));
+      peer.once("data", () => { console.log("ready"); block() });
+    }
+  `,
+    ],
+    { stdout: "pipe", stderr: "inherit" },
+  )
+  const reader = child.stdout.getReader()
+  try {
+    const ready = await reader.read()
+    if (ready.done) {
+      throw new Error("Stalled peer did not start")
+    }
+  } catch (error) {
+    child.kill()
+    throw error
+  } finally {
+    reader.releaseLock()
+  }
+  return child
+}
