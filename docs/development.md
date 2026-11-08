@@ -207,6 +207,12 @@ runs on Windows with Node and Chrome, including `e2e:live` (CLI/MCP against the 
 Hermes CI also runs on both systems, using the release v0.13.0 VM archive for each
 platform with its SHA-256 pinned. Xcode/iOS simulators require macOS.
 
+Windows skips only POSIX socket-mode/chmod assertions, an unauthenticated Unix silent
+socket fixture, and the two `mkfifo` fixtures (Windows has no POSIX FIFOs). Windows ACL,
+authenticated stalled-reader, stdio write-budget/logging and bridge tests run there.
+Native IPC rejection tests await/catch before `toMatchObject`: Bun 1.4.4's async matcher
+can stall Windows pipe progress while waiting for the rejection.
+
 ## Platform notes
 
 - **Imports for Metro.** Import from `effect/Schema` and the like, not `effect`: the root

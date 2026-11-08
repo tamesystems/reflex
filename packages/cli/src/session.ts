@@ -85,7 +85,7 @@ export interface BridgeDescription {
 }
 
 export const connectToSession = async (config: Config): Promise<Client> => {
-  if (process.platform !== "win32" && !existsSync(config.socketPath)) {
+  if (!existsSync(process.platform === "win32" ? config.authPath : config.socketPath)) {
     const how =
       config.target === "device" ? "reflex --target device start" : "reflex start <app-module>"
     throw new Error(`No session running. Start one with: ${how}`)

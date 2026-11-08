@@ -13,6 +13,7 @@ import {
   utimesSync,
   writeFileSync,
 } from "node:fs"
+import { pathToFileURL } from "node:url"
 import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
 import { WRITE_QUEUE_BYTES_MAX } from "@reflex/protocol"
@@ -477,7 +478,7 @@ test(
 const CLI = join(root, "packages/cli/src/cli.ts")
 
 const appModule = (body: string) => `
-  import inventory from "${join(root, "examples/inventory/src/app.ts")}"
+  import inventory from ${JSON.stringify(pathToFileURL(join(root, "examples/inventory/src/app.ts")).href)}
   ${body}
 `
 
@@ -962,26 +963,31 @@ for (const [how, crash] of [
   )
 }
 
-test("a peer that never reads is given up on, once stdin has closed", async () => {
-  // A pipe of Bun's own would be read for us, however little this test reads.
-  const dir = mkdtempSync(join(tmpdir(), "reflex-fifo-"))
-  const fifo = join(dir, "out")
-  expect(Bun.spawnSync(["mkfifo", fifo]).exitCode).toBe(0)
-  const stalled = openSync(fifo, "r+")
-  const child = Bun.spawn(["bun", CLI, "serve", inventoryApp, "--stdio"], {
-    cwd: root,
-    stdin: "pipe",
-    stdout: stalled,
-    stderr: "ignore",
-  })
-  const inspect = { jsonrpc: "2.0", id: 1, method: "app.inspect", params: { tree: true } }
-  const asks = Array.from({ length: 2000 }, () => JSON.stringify(inspect))
-  await child.stdin.write(`${asks.join("\n")}\n`)
-  await child.stdin.end()
-  await child.exited
-  closeSync(stalled)
-  rmSync(dir, { recursive: true, force: true })
-}, 12_000)
+// Windows has no POSIX FIFO; FrameSink units and the process write-budget tests still run there.
+test.skipIf(process.platform === "win32")(
+  "a peer that never reads is given up on, once stdin has closed",
+  async () => {
+    // A pipe of Bun's own would be read for us, however little this test reads.
+    const dir = mkdtempSync(join(tmpdir(), "reflex-fifo-"))
+    const fifo = join(dir, "out")
+    expect(Bun.spawnSync(["mkfifo", fifo]).exitCode).toBe(0)
+    const stalled = openSync(fifo, "r+")
+    const child = Bun.spawn(["bun", CLI, "serve", inventoryApp, "--stdio"], {
+      cwd: root,
+      stdin: "pipe",
+      stdout: stalled,
+      stderr: "ignore",
+    })
+    const inspect = { jsonrpc: "2.0", id: 1, method: "app.inspect", params: { tree: true } }
+    const asks = Array.from({ length: 2000 }, () => JSON.stringify(inspect))
+    await child.stdin.write(`${asks.join("\n")}\n`)
+    await child.stdin.end()
+    await child.exited
+    closeSync(stalled)
+    rmSync(dir, { recursive: true, force: true })
+  },
+  12_000,
+)
 
 test("a session is over stdio or a daemon, not both", () => {
   const result = Bun.spawnSync(["bun", CLI, "serve", inventoryApp, "--stdio", "--daemon"], {
@@ -1093,7 +1099,8 @@ test(
   15_000,
 )
 
-test(
+// This fixture needs mkfifo, unavailable on Windows; bounded stdio log tests run on both.
+test.skipIf(process.platform === "win32")(
   "a stdio peer that leaves stderr unread cannot block protocol replies",
   isolated(async (_, dir) => {
     const fifo = join(dir, "stderr")

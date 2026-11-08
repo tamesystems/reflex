@@ -553,7 +553,9 @@ test("unsubscribing frees a slot", async () => {
   }
   await client.request("app.unsubscribe", { subscriptionId: ids[0] ?? "" })
   await client.request("app.subscribe", {})
-  await expect(client.request("app.subscribe", {})).rejects.toMatchObject({ code: -32013 })
+  expect(await client.request("app.subscribe", {}).catch((error: unknown) => error)).toMatchObject({
+    code: -32013,
+  })
 })
 
 test("an overloaded connection stays silent about notifications", async () => {

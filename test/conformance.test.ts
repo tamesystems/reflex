@@ -119,15 +119,21 @@ describe.each([
 
   test("availability follows state", async () => {
     const app = await open()
-    await expect(app.do("Reset")).rejects.toMatchObject({ code: ErrorCode.ActionUnavailable })
+    expect(await app.do("Reset").catch((error: unknown) => error)).toMatchObject({
+      code: ErrorCode.ActionUnavailable,
+    })
     await app.do("Add", { by: 1 })
     expect((await app.do("Reset")).status).toBe("completed")
   })
 
   test("invalid input and unknown actions are rejected without touching state", async () => {
     const app = await open()
-    await expect(app.do("Add", { by: "x" })).rejects.toMatchObject({ code: ErrorCode.InvalidInput })
-    await expect(app.do("Nope")).rejects.toMatchObject({ code: ErrorCode.ActionNotFound })
+    expect(await app.do("Add", { by: "x" }).catch((error: unknown) => error)).toMatchObject({
+      code: ErrorCode.InvalidInput,
+    })
+    expect(await app.do("Nope").catch((error: unknown) => error)).toMatchObject({
+      code: ErrorCode.ActionNotFound,
+    })
     await app.inspect()
     expect(app.state).toEqual({ count: 0 })
   })
@@ -136,13 +142,15 @@ describe.each([
     const app = await open()
     const { node } = await app.inspect()
     await app.do("Add", { by: 1 })
-    await expect(
-      app.client.request("app.dispatch", {
-        action: "Add",
-        input: { by: 1 },
-        expectedRevision: Number(node?.revision),
-      }),
-    ).rejects.toMatchObject({ code: ErrorCode.StaleRevision })
+    expect(
+      await app.client
+        .request("app.dispatch", {
+          action: "Add",
+          input: { by: 1 },
+          expectedRevision: Number(node?.revision),
+        })
+        .catch((error: unknown) => error),
+    ).toMatchObject({ code: ErrorCode.StaleRevision })
   })
 
   test("wait resolves on a later state and times out with context", async () => {
@@ -150,7 +158,9 @@ describe.each([
     const waiting = app.waitFor({ match: { count: 7 } })
     await app.do("Add", { by: 7 })
     await waiting
-    await expect(app.waitFor({ match: { count: 8 }, timeoutMs: 10 })).rejects.toMatchObject({
+    expect(
+      await app.waitFor({ match: { count: 8 }, timeoutMs: 10 }).catch((error: unknown) => error),
+    ).toMatchObject({
       code: ErrorCode.WaitTimeout,
       data: { state: { count: 7 } },
     })
