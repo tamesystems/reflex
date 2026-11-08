@@ -58,6 +58,13 @@ and creates a fresh actor and session-scoped node handle.
   `runtime.track` for separately owned background work. NodeAdapter cannot infer that
   correlation from an arbitrary actor graph. Protocol idle means no tracked operations,
   not quiescence of the whole actor system.
+- A transition that throws is a separate case that XState does not surface to the caller:
+  `send` returns normally, the actor is left in status `error`, `snapshot.can` still answers
+  true, and later sends are silently dropped. With no error observer XState rethrows the
+  failure as uncaught, which would end a session's process. So the adapter reads the status
+  after each send and reports a failed defect operation, offers no action on an actor that
+  is not active, and subscribes with an error observer that reports to the session. Any
+  actor adapter needs all three; the conformance suite alone did not reveal this.
 - Disposal tests verify the child's abort signal, stopped parent status, no subsequent
   actor snapshots or runtime events from late results or sends, and actor replacement
   on controller reset/close. Stopping cancels the actor's participation; arbitrary promise

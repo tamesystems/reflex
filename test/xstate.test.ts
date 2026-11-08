@@ -139,3 +139,32 @@ test("a child failure is handled by the machine after the event operation has co
     await session.dispose()
   }
 })
+
+test("a transition that throws fails its operation, and the dead actor offers nothing", async () => {
+  const reported: Array<unknown> = []
+  const session = createCounterSession("exploded", undefined, (error) => reported.push(error))
+  try {
+    const accepted = await session.runtime.dispatch({ action: "Explode" })
+    const { operation } = await session.runtime.wait({
+      operationId: accepted.operationId,
+      timeoutMs: 1000,
+    })
+    expect(operation).toMatchObject({
+      status: "failed",
+      error: { tag: "ActorError", defect: true },
+    })
+    expect(session.actor.getSnapshot().status).toBe("error")
+    expect(reported).toHaveLength(1)
+    // XState's own `can` still says true here, and a send would be silently dropped.
+    expect(session.runtime.inspect().node?.actions.Add).toMatchObject({
+      available: false,
+      unavailableReason: "The actor is error",
+    })
+    await expect(
+      session.runtime.dispatch({ action: "Add", input: { by: 1 } }),
+    ).rejects.toMatchObject({ code: ErrorCode.ActionUnavailable })
+  } finally {
+    session.runtime.close()
+    await session.dispose()
+  }
+})

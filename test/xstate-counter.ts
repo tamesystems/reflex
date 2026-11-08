@@ -1,9 +1,19 @@
 /** Test-only actor backend: deliberately no Effect or production XState dependency. */
-import { ErrorCode, ProtocolError } from "@reflex/protocol"
-import { type AppHost, createRuntime, type NodeAdapter, type Runtime } from "@reflex/runtime"
+import { boundedText, ErrorCode, type OperationOutcome, ProtocolError } from "@reflex/protocol"
+import {
+  type AppHost,
+  type BackgroundReporter,
+  createRuntime,
+  type NodeAdapter,
+  type Runtime,
+} from "@reflex/runtime"
 import { assign, createActor, fromPromise, setup } from "xstate"
 
-type CounterEvent = { type: "Add"; by: number } | { type: "Reset" } | { type: "Load" }
+type CounterEvent =
+  | { type: "Add"; by: number }
+  | { type: "Reset" }
+  | { type: "Load" }
+  | { type: "Explode" }
 export type LoadCount = (signal: AbortSignal) => Promise<number>
 
 const counterMachine = setup({
@@ -27,6 +37,14 @@ const counterMachine = setup({
           actions: assign({ count: 0 }),
         },
         Load: "loading",
+        // A transition that throws, as a bug in a machine would.
+        Explode: {
+          actions: assign({
+            count: () => {
+              throw new Error("transition threw")
+            },
+          }),
+        },
       },
     },
     loading: {
@@ -64,7 +82,7 @@ const eventOf = (action: string, input: unknown): CounterEvent => {
     }
     return { type: "Add", by: Number(input.by) }
   }
-  if (action !== "Reset" && action !== "Load") {
+  if (action !== "Reset" && action !== "Load" && action !== "Explode") {
     throw new ProtocolError(ErrorCode.ActionNotFound, `Unknown action: ${action}`)
   }
   if (input !== undefined && (!object || Object.keys(input).length !== 0)) {
@@ -73,10 +91,26 @@ const eventOf = (action: string, input: unknown): CounterEvent => {
   return { type: action }
 }
 
-const availability = (actor: CounterActor, event: CounterEvent) =>
-  actor.getSnapshot().can(event)
+/** `can` still answers true for a dead actor, whose sends are silently dropped. */
+const availability = (actor: CounterActor, event: CounterEvent) => {
+  const snapshot = actor.getSnapshot()
+  if (snapshot.status !== "active") {
+    return { available: false, unavailableReason: `The actor is ${snapshot.status}` } as const
+  }
+  return snapshot.can(event)
     ? ({ available: true } as const)
     : ({ available: false, unavailableReason: "No enabled transition" } as const)
+}
+
+/** A throwing transition does not throw from `send`: it leaves the actor in `error`. */
+const outcomeOf = (actor: CounterActor): OperationOutcome => {
+  const snapshot = actor.getSnapshot()
+  if (snapshot.status !== "error") {
+    return { status: "completed" }
+  }
+  const message = boundedText(String(snapshot.error))
+  return { status: "failed", error: { tag: "ActorError", message, defect: true } }
+}
 
 const adapterOf = (runtime: Runtime, actor: CounterActor): NodeAdapter => ({
   id: runtime.nextId("screen", "Counter"),
@@ -89,23 +123,39 @@ const adapterOf = (runtime: Runtime, actor: CounterActor): NodeAdapter => ({
     Add: { ...availability(actor, { type: "Add", by: 0 }), inputSchema: addInputSchema },
     Reset: { ...availability(actor, { type: "Reset" }), inputSchema: emptyInputSchema },
     Load: { ...availability(actor, { type: "Load" }), inputSchema: emptyInputSchema },
+    Explode: { ...availability(actor, { type: "Explode" }), inputSchema: emptyInputSchema },
   }),
   prepare(action, input) {
     const event = eventOf(action, input)
     return () => {
       actor.send(event)
       // Completion means this event's synchronous transition, not invoked child work.
-      return { done: Promise.resolve({ status: "completed" }), cancel: () => undefined }
+      return { done: Promise.resolve(outcomeOf(actor)), cancel: () => undefined }
     }
   },
   subscribe(listener) {
-    const subscription = actor.subscribe(() => listener())
+    // Without an error observer XState rethrows a machine's failure as uncaught, which
+    // would take the whole session process down. A failure also changes availability.
+    const subscription = actor.subscribe({
+      next: () => listener(),
+      error: (error) => {
+        runtime.report(error)
+        listener()
+      },
+    })
     return () => subscription.unsubscribe()
   },
 })
 
-export const createCounterSession = (sessionId: string, load: LoadCount = async () => 10) => {
-  const runtime = createRuntime({ sessionId })
+export const createCounterSession = (
+  sessionId: string,
+  load: LoadCount = async () => 10,
+  onBackgroundError?: BackgroundReporter,
+) => {
+  const runtime = createRuntime({
+    sessionId,
+    ...(onBackgroundError === undefined ? {} : { onBackgroundError }),
+  })
   const actor = createCounterActor(load)
   actor.start()
   const adapter = adapterOf(runtime, actor)
@@ -125,7 +175,7 @@ export const xstateBackend: AppHost = {
   name: "counter",
   defaultScenario: "default",
   scenarios: [{ name: "default", virtualTime: false }],
-  async start(_, { sessionId }) {
-    return createCounterSession(sessionId)
+  async start(_, { sessionId, onBackgroundError }) {
+    return createCounterSession(sessionId, undefined, onBackgroundError)
   },
 }

@@ -356,7 +356,7 @@ What must stay true when you change things. Most have a test; the test names say
 | [0012](decisions/0012-windows-sessions-use-authenticated-pipes.md)  | Windows sessions use authenticated, encrypted pipes              |
 | [0013](decisions/0013-access-policies.md)                           | Access policies: observe, an action allowlist, or control        |
 | [0014](decisions/0014-keep-the-hand-written-wire.md)                | Keep the hand-written wire rather than adopt Effect RPC          |
-| [0015](decisions/0015-xstate-proves-the-node-adapter.md)            | XState fits NodeAdapter with explicit event-completion semantics |
+| [0015](decisions/0015-xstate-fits-the-node-adapter.md)              | XState fits NodeAdapter with explicit event-completion semantics |
 
 ## 9. Influences
 
@@ -374,7 +374,7 @@ decision is in its ADR; what is still to do is in [roadmap.md](roadmap.md).
   XState also keeps inspection observational, separate from sending events; so can a
   Reflex peer ([ADR 0013](decisions/0013-access-policies.md)). A real XState actor now passes
   the shared conformance suite; event completion and actor lifecycle have explicit mappings
-  ([ADR 0015](decisions/0015-xstate-proves-the-node-adapter.md)).
+  ([ADR 0015](decisions/0015-xstate-fits-the-node-adapter.md)).
 - **[Redux DevTools](https://github.com/reduxjs/redux-devtools).** Transitions are actions,
   not state writes. A protocol that could set `cart.quantity` would bypass validation,
   business rules and effects, so clients can only dispatch named, validated actions.
