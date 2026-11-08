@@ -1,17 +1,20 @@
 import { spawn } from "node:child_process"
-import { randomUUID } from "node:crypto"
+import { randomBytes, randomUUID } from "node:crypto"
 import {
   closeSync,
   existsSync,
-  mkdirSync,
   openSync,
+  readFileSync,
+  writeFileSync,
   readSync,
   rmSync,
   statSync,
   writeSync,
 } from "node:fs"
+import { pathToFileURL } from "node:url"
 import { resolve } from "node:path"
 import {
+  LOCAL_AUTH_SECRET_BYTES,
   boundedText,
   type DescribeResult,
   scenarioDescriptor,
@@ -42,8 +45,7 @@ import {
   releaseLock,
 } from "./session-lock.ts"
 
-const PRIVATE_DIRECTORY_MODE = 0o700
-const GROUP_AND_OTHER_BITS = 0o077
+import { checkSecretAcl, preparePrivateDirectory } from "./windows-security.ts"
 const SHUTDOWN_COMPLETE_TIMEOUT_MS = 15_000
 const POLL_INTERVAL_MS = 25
 /** Kept back in the log, so that a noisy app cannot crowd out why it failed. */
@@ -83,13 +85,13 @@ export interface BridgeDescription {
 }
 
 export const connectToSession = async (config: Config): Promise<Client> => {
-  if (!existsSync(config.socketPath)) {
+  if (process.platform !== "win32" && !existsSync(config.socketPath)) {
     const how =
       config.target === "device" ? "reflex --target device start" : "reflex start <app-module>"
     throw new Error(`No session running. Start one with: ${how}`)
   }
   try {
-    return await connectSocket(config.socketPath)
+    return await connectSocket(config.socketPath, undefined, readLocalSecret(config))
   } catch (error: unknown) {
     const reason = boundedText(String(error))
     throw new Error(`Session is not responding (${reason}). Remove it with: ${stopCommand(config)}`)
@@ -151,6 +153,16 @@ const serveOverSocket = async (config: Config, options: ServeOptions): Promise<v
   let exitCode = 0
   try {
     acquireLock(config, Date.now())
+    if (process.platform === "win32") {
+      if (!existsSync(config.authPath)) {
+        writeFileSync(config.authPath, "", { flag: "wx", mode: 0o600 })
+      }
+      checkSecretAcl(config.authPath)
+      writeFileSync(config.authPath, randomBytes(LOCAL_AUTH_SECRET_BYTES).toString("hex"), {
+        mode: 0o600,
+      })
+      checkSecretAcl(config.authPath)
+    }
     await serveUntilShutdown(config, await startController(config, options))
     // Only after a clean run: a failed start's log is how `start` learns the reason.
     rmSync(logPath, { force: true })
@@ -328,7 +340,9 @@ export const describeBridge = (
 }
 
 const loadHost = async (module: string): Promise<AppHost> => {
-  const loaded: { default?: unknown; app?: unknown } = await import(resolve(module))
+  const loaded: { default?: unknown; app?: unknown } = await import(
+    pathToFileURL(resolve(module)).href
+  )
   return parseHost(loaded.default ?? loaded.app, module)
 }
 
@@ -354,19 +368,12 @@ const parseHost = (value: unknown, module: string): AppHost => {
   return { name, scenarios: parsed, defaultScenario, start: start.bind(value) }
 }
 
-/** The directory's mode is what protects the socket until it has its own. */
-const preparePrivateDirectory = ({ directory }: Config): void => {
-  mkdirSync(directory, { recursive: true, mode: PRIVATE_DIRECTORY_MODE })
-  if ((statSync(directory).mode & GROUP_AND_OTHER_BITS) !== 0) {
-    throw new Error(`${directory} must be accessible only to its owner`)
-  }
-}
-
 const serveUntilShutdown = async (config: Config, controller: Controller): Promise<void> => {
   const { promise: shutdownRequested, resolve: requestShutdown } = Promise.withResolvers<void>()
   try {
     const server = await serveSocket(controller, config.socketPath, {
       onShutdown: requestShutdown,
+      ...(process.platform === "win32" ? { localSecret: readLocalSecret(config) } : {}),
     })
     process.on("SIGTERM", requestShutdown)
     process.on("SIGINT", requestShutdown)
@@ -399,6 +406,7 @@ export const start = async (
   const bridge = options.kind === "bridge" ? describeBridge(config, options) : null
   const child = spawn(process.execPath, [cliPath(), "serve", ...serveArguments, "--daemon"], {
     detached: true,
+    windowsHide: true,
     env: {
       ...process.env,
       REFLEX_DIR: config.directory,
@@ -480,7 +488,7 @@ const describeIfReady = async (
   childPid: number | undefined,
   remainingMs: number,
 ): Promise<DescribeResult | undefined> => {
-  if (lockOwner(config) !== childPid || !existsSync(config.socketPath)) {
+  if (lockOwner(config) !== childPid) {
     return undefined
   }
   const client = await connectIfListening(config)
@@ -496,7 +504,7 @@ const describeIfReady = async (
 
 /** A bridge is ready once it answers on its socket; no app need have connected yet. */
 const listeningAs = async (config: Config, childPid: number | undefined): Promise<boolean> => {
-  if (lockOwner(config) !== childPid || !existsSync(config.socketPath)) {
+  if (lockOwner(config) !== childPid) {
     return false
   }
   const client = await connectIfListening(config)
@@ -507,7 +515,7 @@ const listeningAs = async (config: Config, childPid: number | undefined): Promis
 /** A socket file nothing listens on is one being set up, or a crash's leftover. */
 const connectIfListening = async (config: Config): Promise<Client | undefined> => {
   try {
-    return await connectSocket(config.socketPath)
+    return await connectSocket(config.socketPath, undefined, readLocalSecret(config))
   } catch (error: unknown) {
     if (hasCode(error, "ECONNREFUSED") || hasCode(error, "ENOENT")) {
       return undefined
@@ -534,7 +542,7 @@ const readLogEnd = (path: string): string => {
  * been reused, and only the session itself can answer on its socket.
  */
 export const stop = async (config: Config, clock: Clock = systemClock): Promise<void> => {
-  const client = existsSync(config.socketPath) ? await connectIfListening(config) : undefined
+  const client = await connectIfListening(config)
   if (client === undefined) {
     const owner = lockOwner(config)
     if (owner !== undefined && isAlive(owner)) {
@@ -564,4 +572,17 @@ const awaitRelease = async (config: Config, clock: Clock): Promise<void> => {
     }
     await clock.sleep(POLL_INTERVAL_MS)
   }
+}
+
+const readLocalSecret = (config: Config): string | undefined => {
+  if (process.platform !== "win32") {
+    return undefined
+  }
+  checkSecretAcl(config.directory)
+  checkSecretAcl(config.authPath)
+  const secret = readFileSync(config.authPath, "utf8")
+  if (!/^[a-f0-9]{64}$/.test(secret)) {
+    throw new Error("Invalid local session secret")
+  }
+  return secret
 }

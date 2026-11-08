@@ -1,6 +1,6 @@
 # 0007. Socket permissions are the authentication
 
-Status: Accepted
+Status: Accepted for macOS/Linux; amended for Windows by [0012](0012-windows-sessions-use-authenticated-pipes.md)
 
 ## Context
 

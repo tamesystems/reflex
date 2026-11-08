@@ -111,7 +111,12 @@ export const logPathOf = (config: Config, pid: number): string => `${config.logP
 /** Remove only what this process still owns. */
 export const releaseLock = (config: Config): void => {
   if (lockOwner(config) === process.pid) {
-    rmSync(config.socketPath, { force: true })
+    if (process.platform !== "win32") {
+      rmSync(config.socketPath, { force: true })
+    }
+    if (process.platform === "win32") {
+      rmSync(config.authPath, { force: true })
+    }
     rmSync(config.lockPath, { force: true })
   }
 }
@@ -122,7 +127,12 @@ export const clearLeftovers = (config: Config): void => {
   if (owner !== undefined) {
     rmSync(logPathOf(config, owner), { force: true })
   }
-  rmSync(config.socketPath, { force: true })
+  if (process.platform !== "win32") {
+    rmSync(config.socketPath, { force: true })
+  }
   rmSync(config.lockPath, { force: true })
+  if (process.platform === "win32") {
+    rmSync(config.authPath, { force: true })
+  }
   rmSync(config.reclaimPath, { recursive: true, force: true })
 }

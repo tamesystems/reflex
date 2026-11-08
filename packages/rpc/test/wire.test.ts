@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto"
 /** Peers here speak raw JSON over a socket: no client library, no Effect. */
 import { afterEach, expect, test } from "bun:test"
 import { mkdtempSync, rmSync, statSync } from "node:fs"
@@ -46,7 +47,7 @@ afterEach(async () => {
 
 const serve = async () => {
   const directory = mkdtempSync(join(tmpdir(), "reflex-"))
-  const path = join(directory, "s.sock")
+  const path = endpoint(directory)
   const controller = await createController(app)
   const server = await serveSocket(controller, path)
   cleanups.push(async () => {
@@ -214,7 +215,8 @@ test("unsubscribing stops events", async () => {
   expect(seen).toEqual([])
 })
 
-test("the socket is private to its user", async () => {
+// POSIX mode test; Windows sessions authenticate before serving JSON-RPC.
+test.skipIf(process.platform === "win32")("the socket is private to its user", async () => {
   const { path } = await serve()
   expect(statSync(path).mode & 0o777).toBe(0o600)
 })
@@ -359,7 +361,7 @@ test("an id that does not survive being echoed is refused", async () => {
 
 test("the write queue is counted in bytes, whatever the characters", async () => {
   const directory = mkdtempSync(join(tmpdir(), "reflex-"))
-  const path = join(directory, "s.sock")
+  const path = endpoint(directory)
   const Wide = defineCapability({
     name: "Wide",
     state: Schema.Struct({ text: Schema.String }),
@@ -396,7 +398,7 @@ test("the write queue is counted in bytes, whatever the characters", async () =>
 
 test("a server that stops reading cannot fill the client's memory", async () => {
   const directory = mkdtempSync(join(tmpdir(), "reflex-"))
-  const path = join(directory, "s.sock")
+  const path = endpoint(directory)
   const peers: Array<{ destroy(): void }> = []
   const silent = createServer((socket) => {
     socket.pause()
@@ -482,7 +484,7 @@ test("a subscriber that stops reading is cut off, not buffered without limit", a
 
 test("one reply larger than the queue limit disconnects a slow peer", async () => {
   const directory = mkdtempSync(join(tmpdir(), "reflex-"))
-  const path = join(directory, "s.sock")
+  const path = endpoint(directory)
   const controller = await createController(app)
   const server = await serveSocket(controller, path, { writeQueueBytesMax: 64 })
   cleanups.push(async () => {
@@ -683,7 +685,7 @@ test("a batch's acknowledgments arrive however large its other replies are", asy
 
 test("a socket server's failures reach the reporter it was given", async () => {
   const directory = mkdtempSync(join(tmpdir(), "reflex-"))
-  const path = join(directory, "s.sock")
+  const path = endpoint(directory)
   const controller = await createController(app)
   const reported: Array<unknown> = []
   const failing: typeof controller = {
@@ -799,7 +801,7 @@ test("an error code this client does not know is reported as such", async () => 
 
 test("held events that would overrun the write queue resynchronize, and the peer stays", async () => {
   const directory = mkdtempSync(join(tmpdir(), "reflex-"))
-  const path = join(directory, "s.sock")
+  const path = endpoint(directory)
   let emit: (event: RuntimeEvent) => void = () => undefined
   let finishWait: () => void = () => undefined
   const controller = {
@@ -852,7 +854,7 @@ test("held events that would overrun the write queue resynchronize, and the peer
 
 test("a socket server's event failures reach the reporter it was given", async () => {
   const directory = mkdtempSync(join(tmpdir(), "reflex-"))
-  const path = join(directory, "s.sock")
+  const path = endpoint(directory)
   let emit: (event: RuntimeEvent) => void = () => undefined
   const controller = {
     request: async () => ({}),
@@ -950,3 +952,8 @@ test("awaited dispatches survive the ordinary deadline and expire after the serv
     client.close()
   }
 })
+
+const endpoint = (directory: string): string =>
+  process.platform === "win32"
+    ? `\\\\.\\pipe\\reflex-test-${createHash("sha256").update(directory).digest("hex")}`
+    : join(directory, "s.sock")

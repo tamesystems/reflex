@@ -69,7 +69,8 @@ expect(session.state).toMatchObject({ _tag: "editing", error: "Save timed out" }
 
 ## Quick start
 
-You need [Bun](https://bun.sh) 1.4.4 on macOS or Linux.
+You need [Bun](https://bun.sh) 1.4.4 on macOS, Linux or Windows. See the
+[PowerShell notes](docs/development.md#windows) for JSON arguments and environment variables.
 
 ```console
 $ bun install --frozen-lockfile

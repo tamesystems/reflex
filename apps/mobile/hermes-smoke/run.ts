@@ -60,7 +60,7 @@ try {
   const output = vm.stdout.toString().trim()
   console.log(output)
   // The VM exits 0 whatever the script does, so success must be a printed verdict.
-  if (output.split("\n").at(-1) !== VERDICT) {
+  if (output.split(/\r?\n/).at(-1) !== VERDICT) {
     console.error(vm.stderr.toString().slice(0, 2_000))
     process.exitCode = 1
   }

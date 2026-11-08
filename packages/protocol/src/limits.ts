@@ -108,3 +108,12 @@ export const boundedText = (text: string): string => {
   }
   return `${text.slice(0, ERROR_TEXT_CHARACTERS_MAX)}…`
 }
+
+/** Local pipe mutual authentication, before any JSON-RPC frame is accepted. */
+export const LOCAL_AUTH_TIMEOUT_MS = 5_000
+export const LOCAL_AUTH_LINE_CHARACTERS_MAX = 256
+export const LOCAL_AUTH_SECRET_BYTES = 32
+
+export const LOCAL_AUTH_FRAMES_MAX = 2 ** 32
+/** UTF-8 (at most 3 bytes per JS character), then base64, plus a GCM tag. */
+export const LOCAL_ENCRYPTED_FRAME_CHARACTERS_MAX = FRAME_CHARACTERS_MAX * 4 + 64

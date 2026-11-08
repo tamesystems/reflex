@@ -7,9 +7,12 @@ import { spawn } from "node:child_process"
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
-import { connectSocket, createBridgeController } from "@reflex/rpc"
+import { type Client, createBridgeController } from "@reflex/rpc"
 import type { Controller } from "@reflex/runtime"
 import type { DeviceCommand, DeviceReport } from "./live-device.ts"
+
+import { loadConfig } from "../packages/cli/src/config.ts"
+import { connectToSession } from "../packages/cli/src/session.ts"
 
 const CLI = resolve(import.meta.dirname, "../packages/cli/src/cli.ts")
 const BRIDGE_READY_TIMEOUT_MS = 10_000
@@ -80,10 +83,23 @@ export const openBridged = async (
     rmSync(directory, { recursive: true, force: true })
   }
   try {
-    const socketPath = join(directory, "device.sock")
+    const config = loadConfig({ ...process.env, REFLEX_DIR: directory }, "device")
+    const socketPath = process.platform === "win32" ? config.authPath : config.socketPath
     await until(() => existsSync(socketPath), "the bridge's socket")
     const token = readFileSync(join(directory, "device.token"), "utf8").trim()
-    const client = await connectSocket(socketPath)
+    let client: Client
+    const deadline = Date.now() + BRIDGE_READY_TIMEOUT_MS
+    for (;;) {
+      try {
+        client = await connectToSession(config)
+        break
+      } catch (error) {
+        if (Date.now() >= deadline) {
+          throw error
+        }
+        await Bun.sleep(25)
+      }
+    }
     const bridged = createBridgeController({
       disconnectedMessage: "The bridge went away",
       onClose: release,

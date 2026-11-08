@@ -1,7 +1,8 @@
 import { chmodSync, rmSync } from "node:fs"
-import { connect, createServer, type Server } from "node:net"
+import { connect, createServer, type Server, type Socket } from "node:net"
 import {
   ErrorCode,
+  LOCAL_ENCRYPTED_FRAME_CHARACTERS_MAX,
   FRAME_CHARACTERS_MAX,
   ProtocolError,
   SERVER_CONNECTIONS_MAX,
@@ -15,6 +16,7 @@ import {
   type Timers,
 } from "@reflex/runtime"
 import { type Client, createClient } from "./client.ts"
+import { authenticateLocal, type LocalCipher } from "./local-auth.ts"
 import { FrameSink } from "./frame-sink.ts"
 import { createConnection, createEventEncoder } from "./server.ts"
 
@@ -82,6 +84,7 @@ export const createLineReader = (options: LineReaderOptions) => {
 }
 
 export interface ServeSocketOptions {
+  readonly localSecret?: string | undefined
   readonly onShutdown?: () => void
   readonly writeQueueBytesMax?: number
   readonly onBackgroundError?: BackgroundReporter
@@ -104,15 +107,17 @@ export const serveSocket = (
   options: ServeSocketOptions = {},
 ): Promise<Server> =>
   new Promise((resolve, reject) => {
-    rmSync(path, { force: true })
+    if (process.platform !== "win32") {
+      rmSync(path, { force: true })
+    }
     const report = options.onBackgroundError ?? reportToConsole
     const writeQueueBytesMax = options.writeQueueBytesMax ?? WRITE_QUEUE_BYTES_MAX
     const encodeEvent = createEventEncoder(report)
-    const server = createServer((socket) => {
+    const attach = (socket: Socket, cipher?: LocalCipher): void => {
       const connection = createConnection(
         controller,
         (line) => {
-          const frame = frameOf(line)
+          const frame = frameOf(cipher === undefined ? line : cipher.encode(line))
           // Once a peer is this far behind, disconnecting is the only signal left.
           if (socket.writableLength + frame.length > writeQueueBytesMax) {
             socket.destroy()
@@ -129,12 +134,31 @@ export const serveSocket = (
         },
       )
       const read = createLineReader({
-        onLine: (line) => connection.receive(line),
+        onLine: (line) => {
+          try {
+            connection.receive(cipher === undefined ? line : cipher.decode(line))
+          } catch {
+            socket.destroy()
+          }
+        },
+        frameCharactersMax:
+          cipher === undefined ? FRAME_CHARACTERS_MAX : LOCAL_ENCRYPTED_FRAME_CHARACTERS_MAX,
         onOverflow: () => socket.destroy(),
       })
       socket.on("data", read)
       socket.on("close", () => connection.close())
       socket.on("error", () => connection.close())
+      socket.resume()
+    }
+    const server = createServer((socket) => {
+      if (options.localSecret === undefined) {
+        attach(socket)
+      } else {
+        void authenticateLocal(socket, options.localSecret, true).then(
+          (cipher) => attach(socket, cipher),
+          () => socket.destroy(),
+        )
+      }
     })
     server.maxConnections = SERVER_CONNECTIONS_MAX
     server.once("error", reject)
@@ -142,7 +166,9 @@ export const serveSocket = (
       server.off("error", reject)
       server.on("error", report)
       try {
-        chmodSync(path, SOCKET_MODE)
+        if (process.platform !== "win32") {
+          chmodSync(path, SOCKET_MODE)
+        }
         resolve(server)
       } catch (error: unknown) {
         server.close()
@@ -188,16 +214,21 @@ export const serveStdio = (controller: Controller, timers: Timers = systemTimers
     })
   })
 
-export const connectSocket = (path: string, timers: Timers = systemTimers): Promise<Client> =>
+export const connectSocket = (
+  path: string,
+  timers: Timers = systemTimers,
+  localSecret?: string,
+): Promise<Client> =>
   new Promise((resolve, reject) => {
     const socket = connect(path)
     const timer = timers.setTimeout(() => {
       socket.destroy()
       reject(new Error(`Could not connect within ${SOCKET_CONNECT_TIMEOUT_MS}ms`))
     }, SOCKET_CONNECT_TIMEOUT_MS)
+    let cipher: LocalCipher | undefined
     const client = createClient({
       send: (line) => {
-        const frame = frameOf(line)
+        const frame = frameOf(cipher === undefined ? line : cipher.encode(line))
         // A server that stops reading must not fill this process's memory instead.
         if (socket.writableLength + frame.length > WRITE_QUEUE_BYTES_MAX) {
           throw new ProtocolError(ErrorCode.ResourceExhausted, "The server is not reading")
@@ -208,10 +239,18 @@ export const connectSocket = (path: string, timers: Timers = systemTimers): Prom
       timers,
     })
     const read = createLineReader({
-      onLine: (line) => client.receive(line),
+      onLine: (line) => {
+        try {
+          client.receive(cipher === undefined ? line : cipher.decode(line))
+        } catch {
+          client.fail(new Error("Invalid authenticated frame"))
+          socket.destroy()
+        }
+      },
+      frameCharactersMax:
+        localSecret === undefined ? FRAME_CHARACTERS_MAX : LOCAL_ENCRYPTED_FRAME_CHARACTERS_MAX,
       onOverflow: () => client.fail(new Error("Server sent an oversized frame")),
     })
-    socket.on("data", read)
     socket.once("error", (error) => {
       timers.clearTimeout(timer)
       client.fail(error)
@@ -220,6 +259,18 @@ export const connectSocket = (path: string, timers: Timers = systemTimers): Prom
     socket.on("close", () => client.fail(new Error("Connection closed")))
     socket.once("connect", () => {
       timers.clearTimeout(timer)
-      resolve(client)
+      const ready = (): void => {
+        socket.on("data", read)
+        socket.resume()
+        resolve(client)
+      }
+      if (localSecret === undefined) {
+        ready()
+      } else {
+        void authenticateLocal(socket, localSecret, false).then((authenticated) => {
+          cipher = authenticated
+          ready()
+        }, reject)
+      }
     })
   })

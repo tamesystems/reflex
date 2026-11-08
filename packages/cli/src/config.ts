@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto"
 import { resolve } from "node:path"
 import { BRIDGE_APP_WAIT_MS, SESSION_START_TIMEOUT_MS_MAX } from "@reflex/protocol"
 export { SESSION_LOG_BYTES_MAX } from "@reflex/protocol"
@@ -13,6 +14,7 @@ export interface Config {
   readonly target: Target
   readonly directory: string
   readonly socketPath: string
+  readonly authPath: string
   readonly lockPath: string
   readonly reclaimPath: string
   readonly logPath: string
@@ -51,7 +53,8 @@ export const loadConfig = (
   return {
     target,
     directory,
-    socketPath: resolve(directory, `${base}.sock`),
+    socketPath: sessionEndpoint(directory, target),
+    authPath: resolve(directory, `${base}.auth`),
     lockPath: resolve(directory, `${base}.lock`),
     reclaimPath: resolve(directory, `${base}.reclaim`),
     logPath: resolve(directory, `${base}.log`),
@@ -103,3 +106,15 @@ const parseTimeoutMs = ({
 /** How to stop the session a config names, for messages that suggest it. */
 export const stopCommand = (config: Config): string =>
   config.target === "device" ? "reflex --target device stop" : "reflex stop"
+
+/** Pipes are kernel objects, never files. Hash the entire resolved directory and target. */
+export const sessionEndpoint = (
+  directory: string,
+  target: Target,
+  platform: NodeJS.Platform = process.platform,
+): string =>
+  platform === "win32"
+    ? `\\\\.\\pipe\\reflex-${createHash("sha256")
+        .update(`${resolve(directory).toLowerCase()}\0${target}`)
+        .digest("hex")}`
+    : resolve(directory, `${target === "device" ? "device" : "session"}.sock`)

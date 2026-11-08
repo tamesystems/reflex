@@ -4,6 +4,7 @@
  * the other way round: a tap in the page is what the CLI sees next.
  */
 import { execFile, spawn } from "node:child_process"
+import { fileURLToPath } from "node:url"
 import { promisify } from "node:util"
 import { chromium, type Page } from "playwright-core"
 
@@ -11,7 +12,9 @@ const STEP_TIMEOUT_MS = 8_000
 const JOURNEY_TIMEOUT_MS = 240_000
 const METRO_BUNDLE_TIMEOUT_MS = 150_000
 const DIAGNOSTIC_CHARACTERS_MAX = 600
-const INVENTORY_APP = new URL("../../../examples/inventory/src/app.ts", import.meta.url).pathname
+const INVENTORY_APP = fileURLToPath(
+  new URL("../../../examples/inventory/src/app.ts", import.meta.url).href,
+)
 
 const required = (name: string): string => {
   const value = process.env[name]

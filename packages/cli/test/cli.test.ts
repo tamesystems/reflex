@@ -16,7 +16,8 @@ import {
 import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
 import { WRITE_QUEUE_BYTES_MAX } from "@reflex/protocol"
-import { connectSocket } from "@reflex/rpc"
+import { loadConfig } from "../src/config.ts"
+import { connectToSession } from "../src/session.ts"
 import { nextTurn, waitUntil } from "@reflex/test"
 
 /** A hung command must fail its test, not the whole run. */
@@ -78,7 +79,7 @@ afterAll(() => {
  * reset and wait have dedicated command tests below.
  */
 beforeEach(async () => {
-  const client = await connectSocket(join(directory, "session.sock"))
+  const client = await connectToSession(loadConfig({ ...process.env, REFLEX_DIR: directory }))
   try {
     await client.request("app.reset", { scenario: "inventory-with-products" })
     await client.request("app.wait", { focus: "InventoryList", match: { _tag: "ready" } })
@@ -414,7 +415,8 @@ test(
   15_000,
 )
 
-test(
+// This Unix peer has no Windows authentication handshake.
+test.skipIf(process.platform === "win32")(
   "stop gives up on a socket that never answers",
   isolated(async (_cli, dir) => {
     const { createServer } = await import("node:net")
@@ -447,7 +449,8 @@ test(
   15_000,
 )
 
-test(
+// Windows ACL coverage lives in windows.test.ts; chmod cannot express it.
+test.skipIf(process.platform === "win32")(
   "a session directory others can read is refused",
   isolated((cli, dir) => {
     chmodSync(dir, 0o755)
@@ -1145,7 +1148,9 @@ test(
     expect(started.code).toBe(0)
     try {
       const token = readFileSync(join(dir, "device.token"), "utf8").trim()
-      expect(statSync(join(dir, "device.token")).mode & 0o777).toBe(0o600)
+      if (process.platform !== "win32") {
+        expect(statSync(join(dir, "device.token")).mode & 0o777).toBe(0o600)
+      }
       expect(JSON.parse(started.out)).toEqual({
         target: "device",
         listening: `ws://127.0.0.1:${port}`,

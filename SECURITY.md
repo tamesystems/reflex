@@ -4,6 +4,15 @@ Reflex is development tooling. Its trust model:
 
 - **Sessions** listen on a Unix socket readable only by their owner (`0600`, in a
   directory that must be `0700`). Anyone who can open it can drive the app.
+- **Windows sessions** use mutually authenticated, encrypted named pipes. A fresh
+  32-byte session secret is stored in REFLEX_DIR with a checked ACL allowing only the
+  current user, SYSTEM and Administrators. Existing shared storage is refused, wherever
+  REFLEX_DIR is located; user-profile placement alone is not a guarantee. Trusted
+  ancestors are required. Other users cannot read or originate authenticated frames
+  without the secret; they may deny service. Same-user processes, administrators and
+  SYSTEM are trusted. See [ADR 0012](docs/decisions/0012-windows-sessions-use-authenticated-pipes.md)
+  for the exact ACL, handshake, encryption and threat model. Windows mode bits are not
+  used as access control.
 - **The device bridge** listens on loopback unless `--host` says otherwise, and admits an
   app only with the 32-byte token in `.reflex/device.token`. Traffic is plain `ws://`:
   binding to a network interface exposes it to that network. Apps must load the bridge

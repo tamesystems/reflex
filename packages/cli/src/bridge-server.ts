@@ -20,6 +20,7 @@ import {
 } from "@reflex/protocol"
 import { type BridgeController, createClient, type TransportClient } from "@reflex/rpc"
 import type { BackgroundReporter } from "@reflex/runtime"
+import { checkSecretAcl } from "./windows-security.ts"
 import { hasCode } from "./session-lock.ts"
 
 /** 32 random bytes, as base64url: 43 characters. */
@@ -27,6 +28,7 @@ const TOKEN_BYTES = 32
 
 /** The token outlives any one bridge, so that an app's configuration does too. */
 export const loadOrCreateToken = (path: string): string => {
+  checkSecretAcl(path)
   try {
     const token = readFileSync(path, "utf8").trim()
     if (!isBridgeToken(token)) {
@@ -40,7 +42,10 @@ export const loadOrCreateToken = (path: string): string => {
   }
   const token = randomBytes(TOKEN_BYTES).toString("base64url")
   // `wx`: if another start made one meanwhile, theirs stands and this one fails loudly.
-  writeFileSync(path, `${token}\n`, { mode: 0o600, flag: "wx" })
+  writeFileSync(path, "", { mode: 0o600, flag: "wx" })
+  checkSecretAcl(path)
+  writeFileSync(path, `${token}\n`, { mode: 0o600 })
+  checkSecretAcl(path)
   return token
 }
 

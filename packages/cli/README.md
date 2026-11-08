@@ -49,6 +49,37 @@ answers on its socket, or reports why it failed. The module must export an `AppH
 - **`reflex watch`** exits non-zero whenever its session goes away, a clean stop included:
   it cannot tell the two apart.
 
+## Windows sessions and raw peers
+
+On Windows the endpoint is `\\.\pipe\reflex-<sha256>`: hash the lowercase resolved
+REFLEX_DIR, a NUL, then `headless` or `device`. `loadConfig` exposes `socketPath` and
+`authPath`. There is no `.sock` file. The daemon rotates `<target>.auth` after taking the
+lock. Windows PowerShell 5.1 checks directory/file ACLs; mode bits do not protect secrets.
+Existing storage granting another ordinary principal access is refused. See
+[ADR 0012](../../docs/decisions/0012-windows-sessions-use-authenticated-pipes.md).
+CLI, MCP and remote journeys using `connectToSession` authenticate automatically.
+`connectSocket(path, undefined, secret)` handles the Windows handshake and frame codec.
+`serve --stdio` and Unix sockets continue speaking plain NDJSON.
+
+A raw Windows peer reads the hex secret from authPath and opens the pipe. Before JSON-RPC:
+
+1. Client sends a random 32-byte nonce as 64 lowercase hex characters plus LF.
+2. Server sends its own nonce, a space, and HMAC-SHA256(secret-as-UTF8,
+   `reflex-local-v1:server:<clientNonce>:<serverNonce>`) as hex plus LF.
+3. After checking that proof, client sends the corresponding `client` role proof plus LF.
+4. Server checks and replies `ok` plus LF. Both sides now use encrypted NDJSON frames.
+
+Each direction derives its 32-byte AES key using the same HMAC with role `key-client`
+or `key-server`. Each JSON-RPC line is encrypted with AES-256-GCM; its 12-byte IV is
+zero-filled with the direction's zero-based sequence in the last four bytes, big endian.
+Send base64(ciphertext concatenated with the 16-byte authentication tag), then LF.
+Sequence increases for every frame; reconnect before 2^32 frames. Both fresh nonces make
+keys unique per connection. Invalid proofs/frames close the connection. Handshakes get
+5 seconds and 256 characters per line. Protocol limits also bound encrypted frames.
+The exported `authenticateLocal(socket, secret, false)` returns `{ encode, decode }`
+and pauses the socket; attach a bounded reader, then resume. This helper also supports
+raw peers that build their own JSON-RPC envelopes. Never send the secret on the wire.
+
 ## The device bridge
 
 `reflex --target device start` prints the setting an app needs:
@@ -111,5 +142,6 @@ $ claude mcp add reflex -- bun run /path/to/reflex/packages/cli/src/cli.ts mcp
 ## Related
 
 [ADR 0007](../../docs/decisions/0007-socket-permissions-are-the-authentication.md),
+[ADR 0012](../../docs/decisions/0012-windows-sessions-use-authenticated-pipes.md),
 [ADR 0008](../../docs/decisions/0008-the-device-dials-out.md),
 [ADR 0009](../../docs/decisions/0009-mcp-reuses-the-cli.md).

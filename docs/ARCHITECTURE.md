@@ -23,7 +23,7 @@ Reflex does not own:
 - **app data**. Sessions are in memory. Persistence, networking and auth belong to the
   app's services, which scenarios replace with fixtures.
 - **end-user security**. The control surface is development tooling: it trusts whoever
-  can open the session's socket (see [SECURITY.md](../SECURITY.md)).
+  can authenticate to the session transport (see [SECURITY.md](../SECURITY.md)).
 - **the router's own behavior**. Expo Router decides what a gesture does; Reflex follows.
 
 ## 2. Context
@@ -38,7 +38,7 @@ Reflex does not own:
  │   commands.ts — the one implementation of each │
  │   command, shared by the CLI and the MCP tools │
  └───────────────┬────────────────────────────────┘
-                 │ JSON-RPC over a Unix socket (.reflex/*.sock, 0600)
+                 │ JSON-RPC over Unix socket (0600) or authenticated Windows pipe
                  ▼
  ┌────────────────────────────────────────────────┐
  │ Session daemon (reflex start / serve)          │
@@ -68,8 +68,8 @@ packages/
               SessionController that starts, resets and closes sessions (controller.ts).
               No Effect, no platform APIs. Start: runtime.ts, then controller.ts.
   rpc/        JSON-RPC 2.0 over newline-delimited JSON. server.ts is one peer's
-              connection to a Controller; client.ts the other end; socket.ts the Unix
-              socket and stdio transports; bridge-controller.ts a Controller that
+              connection to a Controller; client.ts the other end; socket.ts the Unix socket, Windows pipe and stdio transports;
+              local-auth.ts authenticates and encrypts Windows pipe frames; bridge-controller.ts a Controller that
               forwards to whichever app is connected.
   effect/     How an Effect app becomes nodes. capability.ts (defineCapability, mount),
               navigation.ts (defineNavigation: the stack, a scope per screen),
@@ -125,7 +125,7 @@ cli.ts          read --target; connectToSession (session.ts); parse and check th
   │
 commands.ts     doAction: app.dispatch, then app.wait {operationId}, then app.wait
   │             {idle}, then app.inspect, over one client (rpc/client.ts)
-  │  Unix socket
+  │  Unix socket / authenticated pipe
 server.ts       PeerConnection: parse the frame, check limits, controller.request
   │
 controller.ts   SessionController: wait out any reset, then the session's runtime
@@ -188,7 +188,7 @@ the router pops the screen beneath and the push still lands; the core follows bo
 the app started with `EXPO_PUBLIC_REFLEX_BRIDGE` set.
 
 ```text
-cli.ts ─► commands.ts ─► device.sock ─► server.ts   (as in 4.1)
+cli.ts ─► commands.ts ─► device transport ─► server.ts   (as in 4.1)
 bridge-controller.ts   forward to the connected app's client; if none is
                        connected, wait up to REFLEX_APP_WAIT_MS for one
 bridge-server.ts       one WebSocket per app, admitted by a token hello
@@ -249,15 +249,25 @@ There is no database. A session's state is its nodes' state, in memory, for as l
 the session lives. On disk, per `REFLEX_DIR` (default `./.reflex`, which must be private to
 its owner):
 
-| File                                    | What it is                                               |
-| --------------------------------------- | -------------------------------------------------------- |
-| `session.sock`, `device.sock`           | Each target's socket, `0600`                             |
-| `session.lock`, `device.lock`           | The daemon's pid, created atomically                     |
-| `session.log.<pid>`, `device.log.<pid>` | A daemon's log, at most 1 MiB, removed after a clean run |
-| `device.token`                          | The bridge's token, kept across restarts, `0600`         |
+| File                                    | What it is                                                       |
+| --------------------------------------- | ---------------------------------------------------------------- |
+| `session.auth`, `device.auth`           | Windows per-session secret, checked private ACL; removed on stop |
+| `session.sock`, `device.sock`           | Each target's Unix socket, `0600` (no pipe file on Windows)      |
+| `session.lock`, `device.lock`           | The daemon's pid, created atomically                             |
+| `session.log.<pid>`, `device.log.<pid>` | A daemon's log, at most 1 MiB, removed after a clean run         |
+| `device.token`                          | The bridge's token, kept across restarts, `0600`                 |
+
+Windows pipe names hash the resolved directory and target; they are kernel objects,
+probed by connection rather than file existence. Windows storage uses checked ACLs,
+not Unix mode bits. `windows-security.ts` owns ACL creation/checking. Clients authenticate
+and encrypt frames before the controller sees JSON-RPC, including shutdown. The daemon
+rotates its local secret only after obtaining its lock; the device bridge token persists.
 
 ## 6. Cross-cutting concepts
 
+- **Local authentication.** Unix permissions remain the boundary; Windows peers mutually
+  authenticate and encrypt traffic using an ACL-protected secret (ADR 0012). Same-user
+  processes, SYSTEM and administrators are trusted. StdIO has its parent as the boundary.
 - **Limits.** Every resource a peer can make a session spend is bounded in
   `packages/protocol/src/limits.ts`. Past a limit, a request is generally refused with
   `ResourceExhausted`, or the peer is disconnected if it cannot be told. Navigation is
@@ -308,6 +318,9 @@ What must stay true when you change things. Most have a test; the test names say
   the session start budget differs (see 4.7).
 - **The production app has no bridge.** It is loaded only behind `__DEV__`, with its
   setting read inside that branch. `e2e:live` checks a production export for it.
+- **No unauthenticated Windows commands.** Pipe peers authenticate before any controller
+  request; frames have confidentiality, integrity and replay protection. Pipe names are
+  discovery, never authentication.
 - **One implementation per command.** The CLI and the MCP tools both call `commands.ts`.
 
 ## 8. Decisions
@@ -325,3 +338,5 @@ What must stay true when you change things. Most have a test; the test names say
 | [0009](decisions/0009-mcp-reuses-the-cli.md)                        | MCP tools reuse the CLI's commands                              |
 | [0010](decisions/0010-operations-and-interruption.md)               | Operations are accepted, then finish; back acts as return       |
 | [0011](decisions/0011-secrets-fail-closed.md)                       | Secrets are removed before encoding, failing closed             |
+
+| [0012](decisions/0012-windows-sessions-use-authenticated-pipes.md) | Windows sessions use authenticated, encrypted pipes |

@@ -5,14 +5,15 @@ for where things live and why.
 
 ## Environment
 
-| Tool               | Version         | Needed for                                  |
-| ------------------ | --------------- | ------------------------------------------- |
-| Bun                | 1.4.4           | Everything                                  |
-| macOS or Linux     |                 | Sessions use Unix sockets; no Windows pipes |
-| Node               | 24              | Browser journeys (Playwright is not on Bun) |
-| Google Chrome      | any current     | Browser journeys                            |
-| Hermes VM          | release v0.13.0 | `hermes-smoke` (CI downloads it)            |
-| Android SDK, Xcode | optional        | Trying the app on an emulator or simulator  |
+| Tool                  | Version         | Needed for                                        |
+| --------------------- | --------------- | ------------------------------------------------- |
+| Bun                   | 1.4.4           | Everything                                        |
+| macOS, Linux, Windows |                 | Unix sockets or authenticated Windows named pipes |
+| Windows PowerShell    | 5.1 (built in)  | Windows filesystem ACL creation and checks        |
+| Node                  | 24              | Browser journeys (Playwright is not on Bun)       |
+| Google Chrome         | any current     | Browser journeys                                  |
+| Hermes VM             | release v0.13.0 | `hermes-smoke` (CI downloads it)                  |
+| Android SDK, Xcode    | optional        | Trying the app on an emulator or simulator        |
 
 The repository has two installs: the workspace, and `apps/mobile`, which Metro needs to
 resolve on its own. Metro compiles workspace sources directly; there is no build step.
@@ -169,6 +170,37 @@ same change:
   (supersede old ones; do not rewrite them);
 - a changed command, variable or workflow updates this file or a package README;
 - a new term updates [domain.md](domain.md).
+
+## Windows
+
+The same Bun 1.4.4 commands run in PowerShell. Use PowerShell 7.3+ for native argument
+passing of JSON; on Windows PowerShell 5.1 use its stop-parsing token for literal JSON:
+
+```powershell
+bun run reflex --% do OpenProduct '{"productId":"product-123"}'
+$env:REFLEX_DIR = "$PWD\.reflex"
+$env:EXPO_PUBLIC_REFLEX_BRIDGE = 'ws://127.0.0.1:8790#<token>'
+Set-Location apps/mobile
+bunx expo start
+# To run the optional VM smoke test:
+$env:HERMES = 'C:\tools\hermes.exe'
+bun run hermes-smoke
+```
+
+Sessions use named pipes, with mutual authentication and encrypted frames, rather than
+`.sock` files. REFLEX_DIR and secrets must have Windows ACLs allowing only the current
+user, SYSTEM and Administrators; new directories get a private ACL automatically.
+Existing shared directories are refused. Use a new directory under a trusted parent
+(such as your user profile), or have its owner correct its ACL. `chmod` is not a Windows
+security check. See [ADR 0012](decisions/0012-windows-sessions-use-authenticated-pipes.md).
+`reflex stop` is the portable graceful shutdown; Windows process termination may leave
+stale files, reclaimed after the pid is gone. Ctrl+C is supported for foreground serving.
+NDJSON accepts CRLF as well as LF; paths containing spaces are supported.
+
+CI runs `check` on Linux and a real `windows-latest` runner. The browser journey also
+runs on Windows with Node and Chrome. Hermes CI stays on Linux: its pinned download is
+the Linux VM artifact; a Windows VM supplied through HERMES can run the same harness,
+but is not verified by that job. Xcode/iOS simulators require macOS.
 
 ## Platform notes
 
