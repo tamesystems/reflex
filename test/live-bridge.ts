@@ -86,7 +86,6 @@ export const openBridged = async (
     const config = loadConfig({ ...process.env, REFLEX_DIR: directory }, "device")
     const socketPath = process.platform === "win32" ? config.authPath : config.socketPath
     await until(() => existsSync(socketPath), "the bridge's socket")
-    const token = readFileSync(join(directory, "device.token"), "utf8").trim()
     let client: Client
     const deadline = Date.now() + BRIDGE_READY_TIMEOUT_MS
     for (;;) {
@@ -100,6 +99,7 @@ export const openBridged = async (
         await Bun.sleep(25)
       }
     }
+    const token = readFileSync(join(directory, "device.token"), "utf8").trim()
     const bridged = createBridgeController({
       disconnectedMessage: "The bridge went away",
       onClose: release,

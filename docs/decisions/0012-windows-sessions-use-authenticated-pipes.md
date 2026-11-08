@@ -20,6 +20,7 @@ Sources:
 - [Microsoft: named pipe security](https://learn.microsoft.com/en-us/windows/win32/ipc/named-pipe-security-and-access-rights)
 - [Node: IPC and listen options](https://nodejs.org/api/net.html#ipc-support)
 - [libuv Windows pipes](https://github.com/libuv/libuv/blob/v1.x/src/win/pipe.c)
+- [Microsoft: pipe impersonation requirements](https://learn.microsoft.com/en-us/windows/win32/api/namedpipeapi/nf-namedpipeapi-impersonatenamedpipeclient)
 - [Bun: net connections](https://bun.com/reference/node/net/createConnection)
 - [Microsoft: creating a directory with DirectorySecurity](https://learn.microsoft.com/en-us/dotnet/api/system.io.directoryinfo.create?view=netframework-4.8.1)
 
@@ -69,3 +70,14 @@ sharing. Unauthorized connections can consume bounded resources or squat the pip
 so availability against hostile local users is not guaranteed. ACL checks cost a
 PowerShell process. Windows SIGTERM kills cannot promise graceful cleanup; protocol
 shutdown remains portable and stale locks are reclaimed only after their owner is dead.
+
+The Node-compatible pipe API also exposes no client impersonation-level control.
+libuv opens clients without SECURITY_SQOS_PRESENT. Principals with Windows
+SeImpersonatePrivilege (including some service accounts), debug/backup privileges, or
+an already obtained token for the developer are therefore also trusted: a malicious
+server with impersonation privilege can act as a connecting client before an
+application handshake. Ordinary different-user processes do not have that privilege;
+cryptography is not a boundary against privileged OS token impersonation. Do not run
+Reflex on a host with untrusted privileged services, or supply explicit logon credentials
+to an untrusted pipe server. External raw clients should request SecurityIdentification
+or SecurityAnonymous when their Windows API exposes that option.

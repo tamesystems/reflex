@@ -10,7 +10,9 @@ Reflex is development tooling. Its trust model:
   REFLEX_DIR is located; user-profile placement alone is not a guarantee. Trusted
   ancestors are required. Other users cannot read or originate authenticated frames
   without the secret; they may deny service. Same-user processes, administrators and
-  SYSTEM are trusted. See [ADR 0012](docs/decisions/0012-windows-sessions-use-authenticated-pipes.md)
+  SYSTEM, and principals with OS impersonation/debug/backup privileges are trusted.
+  The Node-compatible API cannot set a client impersonation level; authentication
+  does not contain a privileged malicious pipe server. See [ADR 0012](docs/decisions/0012-windows-sessions-use-authenticated-pipes.md)
   for the exact ACL, handshake, encryption and threat model. Windows mode bits are not
   used as access control.
 - **The device bridge** listens on loopback unless `--host` says otherwise, and admits an
