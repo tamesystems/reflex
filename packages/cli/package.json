@@ -1,0 +1,21 @@
+{
+  "name": "@reflex/cli",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "reflex": "./src/cli.ts"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@reflex/protocol": "workspace:*",
+    "@reflex/rpc": "workspace:*",
+    "@reflex/runtime": "workspace:*"
+  },
+  "devDependencies": {
+    "@reflex/test": "workspace:*"
+  }
+}

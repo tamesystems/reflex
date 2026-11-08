@@ -1,0 +1,31 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "paths": {
+      "@reflex/protocol": ["../../packages/protocol/src/index.ts"],
+      "@reflex/runtime": ["../../packages/runtime/src/index.ts"],
+      "@reflex/rpc/connection": ["../../packages/rpc/src/server.ts"],
+      "@reflex/effect": ["../../packages/effect/src/index.ts"],
+      "@reflex/expo": ["../../packages/expo/src/react.tsx"],
+      "@reflex/expo/bridge": ["../../packages/expo/src/bridge.ts"],
+      "@reflex/example-inventory": ["../../examples/inventory/src/app.ts"],
+      "@reflex/example-inventory/*": ["../../examples/inventory/src/*"],
+      "effect": ["./node_modules/effect"],
+      "effect/*": ["./node_modules/effect/dist/*"],
+      "react": ["./node_modules/@types/react/index.d.ts"],
+      "expo-router": ["./node_modules/expo-router"],
+      "react/jsx-runtime": ["./node_modules/@types/react/jsx-runtime.d.ts"]
+    },
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "useUnknownInCatchVariables": true,
+    "verbatimModuleSyntax": true
+  },
+  "include": ["app", "src", "e2e/*.ts", "hermes-smoke/*.ts"]
+}

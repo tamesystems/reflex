@@ -1,0 +1,31 @@
+{
+  "name": "reflex-effect",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "examples/*"
+  ],
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit -p tsconfig.json && bun run --cwd apps/mobile typecheck",
+    "format": "biome format --write .",
+    "lint": "biome lint .",
+    "check": "biome check . && bun run typecheck && bun test",
+    "bench": "bun bench/wire.ts",
+    "reflex": "bun packages/cli/src/cli.ts"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.6.6",
+    "@reflex/effect": "workspace:*",
+    "@reflex/protocol": "workspace:*",
+    "@reflex/rpc": "workspace:*",
+    "@reflex/runtime": "workspace:*",
+    "@reflex/test": "workspace:*",
+    "@types/bun": "1.4.4",
+    "effect": "4.1.2",
+    "typescript": "5.9.3"
+  },
+  "packageManager": "bun@1.4.4"
+}

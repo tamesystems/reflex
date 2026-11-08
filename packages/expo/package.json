@@ -1,0 +1,25 @@
+{
+  "name": "@reflex/expo",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/react.tsx",
+    "./projection": "./src/projection.ts",
+    "./bridge": "./src/bridge.ts"
+  },
+  "dependencies": {
+    "@reflex/effect": "workspace:*",
+    "@reflex/protocol": "workspace:*",
+    "@reflex/runtime": "workspace:*",
+    "@reflex/rpc": "workspace:*"
+  },
+  "peerDependencies": {
+    "expo-router": "58.0.30",
+    "react": "19.3.0"
+  },
+  "devDependencies": {
+    "@reflex/test": "workspace:*"
+  }
+}

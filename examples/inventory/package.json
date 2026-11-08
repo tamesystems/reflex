@@ -1,0 +1,20 @@
+{
+  "name": "@reflex/example-inventory",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/app.ts",
+    "./*": "./src/*"
+  },
+  "dependencies": {
+    "@reflex/effect": "workspace:*",
+    "effect": "4.1.2"
+  },
+  "devDependencies": {
+    "@reflex/cli": "workspace:*",
+    "@reflex/test": "workspace:*",
+    "@reflex/protocol": "workspace:*"
+  }
+}

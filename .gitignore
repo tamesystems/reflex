@@ -1,0 +1,11 @@
+node_modules
+dist
+*.tsbuildinfo
+.reflex
+.DS_Store
+
+# Expo and local environment
+.expo/
+.env
+.env*.local
+*.log

@@ -1,0 +1,2 @@
+# CLI journeys set their per-file timeout with bun:test's setDefaultTimeout in
+# packages/cli/test/cli.test.ts. Bun does not honor a [test].timeout option.

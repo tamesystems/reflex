@@ -1,0 +1,24 @@
+{
+  "expo": {
+    "name": "reflex-inventory",
+    "slug": "reflex-inventory",
+    "scheme": "reflexinventory",
+    "version": "0.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "bundleIdentifier": "dev.reflex.inventory"
+    },
+    "android": {
+      "package": "dev.reflex.inventory"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single"
+    },
+    "plugins": ["expo-router"],
+    "experiments": {
+      "tsconfigPaths": false
+    }
+  }
+}
