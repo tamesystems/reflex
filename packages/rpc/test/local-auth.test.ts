@@ -57,3 +57,15 @@ test("authenticated frames resist reading, modification, reflection and replay",
   expect(() => server.value.decode(encoded)).toThrow()
   expect(() => client.value.decode(encoded)).toThrow()
 })
+
+test("modified authenticated frames are rejected and CRLF frames are accepted", async () => {
+  const [server, client] = await pair("secret", "secret")
+  if (server?.status !== "fulfilled" || client?.status !== "fulfilled") {
+    throw new Error("Handshake failed")
+  }
+  const encoded = client.value.encode("hello")
+  expect(server.value.decode(`${encoded}\r`)).toBe("hello")
+  const next = client.value.encode("tamper")
+  const changed = `${next[0] === "A" ? "B" : "A"}${next.slice(1)}`
+  expect(() => server.value.decode(changed)).toThrow()
+})

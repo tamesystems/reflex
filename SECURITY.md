@@ -2,7 +2,7 @@
 
 Reflex is development tooling. Its trust model:
 
-- **Sessions** listen on a Unix socket readable only by their owner (`0600`, in a
+- **macOS/Linux sessions** listen on a Unix socket readable only by their owner (`0600`, in a
   directory that must be `0700`). Anyone who can open it can drive the app.
 - **Windows sessions** use mutually authenticated, encrypted named pipes. A fresh
   32-byte session secret is stored in REFLEX_DIR with a checked ACL allowing only the

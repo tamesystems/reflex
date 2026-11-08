@@ -91,7 +91,7 @@ on this machine, with no UI) or **device** (the app running somewhere else, thro
 bridge). Each target has its own socket, so both can run at once.
 
 **Daemon.** A background session process, started by `reflex start`, that serves its
-controller on a Unix socket.
+controller on a Unix socket or authenticated Windows named pipe.
 
 **Bridge.** The device target's daemon: a WebSocket server the app dials, plus a
 controller that forwards to whichever app is connected. The app's **setting**

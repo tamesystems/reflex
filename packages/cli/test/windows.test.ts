@@ -1,11 +1,15 @@
 import { expect, test } from "bun:test"
 import { execFileSync } from "node:child_process"
-import { mkdtempSync, rmSync } from "node:fs"
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { loadConfig, sessionEndpoint } from "../src/config.ts"
 import { clearLeftovers, isAlive } from "../src/session-lock.ts"
-import { checkWindowsAcl, preparePrivateDirectory } from "../src/windows-security.ts"
+import {
+  checkSecretAcl,
+  checkWindowsAcl,
+  preparePrivateDirectory,
+} from "../src/windows-security.ts"
 
 test("Windows pipe identity includes the resolved directory and target", () => {
   const a = sessionEndpoint("alpha", "headless", "win32")
@@ -45,3 +49,22 @@ test.skipIf(process.platform !== "win32")("stale cleanup never treats the pipe a
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+test.skipIf(process.platform !== "win32")(
+  "Windows secrets reject a broad explicit file ACL",
+  () => {
+    const parent = mkdtempSync(join(tmpdir(), "reflex-secret-acl-"))
+    const directory = join(parent, "private")
+    try {
+      preparePrivateDirectory({ directory })
+      const path = join(directory, "session.auth")
+      writeFileSync(path, "")
+      checkSecretAcl(path)
+      execFileSync("icacls.exe", [path, "/grant", "*S-1-1-0:R"], { stdio: "pipe" })
+      expect(() => checkSecretAcl(path)).toThrow("Windows ACL")
+    } finally {
+      rmSync(parent, { recursive: true, force: true })
+    }
+  },
+  15_000,
+)

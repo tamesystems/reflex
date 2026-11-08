@@ -58,14 +58,14 @@ See [packages/cli/README.md](../packages/cli/README.md#mcp).
 
 ## Test
 
-| Command                                           | What it runs                                                                                                                                                                               |
-| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `bun run check`                                   | Biome format and lint, both typechecks, every `bun test` suite. What CI runs first                                                                                                         |
-| `bun test path/to/file.test.ts`                   | One suite. `-t "name"` for one test                                                                                                                                                        |
-| `bun run --cwd apps/mobile e2e`                   | Exports the web app and runs `e2e/journey.ts` in headless Chrome                                                                                                                           |
-| `bun run --cwd apps/mobile e2e:live`              | Runs the app under Metro with a bridge and drives it with CLI and MCP calls, comparing each answer with a headless session's; checks production exports hold no bridge or token. Not in CI |
-| `HERMES=… bun run --cwd apps/mobile hermes-smoke` | Runs a journey from a Metro bundle on a Hermes VM                                                                                                                                          |
-| `bun run bench`                                   | Wire and encoding costs                                                                                                                                                                    |
+| Command                                           | What it runs                                                                                                                                                                                        |
+| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bun run check`                                   | Biome format and lint, both typechecks, every `bun test` suite. What CI runs first                                                                                                                  |
+| `bun test path/to/file.test.ts`                   | One suite. `-t "name"` for one test                                                                                                                                                                 |
+| `bun run --cwd apps/mobile e2e`                   | Exports the web app and runs `e2e/journey.ts` in headless Chrome                                                                                                                                    |
+| `bun run --cwd apps/mobile e2e:live`              | Runs the app under Metro with a bridge and drives it with CLI and MCP calls, comparing each answer with a headless session's; checks production exports hold no bridge or token. Runs in Windows CI |
+| `HERMES=… bun run --cwd apps/mobile hermes-smoke` | Runs a journey from a Metro bundle on a Hermes VM                                                                                                                                                   |
+| `bun run bench`                                   | Wire and encoding costs                                                                                                                                                                             |
 
 The `bun test` suites, by kind:
 
@@ -177,7 +177,7 @@ The same Bun 1.4.4 commands run in PowerShell. Use PowerShell 7.3+ for native ar
 passing of JSON; on Windows PowerShell 5.1 use its stop-parsing token for literal JSON:
 
 ```powershell
-bun run reflex --% do OpenProduct '{"productId":"product-123"}'
+bun --% run reflex do OpenProduct "{\"productId\":\"product-123\"}"
 $env:REFLEX_DIR = "$PWD\.reflex"
 $env:EXPO_PUBLIC_REFLEX_BRIDGE = 'ws://127.0.0.1:8790#<token>'
 Set-Location apps/mobile
@@ -195,10 +195,12 @@ Existing shared directories are refused. Use a new directory under a trusted par
 security check. See [ADR 0012](decisions/0012-windows-sessions-use-authenticated-pipes.md).
 `reflex stop` is the portable graceful shutdown; Windows process termination may leave
 stale files, reclaimed after the pid is gone. Ctrl+C is supported for foreground serving.
-NDJSON accepts CRLF as well as LF; paths containing spaces are supported.
+NDJSON accepts CRLF as well as LF; paths containing spaces are supported. Git checkouts
+use LF through `.gitattributes`, so formatting checks also pass with `core.autocrlf`.
 
 CI runs `check` on Linux and a real `windows-latest` runner. The browser journey also
-runs on Windows with Node and Chrome. Hermes CI stays on Linux: its pinned download is
+runs on Windows with Node and Chrome, including `e2e:live` (CLI/MCP against the live app).
+Hermes CI stays on Linux: its pinned download is
 the Linux VM artifact; a Windows VM supplied through HERMES can run the same harness,
 but is not verified by that job. Xcode/iOS simulators require macOS.
 

@@ -957,3 +957,32 @@ const endpoint = (directory: string): string =>
   process.platform === "win32"
     ? `\\\\.\\pipe\\reflex-test-${createHash("sha256").update(directory).digest("hex")}`
     : join(directory, "s.sock")
+
+test("authenticated transport admits JSON-RPC only after mutual authentication", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "reflex-secure-"))
+  const path = endpoint(directory)
+  const controller = await createController(app)
+  let shutdowns = 0
+  const server = await serveSocket(controller, path, {
+    localSecret: "session-secret",
+    onShutdown: () => shutdowns++,
+  })
+  cleanups.push(async () => {
+    server.close()
+    await controller.close()
+    rmSync(directory, { recursive: true, force: true })
+  })
+  // A plain JSON-RPC peer must not even be able to shut the session down.
+  const socket = connect(path)
+  socket.on("error", () => {})
+  const closed = new Promise<void>((resolve) => socket.once("close", resolve))
+  socket.write(`${JSON.stringify({ jsonrpc: "2.0", id: 1, method: "session.shutdown" })}\r\n`)
+  await closed
+  expect(shutdowns).toBe(0)
+  await expect(connectSocket(path, undefined, "wrong-secret")).rejects.toThrow("authentication")
+  const client = await connectSocket(path, undefined, "session-secret")
+  cleanups.push(() => client.close())
+  expect(await client.request("app.describe", {})).toMatchObject({ app: "inventory" })
+  await client.request("session.shutdown", {})
+  expect(shutdowns).toBe(1)
+})

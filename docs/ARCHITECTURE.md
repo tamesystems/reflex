@@ -249,13 +249,13 @@ There is no database. A session's state is its nodes' state, in memory, for as l
 the session lives. On disk, per `REFLEX_DIR` (default `./.reflex`, which must be private to
 its owner):
 
-| File                                    | What it is                                                       |
-| --------------------------------------- | ---------------------------------------------------------------- |
-| `session.auth`, `device.auth`           | Windows per-session secret, checked private ACL; removed on stop |
-| `session.sock`, `device.sock`           | Each target's Unix socket, `0600` (no pipe file on Windows)      |
-| `session.lock`, `device.lock`           | The daemon's pid, created atomically                             |
-| `session.log.<pid>`, `device.log.<pid>` | A daemon's log, at most 1 MiB, removed after a clean run         |
-| `device.token`                          | The bridge's token, kept across restarts, `0600`                 |
+| File                                    | What it is                                                                 |
+| --------------------------------------- | -------------------------------------------------------------------------- |
+| `session.auth`, `device.auth`           | Windows per-session secret, checked private ACL; removed on stop           |
+| `session.sock`, `device.sock`           | Each target's Unix socket, `0600` (no pipe file on Windows)                |
+| `session.lock`, `device.lock`           | The daemon's pid, created atomically                                       |
+| `session.log.<pid>`, `device.log.<pid>` | A daemon's log, at most 1 MiB, removed after a clean run                   |
+| `device.token`                          | The bridge's token, kept across restarts; Unix `0600`, Windows private ACL |
 
 Windows pipe names hash the resolved directory and target; they are kernel objects,
 probed by connection rather than file existence. Windows storage uses checked ACLs,
@@ -338,5 +338,4 @@ What must stay true when you change things. Most have a test; the test names say
 | [0009](decisions/0009-mcp-reuses-the-cli.md)                        | MCP tools reuse the CLI's commands                              |
 | [0010](decisions/0010-operations-and-interruption.md)               | Operations are accepted, then finish; back acts as return       |
 | [0011](decisions/0011-secrets-fail-closed.md)                       | Secrets are removed before encoding, failing closed             |
-
-| [0012](decisions/0012-windows-sessions-use-authenticated-pipes.md) | Windows sessions use authenticated, encrypted pipes |
+| [0012](decisions/0012-windows-sessions-use-authenticated-pipes.md)  | Windows sessions use authenticated, encrypted pipes             |

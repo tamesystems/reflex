@@ -24,6 +24,18 @@ jobs:
       - run: bun install --frozen-lockfile
         working-directory: apps/mobile
       - run: bun run check
+      - name: Windows PowerShell JSON arguments
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          $env:REFLEX_DIR = Join-Path $env:RUNNER_TEMP 'reflex-powershell'
+          bun run reflex start examples/inventory/src/app.ts
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          bun --% run reflex do OpenProduct "{\"productId\":\"product-123\"}"
+          $result = $LASTEXITCODE
+          bun run reflex stop
+          if ($result -ne 0) { exit $result }
+          exit $LASTEXITCODE
 
   browser:
     strategy:
@@ -44,6 +56,9 @@ jobs:
       - run: bun install --frozen-lockfile
         working-directory: apps/mobile
       - run: bun run e2e
+        working-directory: apps/mobile
+      - run: bun run e2e:live
+        if: runner.os == 'Windows'
         working-directory: apps/mobile
 
   hermes:
