@@ -204,9 +204,8 @@ use LF through `.gitattributes`, so formatting checks also pass with `core.autoc
 
 CI runs `check` on Linux and a real `windows-latest` runner. The browser journey also
 runs on Windows with Node and Chrome, including `e2e:live` (CLI/MCP against the live app).
-Hermes CI stays on Linux: its pinned download is
-the Linux VM artifact; a Windows VM supplied through HERMES can run the same harness,
-but is not verified by that job. Xcode/iOS simulators require macOS.
+Hermes CI also runs on both systems, using the release v0.13.0 VM archive for each
+platform with its SHA-256 pinned. Xcode/iOS simulators require macOS.
 
 ## Platform notes
 
