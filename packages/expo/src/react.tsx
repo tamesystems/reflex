@@ -10,13 +10,19 @@ import {
 import * as React from "react"
 import { useSession, useRouteNode as useBoundRouteNode } from "@reflex/react"
 import { reportFailure } from "@reflex/live/session"
-import { corePortOf, stackReader } from "./core-port.ts"
-import { type Destination, NODE_PARAM, type RouterLocation, type StackEntry } from "./projection.ts"
-import { ProjectionController } from "./projection-controller.ts"
+import {
+  corePortOf,
+  stackReader,
+  ProjectionController,
+  type Destination,
+  type RouterLocation,
+  type StackEntry,
+} from "@reflex/navigation"
 import { onRouterAction } from "./router-actions.ts"
-
-export * from "./projection.ts"
-export * from "./projection-controller.ts"
+export * from "@reflex/navigation"
+/** Expo route parameter carrying the core entry identity. */
+export { NODE_PARAM } from "./route-token.ts"
+import { NODE_PARAM } from "./route-token.ts"
 
 export interface RouterHref {
   readonly pathname: string

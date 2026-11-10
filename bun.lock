@@ -85,6 +85,7 @@
       "dependencies": {
         "@reflex/effect": "workspace:*",
         "@reflex/live": "workspace:*",
+        "@reflex/navigation": "workspace:*",
         "@reflex/protocol": "workspace:*",
         "@reflex/react": "workspace:*",
         "@reflex/runtime": "workspace:*",
@@ -106,6 +107,18 @@
         "@reflex/runtime": "workspace:*",
       },
     },
+    "packages/navigation": {
+      "name": "@reflex/navigation",
+      "version": "0.0.0",
+      "dependencies": {
+        "@reflex/protocol": "workspace:*",
+        "@reflex/runtime": "workspace:*",
+      },
+      "devDependencies": {
+        "@reflex/effect": "workspace:*",
+        "@reflex/test": "workspace:*",
+      },
+    },
     "packages/protocol": {
       "name": "@reflex/protocol",
       "version": "0.0.0",
@@ -120,7 +133,19 @@
         "@reflex/runtime": "workspace:*",
       },
       "peerDependencies": {
-        "react": "19.3.0",
+        "react": ">=19.2.7 <20",
+      },
+    },
+    "packages/react-router": {
+      "name": "@reflex/react-router",
+      "version": "0.0.0",
+      "dependencies": {
+        "@reflex/protocol": "workspace:*",
+        "@reflex/react": "workspace:*",
+      },
+      "peerDependencies": {
+        "react": ">=19.2.7 <20",
+        "react-router": "8.5.1",
       },
     },
     "packages/rpc": {
@@ -504,15 +529,21 @@
 
     "@reflex/live": ["@reflex/live@workspace:packages/live"],
 
+    "@reflex/navigation": ["@reflex/navigation@workspace:packages/navigation"],
+
     "@reflex/protocol": ["@reflex/protocol@workspace:packages/protocol"],
 
     "@reflex/react": ["@reflex/react@workspace:packages/react"],
+
+    "@reflex/react-router": ["@reflex/react-router@workspace:packages/react-router"],
 
     "@reflex/rpc": ["@reflex/rpc@workspace:packages/rpc"],
 
     "@reflex/runtime": ["@reflex/runtime@workspace:packages/runtime"],
 
     "@reflex/test": ["@reflex/test@workspace:packages/test"],
+
+    "@remix-run/route-pattern": ["@remix-run/route-pattern@0.22.1", "", {}, "sha512-czdGJWh09Lapvcqt7Vb09KlrU2PhRJ8xQaI+AItTuD9aDJ5MAgxnS38lnys6Ll+6RJEqPiaUqTwIQhVLwFvv+w=="],
 
     "@sinclair/typebox": ["@sinclair/typebox@0.27.12", "", {}, "sha512-hhyNJ+nbR6ZR7pToHvllEFun9TL0sbL+tk/ON75lo+Xas054uez98qRbsuNt7MBCyZKK4+8Yli/OAGZhmfBZ/g=="],
 
@@ -641,6 +672,8 @@
     "content-type": ["content-type@2.1.0", "", {}, "sha512-mj7UPXE0jaqaOsukNZRUEfEi2AcL7C/vwmwcHV0O97eO1E1pxBZuyjlZrx5seTaNBg1U6+o35wpa35Qfcc+7ag=="],
 
     "convert-source-map": ["convert-source-map@2.0.0", "", {}, "sha512-Kvp459HrV2FEJ1CAsi1Ku+MY3kasH19TFykTz2xWmMeq6bk2NU3XXvfJ+Q61m0xktWwt+1HSYf3JZsTms3aRJg=="],
+
+    "cookie-es": ["cookie-es@3.1.1", "", {}, "sha512-UaXxwISYJPTr9hwQxMFYZ7kNhSXboMXP+Z3TRX6f1/NyaGPfuNUZOWP1pUEb75B2HjfklIYLVRfWiFZJyC6Npg=="],
 
     "core-js-compat": ["core-js-compat@3.51.0", "", { "dependencies": { "browserslist": "^4.29.3" } }, "sha512-52r6fkXgxv4GLMjmFcMWRx7X9bw071xTTdrDcdyPGRqU2oE+9pCG0bAOMifSBdLw0JRBZKEF0q3B55qPlLuE8g=="],
 
@@ -993,6 +1026,8 @@
     "react-native-worklets": ["react-native-worklets@0.13.1", "", { "dependencies": { "@babel/generator": "^7.27.1", "@babel/plugin-transform-arrow-functions": "^7.27.1", "@babel/plugin-transform-class-properties": "^7.28.6", "@babel/plugin-transform-classes": "^7.28.6", "@babel/plugin-transform-nullish-coalescing-operator": "^7.28.6", "@babel/plugin-transform-optional-chaining": "^7.28.6", "@babel/plugin-transform-shorthand-properties": "^7.27.1", "@babel/plugin-transform-template-literals": "^7.27.1", "@babel/plugin-transform-unicode-regex": "^7.27.1", "@babel/preset-typescript": "^7.28.5", "@babel/traverse": "^7.27.1", "@babel/types": "^7.27.1", "@jridgewell/remapping": "^2.3.5", "convert-source-map": "^2.0.0", "semver": "^7.7.4", "whatwg-fetch": "^3.6.20" }, "peerDependencies": { "@babel/core": "*", "@react-native/metro-config": "*", "react": "*", "react-native": "0.86 - 0.88" } }, "sha512-sX55Vx89/Y9uJmvAbAGoHXBZvCWXtYPGWPJ9Z9yl0h76mP9A10ULlSrixzGqBFLXeQMBpIpyJEhWpzXP7GG6YA=="],
 
     "react-refresh": ["react-refresh@0.14.2", "", {}, "sha512-jCvmsr+1IUSMUyzOkRcvnVbX3ZYC6g9TDrDbFuFmRDq7PD4yaGbLKNQL6k2jnArV8hjYxh7hVhAZB6s9HDGpZA=="],
+
+    "react-router": ["react-router@8.5.1", "", { "dependencies": { "@remix-run/route-pattern": "^0.22.1", "cookie-es": "^3.1.1" }, "peerDependencies": { "@types/react": ">=19.2.0", "@types/react-dom": ">=19.2.0", "react": ">=19.2.7", "react-dom": ">=19.2.7" }, "optionalPeers": ["@types/react", "@types/react-dom", "react-dom"] }, "sha512-5u1eQ46QjuXjNfEnLwzrnou1Bm5dquO3xjVYkkMYCudtkicD2AQHtx+fvXzPATtPJx8TW6DR1x1TDRqsfHyZBw=="],
 
     "regenerate": ["regenerate@1.5.0", "", {}, "sha512-1s+CxXjJ71i7LNVy8nYwg47XV4y6lAnOEhsMtSKq3WpmPfhl9LuKlTqKIn/3yUpE8lBz+W+TT88Bxyhnr0U4yw=="],
 

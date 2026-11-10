@@ -5,7 +5,7 @@
  * own arrives as a core event.
  *
  * Router entries are identified by the core node they were pushed for, carried
- * as a route param. A URL cannot do this: two entries can share one.
+ * through the router port. A URL cannot do this: two entries can share one.
  */
 import {
   array,
@@ -18,9 +18,6 @@ import {
   type Parser,
   string,
 } from "@reflex/protocol"
-
-/** Route param holding the core node an entry was pushed for. */
-export const NODE_PARAM = "reflexNode"
 
 export interface Destination {
   readonly route: string

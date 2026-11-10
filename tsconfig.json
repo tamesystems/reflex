@@ -30,6 +30,7 @@
     "packages/expo/src/react.tsx",
     "packages/expo/src/effect.tsx",
     "packages/react/src/react.tsx",
-    "packages/react/src/effect.tsx"
+    "packages/react/src/effect.tsx",
+    "packages/react-router/src/index.ts"
   ]
 }

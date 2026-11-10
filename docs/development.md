@@ -15,12 +15,13 @@ for where things live and why.
 | Hermes VM             | release v0.13.0 | `hermes-smoke` (CI downloads it)                  |
 | Android SDK, Xcode    | optional        | Trying the app on an emulator or simulator        |
 
-The repository has two installs: the workspace, and `apps/mobile`, which Metro needs to
-resolve on its own. Metro compiles workspace sources directly; there is no build step.
+The repository has three installs: the workspace, `apps/mobile` for Metro, and
+`apps/web` for Vite/React Router. Browser tooling stays in each app’s own lockfile. Metro compiles workspace sources directly; there is no build step.
 
 ```console
 $ bun install --frozen-lockfile
 $ bun install --frozen-lockfile --cwd apps/mobile
+$ bun install --frozen-lockfile --cwd apps/web
 ```
 
 ## Run
@@ -60,7 +61,7 @@ See [packages/cli/README.md](../packages/cli/README.md#mcp).
 
 | Command                                           | What it runs                                                                                                                                                                                        |
 | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `bun run check`                                   | Biome format and lint, both typechecks, every `bun test` suite. What CI runs first                                                                                                                  |
+| `bun run check`                                   | Biome format and lint, all three typechecks, every `bun test` suite. What CI runs first                                                                                                             |
 | `bun test path/to/file.test.ts`                   | One suite. `-t "name"` for one test                                                                                                                                                                 |
 | `bun run --cwd apps/mobile e2e`                   | Exports the web app and runs `e2e/journey.ts` in headless Chrome                                                                                                                                    |
 | `bun run --cwd apps/mobile e2e:plain`             | Isolated plain Zustand/Zod Expo screen driven by CLI/MCP, Metro module graph proves no Effect; runs on Linux and Windows                                                                            |
@@ -167,7 +168,7 @@ test both sides of the boundary.
 
 ### Change how the router is followed
 
-Decisions are pure functions in `packages/expo/src/projection.ts`; test them there first.
+Decisions are pure functions in `packages/navigation/src/projection.ts`; test them there first.
 `ProjectionController` owns timing and state behind fakeable ports. Then run `e2e`.
 
 ## Keeping the docs true
@@ -249,3 +250,12 @@ It runs as part of `bun run check`, hence on both Ubuntu and Windows CI.
 The generic React entry also has a browser bundle test refusing Expo, React Native,
 Effect and the bridge. Run the mobile `e2e`, `e2e:plain`, and `e2e:live` after changing
 these bindings; the latter checks production bridge/token exclusion.
+
+### React Router browser fixture
+
+From apps/web run `bun run dev`, with VITE_REFLEX_BRIDGE set to the bridge’s appSetting.
+`bun run --cwd apps/web e2e` builds production with a real setting and rejects both token
+and bridge dialler in output JS, then drives development through Playwright, CLI and MCP.
+It covers list/detail focus, same-URL entries, back/refusal, forward and reset. The daemon
+runs out of process. This journey runs in the Ubuntu and Windows browser CI jobs. Root
+`bun run check` typechecks the web fixture and React Router hook; no Vite build runs there.

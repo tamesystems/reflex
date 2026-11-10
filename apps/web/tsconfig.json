@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2023", "DOM"],
+    "jsx": "react-jsx",
+    "strict": true,
+    "exactOptionalPropertyTypes": true,
+    "noUncheckedIndexedAccess": true,
+    "allowImportingTsExtensions": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "types": ["vite/client", "node", "bun"],
+    "paths": {
+      "@reflex/protocol": ["../../packages/protocol/src/index.ts"],
+      "@reflex/runtime": ["../../packages/runtime/src/index.ts"],
+      "@reflex/rpc/connection": ["../../packages/rpc/src/server.ts"],
+      "react": ["./node_modules/@types/react/index.d.ts"],
+      "react/jsx-runtime": ["./node_modules/@types/react/jsx-runtime.d.ts"],
+      "@reflex/live": ["../../packages/live/src/index.ts"],
+      "@reflex/react": ["../../packages/react/src/react.tsx"],
+      "@reflex/live/session": ["../../packages/live/src/session.ts"],
+      "@reflex/react-router": ["../../packages/react-router/src/index.ts"],
+      "react-router": ["./node_modules/react-router"],
+      "react-dom/client": ["./node_modules/@types/react-dom/client.d.ts"]
+    }
+  },
+  "include": ["src", "vite.config.ts", "../../packages/react-router/src", "e2e"]
+}

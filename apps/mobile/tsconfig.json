@@ -21,7 +21,8 @@
       "@reflex/live": ["../../packages/live/src/index.ts"],
       "@reflex/react": ["../../packages/react/src/react.tsx"],
       "@reflex/react/effect": ["../../packages/react/src/effect.tsx"],
-      "@reflex/live/session": ["../../packages/live/src/session.ts"]
+      "@reflex/live/session": ["../../packages/live/src/session.ts"],
+      "@reflex/navigation": ["../../packages/navigation/src/index.ts"]
     },
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,

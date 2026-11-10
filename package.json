@@ -9,7 +9,7 @@
   ],
   "scripts": {
     "test": "bun test",
-    "typecheck": "tsc --noEmit -p tsconfig.json && bun run --cwd apps/mobile typecheck",
+    "typecheck": "tsc --noEmit -p tsconfig.json && bun run --cwd apps/mobile typecheck && bun run --cwd apps/web typecheck",
     "format": "biome format --write .",
     "lint": "biome lint .",
     "check": "biome check . && bun run typecheck && bun test",

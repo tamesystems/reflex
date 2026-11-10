@@ -38,6 +38,21 @@ files.
 **Done when.** The MCP server can optionally generate a tool per action, with its input
 schema, and can run a named journey and report its result.
 
+## 4. Core-owned React Router data-mode projection
+
+**Why.** Existing-route focus binding does not provide headless/live navigation equivalence.
+A second core-owned router adapter would share the tested @reflex/navigation rules.
+
+**Now.** @reflex/react-router supports existing routes only. ADR 0018 audits 8.5.1:
+state/subscribe/numeric navigate exist on the data router but are marked private. It
+sketches ports, state/key identity, POP interpretation and loader/redirect handling.
+
+**Done when.** A supported upstream subscription contract or an explicit pinned-private-API
+ADR supports an opt-in data-router adapter. Shared projection rules drive list/detail
+navigation with identical URLs, back/forward, loaders, redirects, blockers, rapid undone
+pushes and reset covered through live CLI/MCP and headless journeys. No existing-route
+adopter must change navigation ownership.
+
 ## Deliberately deferred
 
 Not planned until the contract has been proved in use, because each widens the design a

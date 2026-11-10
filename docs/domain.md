@@ -104,7 +104,8 @@ controller on a Unix socket or authenticated Windows named pipe.
 controller that forwards to whichever app is connected. The app's **setting**
 (`ws://host:port#token`) tells it where the bridge is and how to prove it may connect.
 
-**Projection.** Expo Router showing the core's navigation. The core decides; the router
+**Projection.** A router showing the core's navigation through @reflex/navigation ports.
+Expo Router is the current concrete adapter. The core decides; the router
 is told what to show, and what it does on its own (gestures, links) is fed back as
 actions. `reflexNode` is the route param carrying an entry's handle, so router entries are
 matched to core entries by identity, never by URL.

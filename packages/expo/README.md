@@ -10,7 +10,8 @@ protocol. Generic React bindings live in `@reflex/react`; live serving in `@refl
 - `useCoreStack`, `useShownToken`, `routeParam` and `useRouteNode(resolve, params?)` adapt
   router state and route params to node binding.
 - `@reflex/expo/effect` offers `useRouteNode(capability, params?)` with Expo route inputs.
-- Pure projection functions/controller remain available from the root and `/projection`.
+- Router-neutral projection functions/controller live in `@reflex/navigation` and are
+  re-exported from the Expo root and the compatibility `/projection` entry.
 
 ## Does not own
 
@@ -21,8 +22,8 @@ Router decides gesture behavior. Existing routers can use `@reflex/react` indepe
 ## Start reading
 
 1. `src/react.tsx`: RouterProjection and Expo route hooks.
-2. `src/projection.ts`: pure synchronization rules.
-3. `src/projection-controller.ts`: state and timing behind ports.
+2. `../navigation/src/projection.ts`: pure synchronization rules.
+3. `../navigation/src/projection-controller.ts`: state and timing behind ports.
 4. `src/router-actions.ts`: the only Expo Router private-module imports.
 
 ## Using it

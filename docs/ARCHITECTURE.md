@@ -90,7 +90,11 @@ packages/
               the bridge for UI bundles. See packages/live/README.md.
   react/      React-only provider and hooks (react.tsx), generic route binding,
               optional Effect capability lookup (effect.tsx). See packages/react/README.md.
-  expo/       Expo Router projection, controller, core-port.ts, router-actions.ts,
+  navigation/ Router-neutral projection rules/controller and Navigation core port.
+              No framework, router or Effect. See packages/navigation/README.md.
+  react-router/ Existing React Router 8 route focus, via @reflex/react.
+              See packages/react-router/README.md.
+  expo/       Expo Router projection adapter, router-actions.ts,
               router-specific hooks and Effect route convenience entry.
               See packages/expo/README.md.
 examples/
@@ -99,6 +103,7 @@ examples/
   plain/      Real Zustand/Zod app core, no Effect; rendered by apps/mobile/plain.
   live-counter/ Plain process serving a service node through @reflex/live; no UI framework.
 apps/
+  web/        Vite/React Router existing-route fixture; own install, live CLI/MCP journey.
   mobile/     The same inventory core rendered by Expo Router. Own install. e2e/ holds
               the browser journeys (including the isolated plain Expo entry), hermes-smoke/ runs a journey on a Hermes VM.
 test/         Cross-package suites: conformance (Effect, Zustand, XState, Effect/Zustand live),
@@ -117,6 +122,9 @@ protocol ◄── runtime ◄── rpc ◄── test / cli
                 ├── live ─┘ (rpc/connection only)
                 │    ▲
                 │  react ◄── expo ◄── apps/mobile
+                │    ▲       ▲
+                │    └── react-router ◄── apps/web
+                ├── navigation ─┘
                 │    ▲
                 └── effect ◄── react/effect, expo/effect
 
@@ -130,8 +138,13 @@ runtime + live ◄── examples/live-counter
 - `react` depends on React, with no React Native or Expo imports. Only `react/effect`
   imports Effect capability lookup; the default entry remains Effect-free.
 - UI bindings import `@reflex/live/session`, whose exports exclude the bridge. Apps load
-  `@reflex/live` and read the bridge setting only behind `__DEV__` in production UI builds.
-- `expo` owns router projection and route-param integration; its default entry has no Effect.
+  `@reflex/live` and read the bridge setting only behind `__DEV__` (Expo) or
+  `import.meta.env.DEV` (Vite) in UI builds.
+- `navigation` imports only protocol/runtime; no framework, router, Effect or platform.
+- `expo` adapts navigation ports to Expo Router and owns route-param integration.
+- `react-router` imports only `@reflex/react`, React Router, live/session and runtime/protocol;
+  it reports focus in existing routes and owns no navigation. Its only React hooks are
+  delegated to `@reflex/react`; no Expo, React Native or Effect.
 - An app core never imports React, Expo or a device API.
 - Only `packages/expo/src/router-actions.ts` imports Expo Router's private modules.
 

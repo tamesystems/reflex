@@ -17,6 +17,7 @@ config.resolver.extraNodeModules = {
   "@reflex/effect": path.join(root, "packages/effect"),
   "@reflex/live": path.join(root, "packages/live"),
   "@reflex/react": path.join(root, "packages/react"),
+  "@reflex/navigation": path.join(root, "packages/navigation"),
   "@reflex/expo": path.join(root, "packages/expo"),
   "@reflex/example-inventory": path.join(root, "examples/inventory"),
 }

@@ -92,6 +92,7 @@ test("Expo owns only router integration", () => {
     "@reflex/runtime",
     "@reflex/live/session",
     "@reflex/react",
+    "@reflex/navigation",
     "expo-router",
     "expo-router/build/global-state/getRouteInfoFromState",
     "expo-router/build/global-state/internalNavigationEvents",
@@ -105,13 +106,24 @@ test("application core never imports a UI or device API", () => {
   expect(found).toEqual([])
 })
 
-test("router projection rules need no renderer", () => {
-  const files = ["projection.ts", "projection-controller.ts"]
-  const permit = allowing("@reflex/protocol", "@reflex/runtime")
-  for (const file of files) {
-    const imports = importsOf(join(root, "packages/expo/src", file))
-    expect(imports.filter((specifier) => !permit(specifier))).toEqual([])
-  }
+test("navigation has no framework, router or Effect dependency", () => {
+  expect(
+    violations("packages/navigation/src", allowing("@reflex/protocol", "@reflex/runtime")),
+  ).toEqual([])
+})
+test("React Router binding stays thin and Effect-free", () => {
+  expect(
+    violations(
+      "packages/react-router/src",
+      allowing(
+        "@reflex/react",
+        "@reflex/live/session",
+        "@reflex/runtime",
+        "@reflex/protocol",
+        "react-router",
+      ),
+    ),
+  ).toEqual([])
 })
 
 test("plain example has no Effect or UI dependency", () => {

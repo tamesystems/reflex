@@ -15,6 +15,6 @@
     "@reflex/effect": "workspace:*"
   },
   "peerDependencies": {
-    "react": "19.3.0"
+    "react": ">=19.2.7 <20"
   }
 }

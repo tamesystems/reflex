@@ -123,6 +123,29 @@ Without Expo Router, `@reflex/react` has a generic `useRouteNode(resolve, bindin
 `@reflex/react/effect` accepts a capability and the same explicit binding. It retains the bound node during exit
 animations. Neither route lookup nor projection is needed for an existing router.
 
+## React Router 8 routes
+
+Use `@reflex/react-router` with exactly react-router 8.5.1 and React >=19.2.7 <20.
+Keep your BrowserRouter or data router and place its screens beneath ReflexProvider.
+In each exposed leaf route, call `useRouteFocus(nodeId, "/detail/:id", entryKey?)`.
+String patterns match to the end; PathPattern supports explicit match options.
+Node creation and disposal remain your responsibility. Providers, useNode, useNodeState
+and send come from @reflex/react; the new binding only reports router focus.
+
+Back/forward updates focus from useLocation/useMatch. Two entries can share a URL: use
+location.key to associate each entry with its node, and pass the owning key for retained
+route elements so only the visible entry reports focus. Unmounted route elements clear
+focus through useNodeFocus. Avoid focus hooks on both a layout and its leaf. See
+[apps/web](../apps/web/README.md) for an Effect-free list/detail app retaining entries until
+reset. Its same-URL links explicitly set replace={false}, overriding React Router’s
+same-location replacement default. Reset keeps the current URL but creates a new session.
+This is existing-router mode: Reflex cannot navigate routes automatically or promise
+headless navigation equivalence. Data-mode core projection is deferred (ADR 0018).
+
+For Vite, dynamically import @reflex/live and read VITE_REFLEX_BRIDGE only inside
+`if (import.meta.env.DEV)`. The example’s production check supplies a real setting and
+asserts neither bridge dialler nor token is in the generated JavaScript.
+
 ## 4. Connect the same CLI and MCP
 
 Pass `connectBridge(setting)` as the provider's `bridge`, loading `@reflex/live`

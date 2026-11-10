@@ -6,15 +6,16 @@
   "type": "module",
   "exports": {
     ".": "./src/react.tsx",
-    "./projection": "./src/projection.ts",
-    "./effect": "./src/effect.tsx"
+    "./effect": "./src/effect.tsx",
+    "./projection": "./src/projection-entry.ts"
   },
   "dependencies": {
     "@reflex/effect": "workspace:*",
     "@reflex/protocol": "workspace:*",
     "@reflex/runtime": "workspace:*",
     "@reflex/live": "workspace:*",
-    "@reflex/react": "workspace:*"
+    "@reflex/react": "workspace:*",
+    "@reflex/navigation": "workspace:*"
   },
   "peerDependencies": {
     "expo-router": "58.0.30",

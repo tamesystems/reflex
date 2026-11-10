@@ -1,0 +1,24 @@
+{
+  "name": "@reflex/web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit",
+    "e2e": "bun e2e/run.ts"
+  },
+  "dependencies": {
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "react-router": "8.5.1"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.7",
+    "@types/react-dom": "19.2.3",
+    "@types/node": "24.10.0",
+    "typescript": "5.9.3",
+    "vite": "7.2.2",
+    "playwright-core": "1.65.0"
+  }
+}
