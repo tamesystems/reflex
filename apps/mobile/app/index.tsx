@@ -1,10 +1,11 @@
-import { InventoryList, isLowStock } from "@reflex/example-inventory/features/inventory-list.ts"
-import { send, useNodeState, useRouteNode } from "@reflex/expo/effect"
+import { isLowStock } from "@reflex/example-inventory/features/inventory-list.ts"
+import { useNodeState, useScreen } from "@reflex/expo/effect"
+import { routes } from "../src/routes.ts"
 import { Pressable, Text } from "react-native"
 import { Action, Screen, styles } from "../src/ui.tsx"
 
 export default function InventoryListScreen() {
-  const node = useRouteNode(InventoryList)
+  const node = useScreen(routes.InventoryList)
   const state = useNodeState(node)
   if (node === null || state === null) {
     return null
@@ -20,7 +21,7 @@ export default function InventoryListScreen() {
           <Pressable
             accessibilityRole="button"
             key={product.id}
-            onPress={() => send(node, "OpenProduct", { productId: product.id })}
+            onPress={() => node.actions.OpenProduct({ productId: product.id })}
             style={styles.row}
           >
             <Text>{product.title}</Text>
@@ -30,7 +31,7 @@ export default function InventoryListScreen() {
             </Text>
           </Pressable>
         ))}
-      <Action onPress={() => send(node, "OpenSettings")} title="Settings" />
+      <Action onPress={() => node.actions.OpenSettings()} title="Settings" />
     </Screen>
   )
 }

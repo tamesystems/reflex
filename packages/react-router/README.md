@@ -1,39 +1,21 @@
 # @reflex/react-router
 
-Thin, ESM-only focus binding for application-owned React Router 8 routes. Requires exactly
-react-router 8.5.1 and React 19.2.7 or later in React 19.
-
-## Using it
+Existing-route binding for React Router 8.5.1 and React >=19.2.7 <20. Keep the application's
+router beneath ReflexProvider; Reflex does not own navigation.
 
 ```tsx
-import { useRouteFocus } from "@reflex/react-router"
-import { useLocation } from "react-router"
-
-function Detail({ nodeId }) {
-  const location = useLocation()
-  useRouteFocus(nodeId, "/detail/:id", location.key)
-  // Render the existing store; useNode/useNodeState remain in @reflex/react.
-}
+const node = useRouteNode(Detail, { lifetime: "history-entry" })
+useRouteFocus(node)
+const state = useNodeState(node)
 ```
 
-Place screens beneath `ReflexProvider` from `@reflex/react` and your existing router.
-`useRouteFocus(nodeId, pattern, entryKey?)` uses an exact match for string patterns;
-PathPattern accepts React Router's explicit matching options. Pass null for no node.
-Call in leaf screens so layouts do not compete for focus. For retained route elements,
-pass their owning entry's key, captured when that entry was created, rather than a key
-updated to the current location. Only that entry can report focus, even at identical URLs.
+`useRouteNode` mounts after commit, keyed by location.key, retaining state for browser
+back/forward until session end. No application entry cache is required. `useRouteFocus`
+reads the enclosing match. Retained route elements supply `entryKey` in the mount options
+and as the focus hook's second argument, so hidden same-URL entries cannot take focus.
+Use leaf screens; layouts should not compete for focus.
 
-## Does not own
-
-Routes, navigation, node creation/disposal, providers, stores or dispatch. Back/forward
-updates follow router location. If separate entries need separate nodes, associate handles
-with location.key in your application; see apps/web. Dispose them when their application
-owner ends. Services need no focus. Reset navigation policy remains application-owned.
-Core-owned React Router data-mode projection is future work, not exported here.
-
-## Important invariants
-
-No Expo, React Native, Effect or private router imports. Focus lifecycle and stale cleanup
-are delegated to `useNodeFocus`. Load the bridge only inside a development branch and
-read its setting there. See [adopting](../../docs/adopting.md) and
-[ADR 0018](../../docs/decisions/0018-router-neutral-projection-and-react-router.md).
+The package has no Expo, React Native, Effect or private router imports. React owns the
+mounting/disposal mechanics; the adapter supplies router identity and match information.
+Core-owned data-router projection is deferred (ADR 0018). See [adopting](../../docs/adopting.md)
+and [web](../../apps/web/src/main.tsx).

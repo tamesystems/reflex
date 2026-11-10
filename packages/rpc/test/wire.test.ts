@@ -5,7 +5,8 @@ import { mkdtempSync, rmSync, statSync } from "node:fs"
 import { connect } from "node:net"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { defineApp, defineCapability, mount, Registry } from "@reflex/effect"
+import { defineApp, defineCapability, mount } from "@reflex/effect"
+import { Registry } from "@reflex/effect/internal"
 import {
   BATCH_REQUESTS_MAX,
   CLIENT_LISTENERS_MAX,
@@ -31,7 +32,7 @@ import {
   createLineReader,
   serveSocket,
 } from "@reflex/rpc"
-import { createController } from "@reflex/runtime"
+import { createController } from "@reflex/runtime/internal"
 import { nextTurn, waitUntil } from "@reflex/test"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"

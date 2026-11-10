@@ -1,19 +1,29 @@
-import type { NodeId } from "@reflex/protocol"
-import { useNodeFocus } from "@reflex/react"
-import { type PathPattern, useLocation, useMatch } from "react-router"
+import type { Runtime } from "@reflex/runtime/internal"
+import { useMountedNode, useNodeFocus } from "@reflex/react"
+import { useLocation, useMatch, useResolvedPath } from "react-router"
 
-/**
- * Report an exact route match through the generic focus binding. Supply entryKey
- * for retained route elements: identical URLs can belong to different history entries.
- * Call in a leaf screen; layouts should not compete with their focused children.
- * Node lifetime remains application-owned.
- */
+/** The enclosing route's history entry owns this node until reset. */
+export const useRouteNode = <N extends { dispose(): void }>(
+  definition: { mount(runtime: Runtime): N },
+  options: {
+    readonly lifetime: "history-entry"
+    readonly entryKey?: string
+  },
+): N | null => {
+  const location = useLocation()
+  return useMountedNode(definition, {
+    key: options.entryKey ?? location.key,
+    lifetime: options.lifetime,
+  })
+}
+
+/** Read the match from the enclosing route; retained entries report their owning key. */
 export const useRouteFocus = (
-  nodeId: NodeId | null,
-  pattern: string | PathPattern,
+  node: { readonly id: import("@reflex/protocol").NodeId } | null,
   entryKey?: string,
 ): void => {
   const location = useLocation()
-  const match = useMatch(typeof pattern === "string" ? { path: pattern, end: true } : pattern)
-  useNodeFocus(nodeId, match !== null && (entryKey === undefined || entryKey === location.key))
+  const path = useResolvedPath(".")
+  const match = useMatch({ path: path.pathname, end: true })
+  useNodeFocus(node, match !== null && (entryKey === undefined || entryKey === location.key))
 }

@@ -1,5 +1,5 @@
 import { isRecord, type NodeId } from "@reflex/protocol"
-import type { AppSession, Runtime } from "@reflex/runtime"
+import type { AppSession, Runtime } from "@reflex/runtime/internal"
 import {
   router,
   useGlobalSearchParams,
@@ -8,7 +8,10 @@ import {
   useSegments,
 } from "expo-router"
 import * as React from "react"
-import { useSession, useRouteNode as useBoundRouteNode } from "@reflex/react"
+import {
+  useRuntimeSession as useSession,
+  useRouteNode as useBoundRouteNode,
+} from "@reflex/react/internal"
 import { reportFailure } from "@reflex/live/session"
 import {
   corePortOf,
@@ -19,7 +22,7 @@ import {
   type StackEntry,
 } from "@reflex/navigation"
 import { onRouterAction } from "./router-actions.ts"
-export * from "@reflex/navigation"
+
 /** Expo route parameter carrying the core entry identity. */
 export { NODE_PARAM } from "./route-token.ts"
 import { NODE_PARAM } from "./route-token.ts"
@@ -136,13 +139,12 @@ const locationAt = (
  * be told apart from a push by watching the router, so it would corrupt history.
  */
 export const RouterProjection = ({
-  toHref,
-  fromLocation,
+  routes,
 }: {
-  readonly toHref: ToHref
-  /** The core destination for a route file, or null if it has none. */
-  readonly fromLocation: FromLocation
+  readonly routes: { readonly toHref: ToHref; readonly fromLocation: FromLocation }
 }) => {
+  const { toHref, fromLocation } = routes
+
   const session = useSession()
   const stack = useCoreStack()
   // Expo types these against generated routes, which the mappers deliberately go around.

@@ -1,0 +1,98 @@
+import { ErrorCode, ProtocolError } from "@reflex/protocol"
+import type { AppHost } from "./controller.ts"
+import { createRuntime, type Runtime } from "./runtime.ts"
+import type { Store } from "./store-node.ts"
+
+export interface MountableNode {
+  readonly name: string
+  readonly type: string
+  readonly createStore: () => Store<unknown>
+  mount(
+    runtime: Runtime,
+    store?: unknown,
+  ): { readonly id: import("@reflex/protocol").NodeId; dispose(): void }
+}
+export interface StoreScenario<N extends Record<string, MountableNode>> {
+  readonly description?: string
+  readonly stores?: { readonly [K in keyof N]?: () => ReturnType<N[K]["createStore"]> }
+}
+export interface StoreApp<
+  N extends Record<string, MountableNode>,
+  S extends Record<string, StoreScenario<N>>,
+> extends AppHost {
+  readonly nodes: N
+  readonly defaultScenario: keyof S & string
+  readonly scenarioNames: ReadonlyArray<keyof S & string>
+  withScenarios<const Extra extends Record<string, StoreScenario<N>>>(
+    scenarios: Extra,
+    options?: { readonly defaultScenario?: keyof (S & Extra) & string },
+  ): StoreApp<N, S & Extra>
+}
+
+/** Own fresh stores, typed scenario overrides, focus and disposal on every start/reset. */
+export const defineStoreApp = <
+  const N extends Record<string, MountableNode>,
+  const S extends Record<string, StoreScenario<N>> = { default: Record<string, never> },
+>(definition: {
+  readonly name: string
+  readonly nodes: N
+  readonly scenarios?: S
+  readonly defaultScenario?: NoInfer<keyof S & string>
+}): StoreApp<N, S> => {
+  const defaults: Record<string, StoreScenario<N>> = { default: {} }
+  const scenarios = definition.scenarios ?? (defaults as S)
+  const names = Object.keys(scenarios) as (keyof S & string)[]
+  const defaultScenario = definition.defaultScenario ?? names[0]
+  if (defaultScenario === undefined) {
+    throw new Error("A store app needs at least one scenario")
+  }
+  const host: StoreApp<N, S> = {
+    name: definition.name,
+    nodes: definition.nodes,
+    defaultScenario,
+    scenarioNames: names,
+    scenarios: Object.entries(scenarios).map(([name, scenario]) => ({
+      name,
+      virtualTime: false,
+      ...(scenario.description === undefined ? {} : { description: scenario.description }),
+    })),
+    withScenarios: (extra, options) =>
+      defineStoreApp({
+        ...definition,
+        scenarios: { ...scenarios, ...extra },
+        defaultScenario: options?.defaultScenario ?? defaultScenario,
+      }),
+    async start(name, { sessionId, onBackgroundError }) {
+      const scenario: StoreScenario<N> | undefined = Object.hasOwn(scenarios, name)
+        ? scenarios[name]
+        : undefined
+      if (scenario === undefined) {
+        throw new ProtocolError(ErrorCode.ScenarioNotFound, `Unknown scenario "${name}"`)
+      }
+      const runtime = createRuntime({
+        sessionId,
+        ...(onBackgroundError === undefined ? {} : { onBackgroundError }),
+      })
+      const nodes: ReturnType<MountableNode["mount"]>[] = []
+      const dispose = async () => {
+        for (const node of nodes.reverse()) {
+          node.dispose()
+        }
+      }
+      try {
+        for (const [key, definition] of Object.entries(host.nodes)) {
+          const node = definition.mount(runtime, scenario.stores?.[key]?.())
+          nodes.push(node)
+          if (definition.type === "screen" && runtime.focus === null) {
+            runtime.setFocus(node.id)
+          }
+        }
+        return { runtime, dispose }
+      } catch (error) {
+        await dispose()
+        throw error
+      }
+    },
+  }
+  return host
+}

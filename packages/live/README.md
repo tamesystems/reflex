@@ -15,7 +15,7 @@ provided by browsers, React Native, Bun and Node 22+. No React, React Native, Ex
 
 ## Does not own
 
-Rendering, framework lifecycle, environment variables, the bridge daemon or application state.
+Rendering, framework lifecycle, the bridge daemon or application state.
 The application decides whether and when to connect, and supplies its AppHost and safe projections.
 
 ## Start reading
@@ -28,21 +28,22 @@ The application decides whether and when to connect, and supplies its AppHost an
 ## Using it
 
 ```ts
-import { connectBridge, createLiveController, LiveSessions } from "@reflex/live"
-import { systemTimers } from "@reflex/runtime"
-
-const sessions = new LiveSessions({ timers: systemTimers, onBackgroundError: report })
-const close = sessions.open(host, undefined)
-const controller = createLiveController(sessions, report)
-const stop = connectBridge(setting)(controller)
-// On application shutdown: stop(); close(); await controller.close()
+import { serveLive } from "@reflex/live"
+const server = await serveLive(app, { setting })
+// On shutdown:
+await server.close()
 ```
 
 ## Important invariants
 
 - No framework, Effect or Node imports. Only `@reflex/rpc/connection` from RPC.
 - `@reflex/live/session` exports lifecycle/node helpers without importing the bridge.
-  UI bindings use this entry. Load the root entry and read its setting inside `__DEV__`
-  in Expo apps, so production bundles exclude both bridge code and token.
+  UI bindings use this entry. Expo dev and live/vite modules own guarded environment reads,
+  so production bundles exclude both bridge code and token.
 - Starts use the runtime's default budget, not the headless REFLEX_START_TIMEOUT_MS setting.
 - A reset replaces the app's actual session; there is no separate protocol-only state.
+
+`Bridge` is the single connector type. `serveLive` owns a controller and awaits disposal
+on close. Low-level LiveSessions/controller/node-source helpers remain available through
+the bridge-free session entry. `send` is secondary to typed node.actions and returns its
+correlated outcome union. See [adopting](../../docs/adopting.md).

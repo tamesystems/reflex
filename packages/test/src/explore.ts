@@ -5,7 +5,7 @@ import {
   type NodeId,
   ProtocolError,
 } from "@reflex/protocol"
-import type { AppHost } from "@reflex/runtime"
+import type { AppHost, ConsumerDefinition } from "@reflex/runtime/internal"
 import { createTestApp, type TestApp } from "./test-app.ts"
 
 const RUN_COUNT_DEFAULT = 25
@@ -32,6 +32,32 @@ export interface ExploreStep {
   readonly input: Json
 }
 
+export interface NodeInputs {
+  readonly node: string
+  readonly inputs: Readonly<Record<string, ReadonlyArray<Json>>>
+}
+/** Inputs belong to a definition and action, even when another node uses the same name. */
+export const inputsFor = <D extends ConsumerDefinition>(
+  definition: D,
+  inputs: {
+    readonly [K in keyof import("./journey-client.ts").ActionsOf<NoInfer<D>>]?: ReadonlyArray<
+      import("./journey-client.ts").ActionsOf<D>[K] extends (...args: infer Args) => unknown
+        ? Args extends [infer I]
+          ? I
+          : never
+        : never
+    >
+  },
+): NodeInputs => ({
+  node: definition.name,
+  inputs: Object.fromEntries(
+    Object.entries(inputs).map(([action, values]) => [
+      action,
+      (values as readonly unknown[]).map((value) => definition.client.input(action, [value]) ?? {}),
+    ]),
+  ),
+})
+
 export interface ExploreOptions {
   readonly scenario?: string
   readonly runCount?: number
@@ -41,7 +67,7 @@ export interface ExploreOptions {
    * Real values for actions whose schema cannot know them, such as an id that
    * must exist. Without these a walk only ever finds the "not found" path.
    */
-  readonly knownInputs?: { readonly [action: string]: ReadonlyArray<Json> }
+  readonly knownInputs?: ReadonlyArray<NodeInputs>
   /** Return a message when the app is in a state that must never happen. */
   readonly invariant?: (snapshot: InspectResult) => string | undefined
 }
@@ -158,7 +184,10 @@ const chooseInput = async (
   options: ExploreOptions,
   next: () => number,
 ): Promise<Json> => {
-  const known = options.knownInputs?.[choice.action]
+  const { node } = await app.client.request("app.inspect", { nodeId: choice.nodeId })
+  const known = options.knownInputs?.find((inputs) => inputs.node === node?.name)?.inputs[
+    choice.action
+  ]
   const knownIndex = Math.floor(next() * (known?.length ?? 0))
   const sampleSeed = Math.floor(next() * SAMPLE_SEED_MAX)
   // `null` is a legitimate known input, so only absence falls back to generating.

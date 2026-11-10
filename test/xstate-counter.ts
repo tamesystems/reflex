@@ -6,7 +6,7 @@ import {
   createRuntime,
   type NodeAdapter,
   type Runtime,
-} from "@reflex/runtime"
+} from "@reflex/runtime/internal"
 import { assign, createActor, fromPromise, setup } from "xstate"
 
 type CounterEvent =
@@ -118,7 +118,7 @@ const adapterOf = (runtime: Runtime, actor: CounterActor): NodeAdapter => ({
   name: "Counter",
   // Project public JSON, never the snapshot's actor refs, functions, or internal machinery.
   snapshot: () => ({ count: actor.getSnapshot().context.count }),
-  actions: () => ({
+  describeActions: () => ({
     // Add has no input-dependent guard: a representative valid event suffices here.
     Add: { ...availability(actor, { type: "Add", by: 0 }), inputSchema: addInputSchema },
     Reset: { ...availability(actor, { type: "Reset" }), inputSchema: emptyInputSchema },

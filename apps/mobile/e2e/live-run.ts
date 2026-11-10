@@ -9,7 +9,7 @@ import { spawnSync } from "node:child_process"
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
-import { parseBridgeSetting } from "@reflex/protocol"
+import { defined, parseBridgeSetting } from "@reflex/protocol"
 
 /** Text only the app's side of the bridge holds: its protocol is in every build. */
 const DIALLER_MARKER = "The Reflex bridge refused this app"
@@ -174,6 +174,37 @@ const apiUrl = async (stdout: ReadableStream<Uint8Array>): Promise<string> => {
   }
 }
 
+const compiledJourney = async (): Promise<string> => {
+  let journeyPath = join(
+    import.meta.dirname,
+    realServices ? "services-journey.ts" : "live-journey.ts",
+  )
+  if (realServices) {
+    // The shared story imports the real definitions; compile their TypeScript for Node.
+    const built = await Bun.build({
+      entrypoints: [journeyPath],
+      target: "node",
+      plugins: [
+        {
+          name: "external-playwright",
+          setup(builder) {
+            builder.onResolve({ filter: /^playwright-core$/ }, () => ({
+              path: resolve(import.meta.dirname, "../node_modules/playwright-core/index.mjs"),
+              external: true,
+            }))
+          },
+        },
+      ],
+    })
+    if (!built.success) {
+      throw new AggregateError(built.logs, "Journey compilation failed")
+    }
+    journeyPath = join(work, "services-journey.mjs")
+    await Bun.write(journeyPath, defined(built.outputs[0], "one entry point was compiled"))
+  }
+  return journeyPath
+}
+
 const runWithBridge = async (): Promise<number> => {
   const started = reflex("--target", "device", "start", "--port", String(freePort()))
   if (started.status !== 0) {
@@ -221,24 +252,19 @@ const runWithBridge = async (): Promise<number> => {
     const metroPort = freePort()
     const metro = await startMetro(metroPort, appSetting)
     try {
-      const journey = Bun.spawn(
-        [
-          "node",
-          join(import.meta.dirname, realServices ? "services-journey.ts" : "live-journey.ts"),
-        ],
-        {
-          env: {
-            ...process.env,
-            PORT: String(metroPort),
-            REFLEX_DIR: reflexDirectory,
-            REFLEX_CLI: CLI,
-            BUN: process.execPath,
-          },
-          stdout: "inherit",
-          stderr: "inherit",
-          timeout: JOURNEY_TIMEOUT_MS,
+      const journeyPath = await compiledJourney()
+      const journey = Bun.spawn(["node", journeyPath], {
+        env: {
+          ...process.env,
+          PORT: String(metroPort),
+          REFLEX_DIR: reflexDirectory,
+          REFLEX_CLI: CLI,
+          BUN: process.execPath,
         },
-      )
+        stdout: "inherit",
+        stderr: "inherit",
+        timeout: JOURNEY_TIMEOUT_MS,
+      })
       const exitCode = await journey.exited
       return journey.signalCode === null ? exitCode : 1
     } finally {

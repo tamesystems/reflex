@@ -7,9 +7,9 @@ import {
   defineCapability,
   mount,
   NoParams,
-  Registry,
 } from "@reflex/effect"
-import { explore } from "@reflex/test"
+import { Registry } from "@reflex/effect/internal"
+import { explore, inputsFor } from "@reflex/test"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
 import * as Schema from "effect/Schema"
@@ -53,9 +53,11 @@ const hangingHost = focusedApp(
   }),
 )
 
-const knownInputs = {
-  OpenProduct: [{ productId: "product-123" }, { productId: "product-456" }],
-}
+const knownInputs = [
+  inputsFor(app.nodes.InventoryList, {
+    OpenProduct: [{ productId: "product-123" }, { productId: "product-456" }],
+  }),
+]
 
 const quantityNeverNegative = ({ node }: InspectResult) => {
   const state = node?.state
@@ -149,7 +151,7 @@ test("a null among known inputs is used, not replaced by a generated one", async
   const result = await explore(hostWithInput(inputs), {
     runCount: 1,
     stepCount: 3,
-    knownInputs: { Go: [null] },
+    knownInputs: [{ node: "Recording", inputs: { Go: [null] } }],
   })
   expect(result.failure).toBeUndefined()
   expect(inputs.length).toBeGreaterThan(0)

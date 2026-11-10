@@ -8,7 +8,21 @@ import {
   type WaitParams,
 } from "@reflex/protocol"
 import { type Client, createLoopbackClient } from "@reflex/rpc"
-import { type AppHost, type Controller, createController } from "@reflex/runtime"
+import {
+  type AppHost,
+  type Controller,
+  type ConsumerDefinition,
+  createController,
+} from "@reflex/runtime/internal"
+
+import { createJourneyClient, type JourneyClient } from "./journey-client.ts"
+
+type DefinitionsOf<H> = H extends { readonly nodes: infer N }
+  ? Extract<N[keyof N], ConsumerDefinition>
+  : ConsumerDefinition
+export type ScenariosOf<H> = H extends { readonly scenarioNames: ReadonlyArray<infer K> }
+  ? K & string
+  : string
 
 const JOURNEY_STEP_TIMEOUT_MS_DEFAULT = 2_000
 /** A journey is short. More than this means something is looping. */
@@ -18,13 +32,13 @@ const OBSERVED_EVENT_CHARACTERS_MAX = 64 * 1024 * 1024
 const CONDITION_TIMEOUT_MS = 2_000
 const CONDITION_POLL_MS = 1
 
-export interface TestAppOptions {
-  readonly scenario?: string
+export interface TestAppOptions<H = AppHost> {
+  readonly scenario?: ScenariosOf<H>
   /** How long `do` and `precondition` may take in real time. */
   readonly timeoutMs?: number
 }
 
-export interface TestApp {
+export interface TestApp<H = AppHost> extends JourneyClient<DefinitionsOf<H>> {
   /** State of the focused node as of the last call. */
   readonly state: unknown
   /** The most recent events, in order, up to a limit on their size. */
@@ -34,24 +48,24 @@ export interface TestApp {
   readonly client: Client
   inspect(): Promise<InspectResult>
   /** Snapshot of a node by name, including fixtures. */
-  node(name: string): Promise<NodeSnapshot>
+  inspectRaw(name: string): Promise<NodeSnapshot>
   /** Assert where the journey is before continuing. */
   precondition(screen: string, match?: Json): Promise<void>
   /** Dispatch and wait for the effect and anything it started to settle. */
-  do(action: string, input?: Json): Promise<OperationInfo>
+  dispatchRaw(action: string, input?: Json): Promise<OperationInfo>
   /** Dispatch without waiting, for work that needs time to be advanced. */
   start(action: string, input?: Json): Promise<OperationInfo>
   waitFor(params: WaitParams): Promise<void>
   advanceTime(durationMs: number): Promise<void>
-  reset(scenario?: string): Promise<void>
+  reset(scenario?: ScenariosOf<H>): Promise<void>
   dispose(): Promise<void>
 }
 
 /** Runs a journey through the real protocol, serialized as a remote peer would. */
-export const createTestApp = async (
-  host: AppHost,
-  options: TestAppOptions = {},
-): Promise<TestApp> => {
+export const createTestApp = async <H extends AppHost>(
+  host: H,
+  options: TestAppOptions<NoInfer<H>> = {},
+): Promise<TestApp<H>> => {
   const { scenario } = options
   return createTestAppOn(
     () => createController(host, scenario === undefined ? {} : { scenario }),
@@ -89,7 +103,10 @@ export const createTestAppOn = async (
 export const createTestAppPool = () => {
   const apps: Array<TestApp> = []
   return {
-    open: async (host: AppHost, options?: TestAppOptions): Promise<TestApp> => {
+    open: async <H extends AppHost>(
+      host: H,
+      options?: TestAppOptions<NoInfer<H>>,
+    ): Promise<TestApp<H>> => {
       const app = await createTestApp(host, options)
       apps.push(app)
       return app
@@ -165,6 +182,9 @@ const refuseNetwork = ((input: unknown) => {
 
 class Journey implements TestApp {
   readonly client: Client
+  readonly node: JourneyClient["node"]
+  readonly focused: JourneyClient["focused"]
+  readonly back: JourneyClient["back"]
   readonly events: Array<RuntimeEvent> = []
   state: unknown
   private defects: Array<string> = []
@@ -177,6 +197,30 @@ class Journey implements TestApp {
     private readonly network: { readonly release: () => void },
   ) {
     this.client = createLoopbackClient(controller)
+    const journey = createJourneyClient({
+      inspect: async (name) =>
+        name === undefined
+          ? defined((await this.inspect()).node ?? undefined, "A focused journey has a node")
+          : this.inspectRaw(name),
+      wait: (name, match) => this.precondition(name, match),
+      dispatch: async (nodeId, action, input) => {
+        const { operationId } = await this.client.request("app.dispatch", {
+          nodeId,
+          action,
+          ...(input === undefined ? {} : { input }),
+        })
+        const { operation } = await this.client.request("app.wait", {
+          operationId,
+          timeoutMs: this.timeoutMs,
+        })
+        await this.settle()
+        await this.inspect()
+        return defined(operation, "waiting returns the operation")
+      },
+    })
+    this.node = journey.node
+    this.focused = journey.focused
+    this.back = journey.back
   }
 
   /** On failure, nobody else holds this object, so it must clean up after itself. */
@@ -199,7 +243,7 @@ class Journey implements TestApp {
     return result
   }
 
-  async node(name: string): Promise<NodeSnapshot> {
+  async inspectRaw(name: string): Promise<NodeSnapshot> {
     const { node } = await this.client.request("app.inspect", { name })
     return defined(node ?? undefined, "inspecting by name finds the node or fails")
   }
@@ -214,7 +258,7 @@ class Journey implements TestApp {
     await this.inspect()
   }
 
-  async do(action: string, input?: Json): Promise<OperationInfo> {
+  async dispatchRaw(action: string, input?: Json): Promise<OperationInfo> {
     const { operationId } = await this.dispatch(action, input)
     const { timeoutMs } = this
     const { operation } = await this.client.request("app.wait", { operationId, timeoutMs })

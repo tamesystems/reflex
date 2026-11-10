@@ -2,7 +2,7 @@
 import { afterEach, expect, test } from "bun:test"
 import { type AccessPolicy, ErrorCode } from "@reflex/protocol"
 import { type Client, createLoopbackClient } from "@reflex/rpc"
-import { type Controller, createController } from "@reflex/runtime"
+import { type Controller, createController } from "@reflex/runtime/internal"
 import { nextTurn, waitUntil } from "@reflex/test"
 import app from "../../../examples/inventory/src/app.ts"
 import * as commands from "../src/commands.ts"

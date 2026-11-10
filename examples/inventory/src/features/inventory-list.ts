@@ -1,4 +1,9 @@
-import { defineCapability, type StateAccess } from "@reflex/effect"
+import {
+  defineCapability,
+  type StateAccess,
+  NavigationRefused,
+  type NavigationService,
+} from "@reflex/effect"
 import * as Effect from "effect/Effect"
 import * as Schema from "effect/Schema"
 import { InventoryApi, Product, SettingsStore } from "../domain.ts"
@@ -13,8 +18,6 @@ const State = Schema.Union([
   }),
 ])
 type State = typeof State.Type
-
-export const initialState: State = { _tag: "loading" }
 
 export const isLowStock = (product: Product, lowStockThreshold: number): boolean =>
   product.quantity < lowStockThreshold
@@ -32,32 +35,26 @@ const load = Effect.fnUntraced(function* (state: StateAccess<State>) {
   )
 })
 
-const whenLoaded = (state: State) => (state._tag === "loading" ? "Products are loading" : true)
-
 export const InventoryList = defineCapability({
   name: "InventoryList",
   state: State,
+  initial: (): State => ({ _tag: "loading" }),
   onFocus: load,
   actions: (action) => ({
-    OpenProduct: action({
+    OpenProduct: action.when("ready")({
+      error: NavigationRefused,
       description: "Open a product's detail screen",
       input: Schema.Struct({ productId: Schema.String }),
-      available: whenLoaded,
-      handler: ({ productId }) =>
-        Effect.gen(function* () {
-          const nav = yield* Nav.Tag
-          yield* nav.push("InventoryDetail", { productId })
-        }),
+      handler: ({ productId }): Effect.Effect<void, NavigationRefused, NavigationService> =>
+        Nav.push("InventoryDetail", { productId }),
     }),
     OpenSettings: action({
-      handler: () =>
-        Effect.gen(function* () {
-          const nav = yield* Nav.Tag
-          yield* nav.push("Settings", {})
-        }),
+      error: NavigationRefused,
+      handler: (): Effect.Effect<void, NavigationRefused, NavigationService> =>
+        Nav.push("Settings"),
     }),
     Refresh: action({
-      available: whenLoaded,
+      available: (state) => (state._tag === "loading" ? "Products are loading" : true),
       handler: (_, state) => load(state),
     }),
   }),

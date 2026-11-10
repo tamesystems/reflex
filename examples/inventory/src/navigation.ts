@@ -1,8 +1,10 @@
-import { defineNavigation, NoParams } from "@reflex/effect"
-import * as Schema from "effect/Schema"
+import { defineNavigation } from "@reflex/effect"
+import { InventoryList } from "./features/inventory-list.ts"
+import { InventoryDetail } from "./features/inventory-detail.ts"
+import { Settings } from "./features/settings.ts"
 
-export const Nav = defineNavigation("inventory/Navigation", {
-  InventoryList: NoParams,
-  InventoryDetail: Schema.Struct({ productId: Schema.String }),
-  Settings: NoParams,
-})
+export const Nav = defineNavigation("inventory/Navigation", () => ({
+  InventoryList,
+  InventoryDetail,
+  Settings,
+}))

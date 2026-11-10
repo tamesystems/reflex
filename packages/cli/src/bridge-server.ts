@@ -19,7 +19,7 @@ import {
   WRITE_QUEUE_BYTES_MAX,
 } from "@reflex/protocol"
 import { type BridgeController, createClient, type TransportClient } from "@reflex/rpc"
-import type { BackgroundReporter } from "@reflex/runtime"
+import type { BackgroundReporter } from "@reflex/runtime/internal"
 import { checkSecretAcl } from "./windows-security.ts"
 import { hasCode } from "./session-lock.ts"
 

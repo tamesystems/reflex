@@ -1,12 +1,13 @@
 import { expect, test } from "bun:test"
-import { defineApp, defineCapability, defineNavigation, mount, NoParams } from "@reflex/effect"
+import { defineApp, defineCapability, mount, NoParams } from "@reflex/effect"
+import { defineNavigationFactories } from "@reflex/effect/internal"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
 import * as Schema from "effect/Schema"
 import { corePortOf } from "../src/core-port.ts"
 
 const calls: Array<string> = []
-const Nav = defineNavigation("test/Captured", { Home: NoParams, Next: NoParams })
+const Nav = defineNavigationFactories("test/Captured", { Home: NoParams, Next: NoParams })
 const handlerCalled = (name: string) =>
   Effect.sync(() => {
     calls.push(name)

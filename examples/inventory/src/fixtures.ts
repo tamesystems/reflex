@@ -1,4 +1,4 @@
-import { defineCapability, mountWithAccess, type Registry } from "@reflex/effect"
+import { defineCapability, mountWithAccess } from "@reflex/effect"
 import type * as Duration from "effect/Duration"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
@@ -16,7 +16,7 @@ const FixtureState = Schema.Struct({
 })
 
 /** Test doubles are nodes too, so journeys and agents can observe and steer them. */
-const InventoryFixture = defineCapability({
+export const InventoryFixture = defineCapability({
   name: "InventoryFixture",
   type: "fixture",
   state: FixtureState,
@@ -37,7 +37,7 @@ export const seedProducts: ReadonlyArray<Product> = [
 export const fixtureApi = (options: {
   readonly products: ReadonlyArray<Product>
   readonly saveDelay?: Duration.Input
-}): Layer.Layer<InventoryApi, never, Registry> =>
+}) =>
   Layer.effect(
     InventoryApi,
     Effect.gen(function* () {

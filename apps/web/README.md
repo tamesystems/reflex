@@ -1,7 +1,7 @@
 # React Router example
 
 Vite + React 19.2.7 + React Router 8.5.1, with application-owned list/detail routes and a
-plain mountStore node per history entry. No Effect or core Navigation node.
+typed store node per history entry, mounted and retained by the library. No Effect or core Navigation node.
 
 ```console
 bun install --cwd apps/web --frozen-lockfile

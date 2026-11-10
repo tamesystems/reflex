@@ -5,8 +5,10 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/react.tsx",
-    "./effect": "./src/effect.tsx"
+    ".": "./src/index.ts",
+    "./effect": "./src/effect.tsx",
+    "./internal": "./src/internal.ts",
+    "./advanced": "./src/advanced.ts"
   },
   "dependencies": {
     "@reflex/protocol": "workspace:*",

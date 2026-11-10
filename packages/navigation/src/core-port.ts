@@ -1,5 +1,5 @@
 import { defined } from "@reflex/protocol"
-import type { AppSession } from "@reflex/runtime"
+import type { AppSession } from "@reflex/runtime/internal"
 import { navigationState, type StackEntry } from "./projection.ts"
 import type { CorePort } from "./projection-controller.ts"
 

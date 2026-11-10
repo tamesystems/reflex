@@ -1,3 +1,5 @@
+import { isRecord } from "@reflex/protocol"
+import { createJourneyClient } from "@reflex/test"
 import assert from "node:assert/strict"
 import { execFile } from "node:child_process"
 import { promisify } from "node:util"
@@ -45,24 +47,45 @@ try {
   await page.getByText("Blue T-Shirt").first().waitFor({ timeout: 150_000 })
   const status = await reflex("status")
   assert.equal(status.scenario, "live-services")
-  await servicesJourney({
-    do: async (action, input) =>
-      (await reflex("do", action, ...(input ? [JSON.stringify(input)] : []))).operation,
-    precondition: async (screen, match) => {
-      await reflex("wait", JSON.stringify({ focus: screen, match }))
+  const journey = createJourneyClient({
+    inspect: async (name) => {
+      const { nodes, focus } = await reflex("tree")
+      const node = nodes.find((node: { readonly name: string; readonly id: string }) =>
+        name === undefined ? node.id === focus : node.name === name,
+      )
+      assert(node, `Missing node ${name}`)
+      return node
+    },
+    dispatch: async (nodeId, action, input) =>
+      (
+        await reflex(
+          "do",
+          action,
+          ...(input === undefined ? [] : [JSON.stringify(input)]),
+          "--node",
+          nodeId,
+        )
+      ).operation,
+    wait: async (screen, match) => {
+      await reflex(
+        "wait",
+        JSON.stringify({ focus: screen, ...(match === undefined ? {} : { match }) }),
+      )
       const seen = await reflex("ls")
       assert.equal(seen.name, screen)
+      if (screen === "InventoryDetail" && isRecord(match)) {
+        if (typeof match.quantity === "number") {
+          await page.getByText(`Quantity: ${match.quantity}`, { exact: true }).waitFor()
+        }
+        if (typeof match.error === "string") {
+          await page.getByText(match.error, { exact: true }).waitFor()
+        }
+      }
       console.log(`ok ${screen}: ${JSON.stringify(match)}`)
-      if (screen === "InventoryDetail" && typeof match.quantity === "number") {
-        await page.getByText(`Quantity: ${match.quantity}`, { exact: true }).waitFor()
-      }
-      if (screen === "InventoryDetail" && typeof match.error === "string") {
-        await page.getByText(match.error, { exact: true }).waitFor()
-      }
     },
-    failNextSave: async () => {
-      assert((await fetch(`${api}/fail-next-save`, { method: "POST" })).ok)
-    },
+  })
+  await servicesJourney(journey, async () => {
+    assert((await fetch(`${api}/fail-next-save`, { method: "POST" })).ok)
   })
   const saved = await fetch(`${api}/products/product-123`).then((response) => response.json())
   assert.equal(saved.quantity, 12)

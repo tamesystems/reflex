@@ -22,7 +22,7 @@ import {
   type Runtime,
   type Timers,
   withDeadline,
-} from "@reflex/runtime"
+} from "@reflex/runtime/internal"
 import { EventLog } from "../src/event-log.ts"
 
 const available = { available: true, inputSchema: {} } as const
@@ -37,7 +37,7 @@ const nodeOn = (runtime: Runtime, name: string, state: Json = {}) => {
     type: "service",
     name,
     snapshot: () => current,
-    actions: () => ({ Go: available }),
+    describeActions: () => ({ Go: available }),
     prepare: () => () => ({
       done: new Promise((resolve) => finishes.push(() => resolve({ status: "completed" }))),
       cancel: () => undefined,

@@ -1,4 +1,4 @@
-import { defineCapability, type StateAccess } from "@reflex/effect"
+import { defineCapability, type StateAccess, type NavigationService } from "@reflex/effect"
 import * as Effect from "effect/Effect"
 import * as Schema from "effect/Schema"
 import { ApiError, InventoryApi, Quantity, QUANTITY_MAX } from "../domain.ts"
@@ -19,33 +19,12 @@ const State = Schema.Union([
   Schema.TaggedStruct("saving", Loaded),
 ])
 type State = typeof State.Type
-type Editing = Extract<State, { readonly _tag: "editing" }>
 
-export const initialState = (productId: string): State => ({ _tag: "loading", productId })
-
-const whenEditing = (state: State): true | string => {
-  switch (state._tag) {
-    case "loading":
-      return "Product is loading"
-    case "missing":
-      return "Product does not exist"
-    case "saving":
-      return "Save in progress"
-    case "editing":
-      return true
-  }
-}
-
-/** Actions are only reachable while editing, which `available` enforces. */
-const edit = (state: StateAccess<State>, f: (editing: Editing) => Editing) =>
-  state.update((current) => (current._tag === "editing" ? f(current) : current))
-
-const save = Effect.fnUntraced(function* (state: StateAccess<State>) {
+const save = Effect.fnUntraced(function* (
+  state: StateAccess<Extract<State, { readonly _tag: "editing" }>, State>,
+) {
   const api = yield* InventoryApi
   const current = yield* state.get
-  if (current._tag !== "editing") {
-    return
-  }
   const { productId, title, quantity } = current
   yield* state.update(() => ({ _tag: "saving", productId, title, quantity }))
   const finish = (error: string | null) =>
@@ -55,20 +34,17 @@ const save = Effect.fnUntraced(function* (state: StateAccess<State>) {
       duration: SAVE_TIMEOUT,
       orElse: () => Effect.fail(new ApiError({ message: "Save timed out" })),
     }),
-    Effect.onExit((exit) => {
-      if (exit._tag === "Success") {
-        return finish(null)
-      }
-      // A cancelled save is not an error, but the screen must become usable again.
-      const failure = exit.cause.reasons.find((reason) => reason._tag === "Fail")
-      return finish(failure === undefined ? null : failure.error.message)
-    }),
+    Effect.tapError(({ message }) => finish(message)),
+    Effect.tap(() => finish(null)),
+    Effect.onInterrupt(() => finish(null)),
   )
 })
 
 export const InventoryDetail = defineCapability({
   name: "InventoryDetail",
   state: State,
+  params: Schema.Struct({ productId: Schema.String }),
+  initial: ({ productId }): State => ({ _tag: "loading", productId }),
   onFocus: (state) =>
     Effect.gen(function* () {
       const api = yield* InventoryApi
@@ -88,47 +64,32 @@ export const InventoryDetail = defineCapability({
       )
     }),
   actions: (action) => ({
-    Increment: action({
-      available: (state) => {
-        const verdict = whenEditing(state)
-        if (verdict === true && state._tag === "editing" && state.quantity >= QUANTITY_MAX) {
-          return "Quantity is already at its maximum"
-        }
-        return verdict
-      },
-      handler: (_, state) => edit(state, (s) => ({ ...s, quantity: s.quantity + 1 })),
+    Increment: action.when("editing").reduce({
+      available: (state) =>
+        state.quantity < QUANTITY_MAX ? true : "Quantity is already at its maximum",
+      reducer: (_, state) => ({ ...state, quantity: state.quantity + 1 }),
     }),
-    Decrement: action({
-      available: (state) => {
-        const verdict = whenEditing(state)
-        if (verdict === true && state._tag === "editing" && state.quantity === 0) {
-          return "Quantity is already zero"
-        }
-        return verdict
-      },
-      handler: (_, state) => edit(state, (s) => ({ ...s, quantity: s.quantity - 1 })),
+    Decrement: action.when("editing").reduce({
+      available: (state) => (state.quantity > 0 ? true : "Quantity is already zero"),
+      reducer: (_, state) => ({ ...state, quantity: state.quantity - 1 }),
     }),
-    SetQuantity: action({
+    SetQuantity: action.when("editing").reduce({
       description: "Set the quantity directly",
       input: Schema.Struct({ quantity: Quantity }),
-      available: whenEditing,
-      handler: ({ quantity }, state) => edit(state, (s) => ({ ...s, quantity })),
+      reducer: ({ quantity }, state) => ({ ...state, quantity }),
     }),
-    Save: action({
+    Save: action.when("editing")({
       description: "Persist the quantity; gives up after 5 seconds",
-      available: whenEditing,
       error: ApiError,
       handler: (_, state) => save(state),
     }),
-    SaveAndClose: action({
+    SaveAndClose: action.when("editing")({
       description: "Persist the quantity and return to the previous screen",
-      available: whenEditing,
       error: ApiError,
-      handler: (_, state) =>
+      handler: (_, state): Effect.Effect<void, ApiError, NavigationService | InventoryApi> =>
         Effect.gen(function* () {
           yield* save(state)
-          const nav = yield* Nav.Tag
-          yield* nav.back
+          yield* Nav.back
         }),
     }),
   }),

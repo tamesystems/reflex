@@ -1,55 +1,52 @@
-/** One behavior definition, run by @reflex/test and by the browser's real CLI harness. */
-export interface ServicesJourney {
-  do(
-    action: string,
-    input?: Record<string, unknown>,
-  ): Promise<{
-    readonly status: string
-    readonly error?: { readonly tag: string; readonly defect: boolean }
-  }>
-  precondition(screen: string, match: Record<string, unknown>): Promise<void>
-  failNextSave(): Promise<void>
-}
+import type { JourneyClientFor } from "@reflex/test"
+import type inventoryApp from "../src/app.ts"
+import { InventoryList } from "../src/features/inventory-list.ts"
+import { InventoryDetail } from "../src/features/inventory-detail.ts"
+import { Settings } from "../src/features/settings.ts"
 
-export const servicesJourney = async (app: ServicesJourney): Promise<void> => {
-  await app.precondition("InventoryList", {
+/** The same typed story runs against fixtures and the live CLI transport. */
+export const servicesJourney = async (
+  app: JourneyClientFor<typeof inventoryApp>,
+  failNextSave: () => Promise<void>,
+): Promise<void> => {
+  const list = await app.focused(InventoryList, {
     _tag: "ready",
     products: [{ id: "product-123", quantity: 5 }, {}, {}],
   })
-  await app.do("OpenProduct", { productId: "product-123" })
-  await app.precondition("InventoryDetail", { _tag: "editing", title: "Blue T-Shirt", quantity: 5 })
-  await app.do("SetQuantity", { quantity: 12 })
-  if ((await app.do("Save")).status !== "completed") {
+  await list.actions.OpenProduct({ productId: "product-123" })
+  const detail = await app.focused(InventoryDetail, {
+    _tag: "editing",
+    title: "Blue T-Shirt",
+    quantity: 5,
+  })
+  await detail.actions.SetQuantity({ quantity: 12 })
+  if ((await detail.actions.Save()).status !== "completed") {
     throw new Error("Save did not complete")
   }
-  await app.do("GoBack")
-  await app.precondition("InventoryList", {
+  await app.back()
+  const updated = await app.focused(InventoryList, {
     products: [{ id: "product-123", quantity: 12 }, {}, {}],
   })
-  await app.do("OpenProduct", { productId: "product-123" })
-  await app.precondition("InventoryDetail", { quantity: 12, error: null })
-  await app.do("SetQuantity", { quantity: 19 })
-  await app.failNextSave()
-  const failed = await app.do("Save")
-  if (
-    failed.status !== "failed" ||
-    failed.error?.tag !== "ApiError" ||
-    failed.error.defect !== false
-  ) {
-    throw new Error("A server error must be a typed ApiError, not a defect")
-  }
-  await app.precondition("InventoryDetail", {
+  await updated.actions.OpenProduct({ productId: "product-123" })
+  const reopened = await app.focused(InventoryDetail, {
     _tag: "editing",
-    quantity: 19,
-    error: "Server error",
+    quantity: 12,
+    error: null,
   })
-  await app.do("GoBack")
-  await app.precondition("InventoryList", { products: [{ quantity: 12 }, {}, {}] })
-  await app.do("OpenSettings")
-  await app.precondition("Settings", { _tag: "ready" })
-  await app.do("SetLowStockThreshold", { threshold: 3 })
-  await app.do("GoBack")
-  await app.precondition("InventoryList", { lowStockThreshold: 3 })
-  await app.do("OpenSettings")
-  await app.precondition("Settings", { lowStockThreshold: 3 })
+  await reopened.actions.SetQuantity({ quantity: 19 })
+  await failNextSave()
+  const failed = await reopened.actions.Save()
+  if (failed.status !== "domain-error" || failed.error.tag !== "ApiError") {
+    throw new Error("A server error must be a declared ApiError")
+  }
+  await app.focused(InventoryDetail, { _tag: "editing", quantity: 19, error: "Server error" })
+  await app.back()
+  const saved = await app.focused(InventoryList, { products: [{ quantity: 12 }, {}, {}] })
+  await saved.actions.OpenSettings()
+  const settings = await app.focused(Settings, { _tag: "ready" })
+  await settings.actions.SetLowStockThreshold({ threshold: 3 })
+  await app.back()
+  const refreshed = await app.focused(InventoryList, { lowStockThreshold: 3 })
+  await refreshed.actions.OpenSettings()
+  await app.focused(Settings, { lowStockThreshold: 3 })
 }

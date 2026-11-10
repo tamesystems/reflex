@@ -30,7 +30,7 @@ import {
   type ControllerMethod,
   reportToConsole,
   restrictController,
-} from "@reflex/runtime"
+} from "@reflex/runtime/internal"
 
 /** Room for the envelope around an event. */
 const NOTIFICATION_CHARACTERS_MAX = FRAME_CHARACTERS_MAX - 1024

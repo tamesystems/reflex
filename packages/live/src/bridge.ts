@@ -20,7 +20,7 @@ import {
   reportToConsole,
   systemTimers,
   type Timers,
-} from "@reflex/runtime"
+} from "@reflex/runtime/internal"
 
 /** Serves a controller until the returned function is called. */
 export type Bridge = (controller: Controller) => () => void

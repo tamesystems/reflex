@@ -1,5 +1,5 @@
 import { ErrorCode, type Json, type NodeId, ProtocolError } from "@reflex/protocol"
-import type { Runtime } from "@reflex/runtime"
+import type { Runtime } from "@reflex/runtime/internal"
 
 /** Public JSON and protocol dispatch for any adapter, including one without `live`. */
 export const nodeSource = (runtime: Runtime, id: NodeId) => {

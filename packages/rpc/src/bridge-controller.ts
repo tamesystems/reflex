@@ -19,7 +19,7 @@ import {
   reportToConsole,
   systemTimers,
   type Timers,
-} from "@reflex/runtime"
+} from "@reflex/runtime/internal"
 import type { Client } from "./client.ts"
 
 export interface BridgeControllerOptions {

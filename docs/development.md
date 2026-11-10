@@ -92,7 +92,7 @@ The `bun test` suites, by kind:
   protocol, serialized to JSON as a remote peer would see it. `advanceTime` moves virtual
   time; nothing sleeps. `explore(host, { invariant })` walks random available actions with
   schema-generated inputs and shrinks a failure, within a budget of 200 replays. Give it
-  `knownInputs` for values a schema cannot know, such as ids that must exist: otherwise
+  `knownInputs: [inputsFor(Definition, { Action: [input] })]` for values a schema cannot know, such as ids that must exist: otherwise
   a walk only ever finds the "not found" path.
 - **Process**, in `packages/cli/test`: each command is a real `reflex` process against a
   real daemon.
@@ -142,15 +142,13 @@ Its exact Zustand/Zod dev dependencies are installed in apps/mobile; no third in
 
 ### Add a screen
 
-1. Define its capability in `examples/inventory/src/features/`: a state `Schema`, actions,
-   and `onFocus` if it loads. See `inventory-detail.ts`.
-2. Add its route and params schema to `navigation.ts`, and mount it in `app.ts`'s `screens`.
-3. Add a journey test that reaches it through actions.
-4. For the app: add a route file under `apps/mobile/app/`, map it both ways in
-   `apps/mobile/src/routes.ts` (`toHref`, `fromLocation`), and render it with
-   `useRouteNode`, `useNodeState` and `send` from `@reflex/expo/effect`.
+1. Define its state schema, params, `initial(params)`, actions and optional `onFocus` in a capability.
+2. Add the capability to navigation's screen object; its layer derives mounting.
+3. Add a typed journey using `session.focused(Capability, match)` and `node.actions`.
+4. Register its file path and param-name mapping with `expoRoutes` and render with `useScreen`.
+5. Use `useAction` for UI guard/pending/outcome state; never duplicate action availability.
 
-Navigate with actions that call `nav.push`; never with `router.push` from a component.
+Navigate with `Nav.push`/`Nav.back` Effects from handlers. See [adopting.md](adopting.md).
 
 ### Add a scenario or a fixture control
 
@@ -274,3 +272,12 @@ and bridge dialler in output JS, then drives development through Playwright, CLI
 It covers list/detail focus, same-URL entries, back/refusal, forward and reset. The daemon
 runs out of process. This journey runs in the Ubuntu and Windows browser CI jobs. Root
 `bun run check` typechecks the web fixture and React Router hook; no Vite build runs there.
+
+## Userland API checks
+
+Judge changes against [api-principles.md](api-principles.md). `test/userland.types.ts`,
+`packages/live/test/typed-actions.types.ts` and `apps/mobile/src/api.types.ts` are typechecked
+negative/positive inference tests, not executable journeys. Keep expected errors on the
+actual invalid call. Record root diagnostics before and after with
+`bunx tsc --noEmit -p tsconfig.json --extendedDiagnostics`; all three typechecks still run
+in `bun run check`. Integration plumbing belongs under explicit internal subpaths.

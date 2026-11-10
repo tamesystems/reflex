@@ -7,11 +7,11 @@ protocol. Generic React bindings live in `@reflex/react`; live serving in `@refl
 
 - `RouterProjection` keeps Expo Router showing the core Navigation stack and feeds accepted
   gestures, links and router actions back to the core.
-- `useCoreStack`, `useShownToken`, `routeParam` and `useRouteNode(resolve, params?)` adapt
-  router state and route params to node binding.
-- `@reflex/expo/effect` offers `useRouteNode(capability, params?)` with Expo route inputs.
-- Router-neutral projection functions/controller live in `@reflex/navigation` and are
-  re-exported from the Expo root and the compatibility `/projection` entry.
+- `@reflex/expo/effect` provides `expoRoutes(Nav, registration)` and `useScreen(routes.Detail)`.
+  Registration derives both mapping directions and validates incoming params.
+- `@reflex/expo/dev` provides `developmentBridge()`, with production exclusion.
+- Router-neutral infrastructure is available through `/internal` and @reflex/navigation,
+  outside the root author surface.
 
 ## Does not own
 
@@ -33,15 +33,15 @@ import { ReflexProvider } from "@reflex/react"
 import { RouterProjection } from "@reflex/expo"
 
 ;<ReflexProvider host={app} bridge={bridge}>
-  <RouterProjection toHref={toHref} fromLocation={fromLocation} />
+  <RouterProjection routes={routes} />
   <Stack />
 </ReflexProvider>
 ```
 
-`toHref` and `fromLocation` map route files and decoded params (see apps/mobile/src/routes.ts).
-Load `connectBridge` from `@reflex/live` and read EXPO_PUBLIC_REFLEX_BRIDGE only behind
-`__DEV__`, as apps/mobile/app/_layout.tsx does. Screens import `send`/`useNodeState` from
-`@reflex/react`; the Expo Effect convenience entry re-exports these two helpers.
+The registration maps core param names to the application's file-route names; see
+[mobile routes](../../apps/mobile/src/routes.ts). Screens use `useScreen`, `useNodeState`
+and `useAction` from the Effect entry. Pass `developmentBridge()` as the provider bridge;
+the module owns the development guard and setting read.
 
 ## How the router is followed
 

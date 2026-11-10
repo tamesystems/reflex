@@ -1,5 +1,5 @@
 import type { NodeId } from "@reflex/protocol"
-import { matches } from "@reflex/runtime"
+import { matches } from "@reflex/runtime/internal"
 import type { Json } from "@reflex/protocol"
 
 export interface RouteEntry {

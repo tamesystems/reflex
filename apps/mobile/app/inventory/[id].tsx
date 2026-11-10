@@ -1,12 +1,12 @@
-import { InventoryDetail } from "@reflex/example-inventory/features/inventory-detail.ts"
-import { routeParam, send, useNodeState, useRouteNode } from "@reflex/expo/effect"
-import { useLocalSearchParams } from "expo-router"
+import { useAction, useNodeState, useScreen } from "@reflex/expo/effect"
+import { routes } from "../../src/routes.ts"
 import { Text } from "react-native"
 import { Action, Screen, styles } from "../../src/ui.tsx"
 
 export default function InventoryDetailScreen() {
-  const productId = routeParam(useLocalSearchParams().id)
-  const node = useRouteNode(InventoryDetail, { productId })
+  const node = useScreen(routes.InventoryDetail)
+  const increment = useAction(node, "Increment")
+  const save = useAction(node, "Save")
   const state = useNodeState(node)
   if (node === null || state === null) {
     return null
@@ -32,10 +32,10 @@ export default function InventoryDetailScreen() {
       {state._tag === "editing" && state.error !== null && (
         <Text style={styles.error}>{state.error}</Text>
       )}
-      <Action disabled={saving} onPress={() => send(node, "Increment")} title="Increment" />
+      <Action disabled={!increment.available} onPress={() => increment.run()} title="Increment" />
       <Action
-        disabled={saving}
-        onPress={() => send(node, "Save")}
+        disabled={!save.available}
+        onPress={() => save.run()}
         title={saving ? "Saving…" : "Save"}
       />
     </Screen>

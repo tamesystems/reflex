@@ -19,7 +19,7 @@ import {
   createControlWork,
   systemTimers,
   type Timers,
-} from "@reflex/runtime"
+} from "@reflex/runtime/internal"
 import { type LiveSessions, liveSessionOf } from "./live-sessions.ts"
 
 type Handlers = {

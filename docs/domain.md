@@ -30,7 +30,7 @@ place of the network. Some run on **virtual time**, a clock that moves only when
 calls `advanceTime`. A **fixture** is a stand-in service, often with a node of its own.
 
 **Capability.** The definition of a kind of node: a state schema, actions and an optional
-`onFocus`. `defineCapability` makes one; `mount` turns it into a live node.
+`onFocus`. `defineCapability` makes one; `mount` turns it into a live node. A screen also owns its params schema and `initial(params)`. Store definitions use `defineStoreNode`; both produce the same consumer-facing `NodeHandle`.
 
 **Node.** A live, stateful thing a client can see and act on. Its **type** decides when it
 can act:
@@ -42,7 +42,7 @@ can act:
 **Ambient.** Actionable whatever has focus. An action sent without a node goes to the
 focused screen if it has one by that name, otherwise to the one ambient node that does.
 
-**Handle** (`NodeId`). A node's identity, such as `screen/InventoryDetail/session-ab12-1/4`.
+**Node id** (`NodeId`). A node's identity, such as `screen/InventoryDetail/session-ab12-1/4`.
 It names its session, so it means nothing after a reset. Two screens of the same kind,
 even with the same params, have different handles.
 
@@ -57,8 +57,7 @@ it as soon as it is **accepted**; that is not completion.
 `mountStore`. It excludes secrets and internal machinery; the store remains application-owned.
 
 **Focus.** The screen the user is on: the top of the core navigation stack, or the screen
-reported by an existing router through `useNodeFocus`. With Effect navigation, getting focus starts
-the screen's `onFocus`, as a tracked operation.
+reported by an existing router through `useNodeFocus`. Every focus arrival starts the screen's `onFocus`, if present, as a tracked operation. Repeating the current focus does not restart it.
 
 **Route**, **stack**, **entry**. A route is a kind of screen with a params schema; the stack
 is the list of entries the user has opened, each an instance of a route with its own scope
@@ -116,3 +115,24 @@ matched to core entries by identity, never by URL.
 
 Navigation and focus are optional. A service-only app needs neither; `screen` remains
 the protocol name for a focus-gated node. Expo Router projection is one optional binding.
+
+## Author contracts
+
+**Definition.** A real value carrying state, input, actions, declared errors and guards.
+UI bindings and journeys consume this value; they do not reconstruct its types.
+
+**Node handle** (`NodeHandle`). The consumer's typed snapshot/subscription, action object,
+availability and disposal. Distinct from its opaque protocol id. `actions.Save()` takes no
+input; `actions.SetQuantity({ quantity })` requires exactly that action's input.
+
+**Action outcome.** The local result: completed, cancelled, refused with a reason,
+domain-error with safe declared data, or defect. Wire operations retain their original
+running/completed/failed/cancelled statuses. A journey sees the encoded public state and
+error data; a local Effect UI sees the capability's domain state.
+
+**Guarded reducer.** `action.when(tag).reduce(...)` narrows state and rechecks its tag before
+the synchronous commit. Async guarded handlers must recheck the full state in `update`.
+
+**History-entry lifetime.** A React node mounted after commit and retained by the library
+under the router's location key until session end. It survives back/forward without an
+application cache. Component lifetime disposes when its owning component releases it.

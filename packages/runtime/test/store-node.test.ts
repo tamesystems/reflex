@@ -7,7 +7,7 @@ import {
   NODE_STATE_DEPTH_MAX,
   type RuntimeEvent,
 } from "@reflex/protocol"
-import { createRuntime, mountStore, standardInput, StoreFailure } from "@reflex/runtime"
+import { createRuntime, mountStore, standardInput, StoreFailure } from "@reflex/runtime/internal"
 import Ajv from "ajv/dist/2020.js"
 import { createStore } from "zustand/vanilla"
 import { z } from "zod"
@@ -73,9 +73,11 @@ test("published input JSON Schema agrees with Standard Schema before acceptance"
     expect(validate(input)).toBe(expected)
     const sequence = runtime.sequence
     if (expected) {
-      expect((await node.send("Add", input)).status).toBe("completed")
+      expect((await node.dispatchRaw("Add", input)).status).toBe("completed")
     } else {
-      await expect(node.send("Add", input)).rejects.toMatchObject({ code: ErrorCode.InvalidInput })
+      await expect(node.dispatchRaw("Add", input)).rejects.toMatchObject({
+        code: ErrorCode.InvalidInput,
+      })
       expect(runtime.sequence).toBe(sequence)
     }
   }
@@ -103,7 +105,7 @@ test("async Standard Schema is explicitly refused without starting work or leaki
     },
   })
   const sequence = runtime.sequence
-  await expect(node.send("Run", "ok")).rejects.toMatchObject({
+  await expect(node.dispatchRaw("Run", "ok")).rejects.toMatchObject({
     code: ErrorCode.InvalidInput,
     message: expect.stringContaining("Async Standard Schema"),
   })
@@ -334,7 +336,7 @@ test("no-input actions reject payloads before acceptance and listeners are bound
   // Add changes availability; Reset itself takes no input.
   await node.send("Add", { by: 1 })
   const accepted = runtime.sequence
-  await expect(node.send("Reset", { unexpected: true })).rejects.toMatchObject({
+  await expect(node.dispatchRaw("Reset", { unexpected: true })).rejects.toMatchObject({
     code: ErrorCode.InvalidInput,
   })
   expect(runtime.sequence).toBe(accepted)
@@ -428,7 +430,7 @@ test("state that cannot be published never breaks the application's own store wr
 
 test("a refused input says what is wrong, within a bound", async () => {
   const { node } = setup()
-  const refused = await node.send("Add", { by: "3" }).catch((error: unknown) => error)
+  const refused = await node.dispatchRaw("Add", { by: "3" }).catch((error: unknown) => error)
   expect(refused).toMatchObject({ code: ErrorCode.InvalidInput })
   expect(String(refused)).toContain("by:")
   node.dispose()
@@ -459,7 +461,7 @@ test("a refused input says what is wrong, within a bound", async () => {
       },
     },
   })
-  const bounded = (await many.send("Run", {}).catch((error: unknown) => error)) as Error
+  const bounded = (await many.dispatchRaw("Run", {}).catch((error: unknown) => error)) as Error
   expect(bounded.message).toContain("field0: ")
   expect(bounded.message).not.toContain("field5: ")
   many.dispose()

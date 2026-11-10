@@ -1,11 +1,11 @@
-import { LOW_STOCK_THRESHOLD_MAX } from "@reflex/example-inventory/domain.ts"
-import { Settings } from "@reflex/example-inventory/features/settings.ts"
-import { send, useNodeState, useRouteNode } from "@reflex/expo/effect"
+import { useAction, useNodeState, useScreen } from "@reflex/expo/effect"
+import { routes } from "../src/routes.ts"
 import { Text } from "react-native"
 import { Action, Screen, styles } from "../src/ui.tsx"
 
 export default function SettingsScreen() {
-  const node = useRouteNode(Settings)
+  const node = useScreen(routes.Settings)
+  const raise = useAction(node, "RaiseLowStockThreshold")
   const state = useNodeState(node)
   if (node === null || state === null || state._tag === "loading") {
     return null
@@ -16,11 +16,7 @@ export default function SettingsScreen() {
     <Screen>
       <Text style={styles.title}>Settings</Text>
       <Text>Low stock below: {lowStockThreshold}</Text>
-      <Action
-        disabled={lowStockThreshold >= LOW_STOCK_THRESHOLD_MAX}
-        onPress={() => send(node, "SetLowStockThreshold", { threshold: lowStockThreshold + 1 })}
-        title="Raise threshold"
-      />
+      <Action disabled={!raise.available} onPress={() => raise.run()} title="Raise threshold" />
     </Screen>
   )
 }

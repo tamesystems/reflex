@@ -12,11 +12,10 @@ const State = Schema.Union([
 ])
 type State = typeof State.Type
 
-export const initialState: State = { _tag: "loading" }
-
 export const Settings = defineCapability({
   name: "Settings",
   state: State,
+  initial: (): State => ({ _tag: "loading" }),
   onFocus: (state) =>
     Effect.gen(function* () {
       const store = yield* SettingsStore
@@ -24,6 +23,20 @@ export const Settings = defineCapability({
       yield* state.update(() => ({ _tag: "ready", ...loaded }))
     }),
   actions: (action) => ({
+    RaiseLowStockThreshold: action.when("ready")({
+      available: (state) =>
+        state.lowStockThreshold < LOW_STOCK_THRESHOLD_MAX ? true : "Threshold is at its maximum",
+      handler: (_, state) =>
+        Effect.gen(function* () {
+          const current = yield* state.get
+          const store = yield* SettingsStore
+          const threshold = current.lowStockThreshold + 1
+          yield* store.setLowStockThreshold(threshold)
+          yield* state.update((value) =>
+            value._tag === "ready" ? { ...value, lowStockThreshold: threshold } : value,
+          )
+        }),
+    }),
     SetLowStockThreshold: action({
       input: Schema.Struct({
         threshold: Schema.Int.check(

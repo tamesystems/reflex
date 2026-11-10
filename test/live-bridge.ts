@@ -8,7 +8,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
 import { type Client, createBridgeController } from "@reflex/rpc"
-import type { Controller } from "@reflex/runtime"
+import type { Controller } from "@reflex/runtime/internal"
 import type { DeviceCommand, DeviceReport } from "./live-device.ts"
 
 import { loadConfig } from "../packages/cli/src/config.ts"

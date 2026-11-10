@@ -6,7 +6,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./session": "./src/session.ts"
+    "./session": "./src/session.ts",
+    "./vite": "./src/vite.ts"
   },
   "dependencies": {
     "@reflex/protocol": "workspace:*",

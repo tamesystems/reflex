@@ -52,7 +52,7 @@ export interface NodeAdapter {
   /** Must be JSON, with secrets already removed. */
   snapshot(): Json
   /** Availability may depend on current state. */
-  actions(): { readonly [name: string]: ActionDescriptor }
+  describeActions(): { readonly [name: string]: ActionDescriptor }
   /**
    * Validates `input`, throwing `ProtocolError` if it is unacceptable, and returns
    * what starts the action. Separate, so that an operation can be reported as
@@ -61,6 +61,10 @@ export interface NodeAdapter {
   prepare(action: string, input: unknown): () => Invocation
   subscribe(listener: () => void): () => void
   /** Generate a valid wire input, for exploration and agent hints. */
+  /** Called once when this node gains focus, after focus is published. */
+  onFocus?(): void
+  /** Notify local guard subscribers without publishing a state revision. */
+  availabilityChanged?(): void
   sample?(action: string, seed: number): Promise<Json>
 }
 
@@ -178,8 +182,18 @@ class SessionRuntime implements Runtime {
       this.entry(nodeId)
     }
     if (this.focus !== nodeId) {
+      const previous = this.focus
       this.focus = nodeId
       this.publishChange({ type: "focus.changed", nodeId })
+      if (previous !== null) {
+        this.nodes.get(previous)?.adapter.availabilityChanged?.()
+      }
+      if (nodeId !== null) {
+        this.entry(nodeId).adapter.availabilityChanged?.()
+      }
+      if (nodeId !== null) {
+        this.entry(nodeId).adapter.onFocus?.()
+      }
     }
   }
 
@@ -445,22 +459,22 @@ class SessionRuntime implements Runtime {
 
   private resolveAction(action: string, nodeId: NodeId | undefined) {
     const entry = nodeId === undefined ? this.findActionOwner(action) : this.entry(nodeId)
-    return { entry, descriptors: entry.adapter.actions() }
+    return { entry, descriptors: entry.adapter.describeActions() }
   }
 
   private findActionOwner(action: string): Entry {
     const focused = this.focus === null ? undefined : this.nodes.get(this.focus)
-    if (focused !== undefined && Object.hasOwn(focused.adapter.actions(), action)) {
+    if (focused !== undefined && Object.hasOwn(focused.adapter.describeActions(), action)) {
       return focused
     }
     const ambient = this.ambientEntries()
-    const owners = ambient.filter(({ adapter }) => Object.hasOwn(adapter.actions(), action))
+    const owners = ambient.filter(({ adapter }) => Object.hasOwn(adapter.describeActions(), action))
     const [owner, ...others] = owners
     if (owner === undefined) {
       const reachable = focused === undefined ? ambient : [focused, ...ambient]
       throw new ProtocolError(ErrorCode.ActionNotFound, `Nothing here accepts "${action}"`, {
         focus: this.focus,
-        available: reachable.flatMap(({ adapter }) => Object.keys(adapter.actions())),
+        available: reachable.flatMap(({ adapter }) => Object.keys(adapter.describeActions())),
       })
     }
     if (others.length > 0) {
@@ -656,11 +670,11 @@ const snapshotOf = ({ adapter, revision }: Entry): NodeSnapshot => ({
   name: adapter.name,
   revision,
   state: adapter.snapshot(),
-  actions: adapter.actions(),
+  actions: adapter.describeActions(),
 })
 
 const ambientActionsOf = (adapter: NodeAdapter): ReadonlyArray<AmbientAction> =>
-  Object.entries(adapter.actions()).map(([action, descriptor]) => ({
+  Object.entries(adapter.describeActions()).map(([action, descriptor]) => ({
     ...descriptor,
     nodeId: adapter.id,
     nodeType: adapter.type,

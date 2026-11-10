@@ -9,7 +9,8 @@
   },
   "dependencies": {
     "@reflex/react": "workspace:*",
-    "@reflex/protocol": "workspace:*"
+    "@reflex/protocol": "workspace:*",
+    "@reflex/runtime": "workspace:*"
   },
   "peerDependencies": {
     "react-router": "8.5.1",

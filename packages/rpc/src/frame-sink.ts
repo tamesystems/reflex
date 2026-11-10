@@ -1,6 +1,6 @@
 import { write as writeToFile } from "node:fs"
 import { WRITE_QUEUE_BYTES_MAX } from "@reflex/protocol"
-import { systemTimers, type Timers } from "@reflex/runtime"
+import { systemTimers, type Timers } from "@reflex/runtime/internal"
 
 /** How soon to try a full pipe again, when it is one that says so rather than blocks. */
 const PIPE_FULL_RETRY_MS = 1

@@ -7,7 +7,7 @@ import {
   endSession,
   startCounted,
   type Timers,
-} from "@reflex/runtime"
+} from "@reflex/runtime/internal"
 
 /** The current session, plus those whose start or disposal has yet to finish. */
 const OWNED_SESSIONS_MAX = UNFINISHED_SESSIONS_MAX + 1

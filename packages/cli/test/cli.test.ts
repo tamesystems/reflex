@@ -355,7 +355,7 @@ test(
 
 test("shutdown is refused inside a batch, so its reply is not lost", async () => {
   const { createConnection } = await import("@reflex/rpc")
-  const { createController } = await import("@reflex/runtime")
+  const { createController } = await import("@reflex/runtime/internal")
   const { default: app } = await import("../../../examples/inventory/src/app.ts")
   const controller = await createController(app)
   let shutdowns = 0

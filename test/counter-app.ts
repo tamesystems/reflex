@@ -1,5 +1,6 @@
 /** The conformance suite's Effect app, in a module of its own so a device can load it too. */
-import { defineApp, defineCapability, mount, Registry } from "@reflex/effect"
+import { defineApp, defineCapability, mount } from "@reflex/effect"
+import { Registry } from "@reflex/effect/internal"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
 import * as Schema from "effect/Schema"

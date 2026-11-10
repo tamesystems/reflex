@@ -24,7 +24,7 @@ import {
   ADVANCE_TIME_MS_MAX,
 } from "@reflex/protocol"
 import { type Client, restrictClient } from "@reflex/rpc"
-import { reportToConsole } from "@reflex/runtime"
+import { reportToConsole } from "@reflex/runtime/internal"
 import * as commands from "./commands.ts"
 import type { Target } from "./config.ts"
 

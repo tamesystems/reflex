@@ -1,186 +1,152 @@
 # Adopting Reflex in an existing app
 
-Expose a service or one screen first. Keep your Zustand/Redux store, hooks, router and
-business logic. Reflex registers a deliberate public view and named actions over that
-logic; it does not take ownership of the store. The complete example is
-[examples/plain](../examples/plain/src/app.ts), rendered by
-[apps/mobile/plain](../apps/mobile/plain/index.tsx) without Effect.
+Expose one store or screen first. Keep the application's state and router; Reflex owns
+its public contract and session lifetime. See [plain](../examples/plain/src/app.ts) and
+[web](../apps/web/src/main.tsx) for complete examples.
 
-## 1. Expose an existing store
-
-`mountStore` from `@reflex/runtime` accepts structural `getState()` and
-`subscribe(listener): unsubscribe` methods. Zustand vanilla stores and Redux stores fit;
-for hooks, hoist only the behavior you want to expose into an external store and keep
-using `useSyncExternalStore` to render it. Do not copy hook state into a second Reflex
-store: that would create two sources of truth.
+## Define the contract once
 
 ```ts
-import { mountStore, standardInput } from "@reflex/runtime"
-import { z } from "zod"
-
-const input = z.strictObject({ by: z.int() })
-const node = mountStore(runtime, {
+const Counter = defineStoreNode({
   name: "Counter",
-  type: "service", // ambient; works without any router or focus
-  store, // your existing Zustand or Redux store
-  project: ({ count }) => ({ count }), // deliberately exclude token, functions, etc.
-  actions: {
-    Add: {
-      input: standardInput(input, z.toJSONSchema(input, { io: "input" })),
-      available: ({ count }) => (count < 100 ? true : "At limit"),
-      handler: ({ by }: z.infer<typeof input>, { signal }) => addToCounter(by, signal),
-    },
-  },
+  store: createCounterStore,
+  project: ({ count }) => ({ count }),
+  actions: (action) => ({
+    Add: action({
+      input: standardInput(z.strictObject({ by: z.int() })),
+      handler: ({ by }, { store }) => store.setState({ count: store.getState().count + by }),
+    }),
+  }),
 })
-// When this owner ends:
-node.dispose()
+const app = defineStoreApp({ name: "counter", nodes: { Counter } })
 ```
 
-No Reflex package depends on Zustand or Zod. `standardInput` accepts Standard Schema v1
-validators, with an explicit JSON Schema (or a converter's output). The published schema
-must describe the wire input, not the transformed output. Use strict objects when the JSON
-Schema rejects extra properties. Tests should run the same valid and invalid inputs through
-both validators; the example does this with Ajv. Schema conversion cannot express every
-custom refinement, so supplying a JSON Schema is an application responsibility.
+`defineStoreNode` retains the concrete store, projected state and action map. Handlers
+receive decoded inputs; consumers supply the validator's input type. This applies to both
+Standard Schema and Effect codecs: a NumberFromString input accepts a string at the
+action call and gives the handler a number. `standardInput`
+uses Standard Schema v1 and Standard JSON Schema when available, including Zod 4. A second
+argument overrides the input JSON Schema for validators without a converter or refinements
+it cannot express. Prepare is synchronous: async validation is refused before acceptance.
 
-`prepare` is synchronous. A validator that returns a Promise is refused with `InvalidInput`
-and a clear async-validator message before any operation starts. Rejected validation
-Promises are observed. Async business work belongs in the handler, after synchronous
-validation. Omit `input` for no-input actions (omitted input, null, or an empty object).
+`defineStoreApp` creates fresh stores on start/reset, owns the reporter and disposal, and
+focuses the first screen. Its optional scenarios provide typed `stores` overrides, keyed by node; `.withScenarios`
+composes them while preserving names and store types. Use a handwritten `AppHost` only
+for custom ownership beyond these factories. For a process, use
+`await serveLive(app, { setting })` from `@reflex/live`, then `await server.close()`.
 
-`project` must return plain JSON, without accessors. Reflex checks the existing protocol
-state size and depth limits, copies and freezes the result, and publishes only that copy.
-Every notification rechecks it; identical projected JSON causes no event or revision.
-Include every state field that determines availability in the public projection so that
-changes in availability also change the public revision. Do not put secrets there.
-**Automatic `Schema.Redacted` scanning does not apply to this path.** No full-store
-serialization or automatic secret detection happens. Error tags and messages are public,
-too; never include credentials in them.
+## Render typed nodes
 
-An invalid external write has already happened in your store: Reflex cannot roll it back.
-Your write still succeeds and your store's other subscribers still run: Reflex reports the
-problem to the session's background reporter, once until the state is publishable again,
-keeps the last valid public snapshot, and emits no change. Clients see stale state until
-then, so treat a report as a bug to fix. An operation that finishes while the state is
-unpublishable fails, though its work ran. Validate your own writes
-before committing them when you need atomic store/public-state updates.
-
-## 2. Own session lifetime, without rewriting the core
-
-Create an `AppHost` with `name`, `defaultScenario`, `scenarios`, and async `start` (see the
-plain example). `start` receives a session id and background reporter. Create a runtime
-with those, mount your exposed nodes, and return `{ runtime, dispose }`; dispose every
-mounted node. Existing services can be injected into this factory. The example creates a
-fresh store per session so reset really resets it. If you attach an existing singleton,
-reset must explicitly reset it or document that its data persists; Reflex cannot reset
-application-owned state implicitly.
-
-A handler may return a value or a Promise. `app.dispatch` accepts it first; operation
-completion means that returned Promise settled successfully, including any work it
-awaited. Return/await the business work you want clients to wait for. Fire-and-forget work
-is outside this operation and protocol idle. Throw `new StoreFailure(tag, message)` for
-an expected business failure; other throws and rejections are defects. Public error data
-is deliberately unsupported; expose a safe error state instead.
-
-Cancellation settles the operation as cancelled and aborts the handler's `AbortSignal`.
-Disposal unregisters, unsubscribes and cancels all owned invocations. JavaScript cannot
-forcibly stop a Promise: handlers must pass the signal to I/O and check it before late
-writes. A cancelled handler that ignores it can still mutate the application store.
-Disposal prevents further Reflex publication; it does not destroy your store.
-
-## 3. Render selected screens using the generic bindings
-
-Import from `@reflex/react` for the Effect-free entry. `ReflexProvider` accepts any `AppHost`,
-serves the session via the existing live controller and remounts its subtree on reset.
-`useNode(id)` binds any adapter's public JSON and protocol dispatch, even if it has no
-`live` object. `useNodeState(source)` accepts any structural snapshot/subscription source.
-`send(node, action, input)` uses that node's send method and reports defects/resource
-failures; show expected business errors in application state. The plain Expo screen uses
-all these bindings and a real Zustand store. UI code can also keep calling existing store
-functions directly; the store subscription publishes their public changes.
-
-Keep your router. Use `type: "screen"` for a selected screen and call
-`useNodeFocus(nodeId, isFocused)` with your router's actual focus boolean (for example,
-React Navigation's `useIsFocused()`). The hook sets runtime focus on arrival and clears
-it on departure only if that screen still owns it. Mount the provider above the selected
-screens; register nodes with the session and dispose them when their owner ends. A screen
-covered by another refuses new actions; existing operations continue until cancelled or
-disposed. Dispose a popped screen's node yourself to cancel its work. Unexposed screens
-should report departure of the exposed screen; they need no nodes. Ambient `service`
-nodes need no focus and remain actionable from every screen.
-
-This mode exposes only selected behavior, not automatic navigation. `RouterProjection`
-requires the `Navigation` node and stack contract produced by `defineNavigation`; it
-cannot drive an arbitrary existing router without that core navigation model. Do not
-mount it in incremental adoption mode. Navigation remains application-owned, and headless
-fixtures must explicitly model focus changes if their tests need them. The plain example
-switches between an exposed counter and an unexposed screen using application-owned
-React state. Leaving the counter clears focus; returning restores it. It uses no projection.
-
-For Expo Router capabilities, import `useRouteNode` from `@reflex/expo/effect`.
-Without Expo Router, `@reflex/react` has a generic `useRouteNode(resolve, binding)`;
-`binding` supplies `{ stack, token, params? }`, where entries have `{ nodeId, params }`.
-`@reflex/react/effect` accepts a capability and the same explicit binding. It retains the bound node during exit
-animations. Neither route lookup nor projection is needed for an existing router.
-
-## React Router 8 routes
-
-Use `@reflex/react-router` with exactly react-router 8.5.1 and React >=19.2.7 <20.
-Keep your BrowserRouter or data router and place its screens beneath ReflexProvider.
-In each exposed leaf route, call `useRouteFocus(nodeId, "/detail/:id", entryKey?)`.
-String patterns match to the end; PathPattern supports explicit match options.
-Node creation and disposal remain your responsibility. Mount nodes in an effect, not
-during render: a render React abandons would leave a node the CLI sees and no screen shows. Providers, useNode, useNodeState
-and send come from @reflex/react; the new binding only reports router focus.
-
-Back/forward updates focus from useLocation/useMatch. Two entries can share a URL: use
-location.key to associate each entry with its node, and pass the owning key for retained
-route elements so only the visible entry reports focus. Unmounted route elements clear
-focus through useNodeFocus. Avoid focus hooks on both a layout and its leaf. See
-[apps/web](../apps/web/README.md) for an Effect-free list/detail app retaining entries until
-reset. Its same-URL links explicitly set replace={false}, overriding React Router’s
-same-location replacement default. Reset keeps the current URL but creates a new session.
-This is existing-router mode: Reflex cannot navigate routes automatically or promise
-headless navigation equivalence. Data-mode core projection is deferred (ADR 0018).
-
-For Vite, dynamically import @reflex/live and read VITE_REFLEX_BRIDGE only inside
-`if (import.meta.env.DEV)`. The example’s production check supplies a real setting and
-asserts neither bridge dialler nor token is in the generated JavaScript.
-
-## 4. Connect the same CLI and MCP
-
-Pass `connectBridge(setting)` as the provider's `bridge`, loading `@reflex/live`
-only inside `__DEV__` and reading `EXPO_PUBLIC_REFLEX_BRIDGE` there. See the plain entry.
-Start the device bridge and give the app its printed setting:
-
-```console
-bun run reflex --target device start
-# Start your app with EXPO_PUBLIC_REFLEX_BRIDGE set to the printed appSetting
-bun run reflex --target device ls --schema
-bun run reflex --target device do Add '{"by":2}'
-bun run reflex --target device mcp
+```tsx
+const node = useNode(Counter)
+const state = useNodeState(node)
+const add = useAction(node, "Add")
+return <button disabled={!add.available} onClick={() => add.run({ by: 1 })}>
+  {state?.count}
+</button>
 ```
 
-The controller is unchanged. Access policies, wire validation, revisions, waits,
-subscriptions, CLI and MCP use exactly the existing protocol. Start a headless instance
-with `bun run reflex start examples/plain/src/app.ts` to exercise the same behavior.
+`ReflexProvider` owns the session. `useNode` accepts the definition value; the application
+never inspects JSON to find its own state. `useAction` returns `run`, `available`, `reason`,
+`pending` and `outcome`. Its guard comes from the same definition the runtime enforces.
+`node.actions.Add({ by: 1 })` works outside React too. Outcomes distinguish `completed`,
+`cancelled`, `refused`, `domain-error` and `defect`. Refusals include a code and reason.
+The secondary `send(node, action, input)` preserves correlated arguments and returns the
+same outcome union; await it or explicitly discard its Promise.
 
-## Guarantees and tradeoffs
+`useSession()` exposes `scenario` and `reset`. Raw registry access is an explicit escape
+hatch: `useRuntime` and `useRawNode` from `@reflex/react/advanced`. Sibling integration
+helpers live under `/internal`, outside the author-facing root exports.
 
-| Guarantee                                         | Store path                                                                   | Effect capability path                                |
-| ------------------------------------------------- | ---------------------------------------------------------------------------- | ----------------------------------------------------- |
-| Explicit public state; bounded JSON               | Required projection, checked before publication                              | Schema encoding, bounds and automatic redaction       |
-| Automatic `Schema.Redacted` scanning              | No; select safe fields yourself                                              | Yes                                                   |
-| State write ownership/atomic validation           | Application store owns writes; invalid external writes cannot be rolled back | StateAccess validates before commit                   |
-| No public event for unchanged projection          | Yes                                                                          | Identity-based unchanged-state suppression            |
-| Input validation before acceptance                | Synchronous Standard Schema + supplied JSON Schema                           | Effect Schema derives both                            |
-| Availability and focus refusal                    | Yes; router reports focus                                                    | Yes; core navigation owns focus                       |
-| Declared failure versus defect                    | StoreFailure versus other throws/rejections                                  | Typed failure versus defect; optional safe error data |
-| Returned async work tracked to completion         | Yes, await the returned Promise                                              | Yes, scoped fibers                                    |
-| Cancellation on dispose                           | AbortSignal, cooperative; unregister and unsubscribe                         | Scope interruption and unregister                     |
-| Structured concurrency, virtual clock, generators | No; app supplies fixtures/time, no automatic sampling                        | Effect scopes, TestClock, schema generators           |
-| Automatic navigation and pop lifetime             | No; existing router/application owns these                                   | defineNavigation + RouterProjection                   |
-| CLI, MCP, bridge, policies, events, waits         | Same controllers and protocol                                                | Same controllers and protocol                         |
-| Effect in a generic Expo bundle                   | None; checked from Metro's module graph in CI                                | Explicit capability entry includes Effect             |
+## Keep an existing router
 
-For a live app without React, see [live-counter](../examples/live-counter/README.md).
+For a selected screen, `useNodeFocus(node, focused)` reports the router's focus boolean.
+Focus is one runtime operation: an arrival publishes focus and runs Effect `onFocus` as
+tracked work. Repeated reports do not reload; departure and return do. Older cleanup
+cannot clear a newer screen's focus. Covered screens refuse new actions; existing work
+continues until cancelled or disposed. Ambient service/fixture nodes need no focus.
+
+For React Router 8.5.1, mount a definition after commit and retain its history entry:
+
+```tsx
+const node = useRouteNode(Detail, { lifetime: "history-entry" })
+useRouteFocus(node)
+```
+
+Both hooks come from `@reflex/react-router`. The library keys ownership by `location.key`
+and disposes retained entries at session end. Retained route elements can supply
+`entryKey` to `useRouteNode`, and the same key as `useRouteFocus`'s second argument.
+Do not mount during render. This adapter follows existing routes; it does not navigate
+headlessly. Core-owned React Router projection remains deferred (ADR 0018).
+
+## Effect screens and Expo
+
+A capability owns `state`, `params`, `initial(params)`, actions and `onFocus`.
+`defineNavigation("app/Navigation", () => ({ List, Detail, Settings }))` derives route schemas and
+mounting from those definitions. Its layer needs only the initial destination.
+`Nav.push("Settings")` is an Effect ready to return from a handler; required params remain
+required. Navigation failures must be declared with `error: NavigationRefused`.
+
+Use `action.when("editing").reduce({ input, reducer })` for synchronous state updates.
+The guard narrows both availability and the reducer. Async guarded handlers receive a
+narrowed `get`; `update` still sees the full union and must recheck before committing.
+A stale narrowed read interrupts rather than inventing a state that no longer exists.
+
+```ts
+const routes = expoRoutes(Nav, {
+  List: "/",
+  Detail: { pathname: "/inventory/[id]", params: { productId: "id" } },
+  Settings: "/settings",
+})
+```
+
+Import `expoRoutes` and `useScreen` from `@reflex/expo/effect`. The mapping derives both
+directions and validates incoming params. Render `<RouterProjection routes={routes} />`
+from `@reflex/expo`, and read a screen with `useScreen(routes.Detail)`. File-route param
+names remain the application's choice. No UI param parsing or initial-state map is needed.
+Use `defineNavigationFactories` from `@reflex/effect/internal` only for custom ownership.
+
+## Failures and journeys
+
+Effect actions that can fail declare an error schema; their handler's error channel must
+match it. The client observes encoded, redacted error data, which may be omitted if it
+exceeds wire limits. Store actions declare a `standardInput(errorSchema)` as `error` and
+call their typed context's `fail(error)`. Other throws are defects. `StoreFailure` remains
+an explicit low-level expected failure. All public error messages/data must be safe.
+
+```ts
+const session = await pool.open(app, { scenario: "default" })
+const detail = await session.focused(Detail, { _tag: "editing" })
+await detail.actions.SetQuantity({ quantity: 12 })
+```
+
+Register the app's definitions through `nodes` (`nodes: Nav.screens` for navigation).
+Scenario literals and node membership flow into the test client. `focused` validates a
+typed partial state match; its returned state is a captured wire snapshot, narrowed by
+`_tag`. Call it again for a later snapshot. `createJourneyClient(transport)` provides the
+same API for a live RPC/CLI target; `JourneyClientFor<typeof app>` derives a reusable story's
+contract. `inputsFor(Definition, { Action: [input] })` supplies typed exploration inputs
+keyed by node and action. `node(Definition)` also binds ambient fixture/service nodes. `inspectRaw`, `dispatchRaw` and `client.request` are explicit protocol escape
+hatches, including deliberately invalid-input tests and cancellation/virtual-time work.
+
+## Development bridges
+
+Expo uses `developmentBridge()` from `@reflex/expo/dev`; Vite uses
+`await developmentBridge()` from `@reflex/live/vite`. Pass the result as the provider's
+`bridge`. Read `EXPO_PUBLIC_REFLEX_BRIDGE` or `VITE_REFLEX_BRIDGE` only in those development
+modules. Production builds exclude the dialler and token; the browser journeys check it.
+CLI, MCP, access policies, revisions, waits and wire validation are unchanged.
+
+## Boundaries that remain application-owned
+
+Store projection deliberately selects safe public fields. It is copied, frozen and
+bounded JSON, and unchanged projections produce no revision. There is no automatic secret
+scanning on the store path. Include state controlling availability in the projection.
+An invalid external write cannot be rolled back: Reflex reports it, retains the previous
+snapshot and fails operations finishing while publication is invalid. Validate store
+writes when atomicity matters.
+
+Cancellation aborts a store handler's signal, but JavaScript cannot forcibly stop a
+Promise. Pass the signal to I/O and check it before late writes. Effect scopes interrupt
+owned fibers. Persistence belongs to app services; resetting fresh stores does not reset
+an external server or database. See [architecture](ARCHITECTURE.md) for limits and flows.

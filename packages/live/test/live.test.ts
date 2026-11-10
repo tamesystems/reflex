@@ -6,7 +6,7 @@ import {
   OUTSTANDING_CONTROL_REQUESTS_MAX,
   type RuntimeEvent,
 } from "@reflex/protocol"
-import { type AppHost, createRuntime, systemTimers, type Timers } from "@reflex/runtime"
+import { type AppHost, createRuntime, systemTimers, type Timers } from "@reflex/runtime/internal"
 import { nextTurn, waitUntil } from "@reflex/test"
 import app from "../../../examples/inventory/src/app.ts"
 import { createLiveController } from "../src/live-controller.ts"

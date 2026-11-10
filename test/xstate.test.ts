@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { ErrorCode, type RuntimeEvent } from "@reflex/protocol"
-import { createController } from "@reflex/runtime"
+import { createController } from "@reflex/runtime/internal"
 import { waitFor } from "xstate"
 import { createCounterSession, xstateBackend } from "./xstate-counter.ts"
 

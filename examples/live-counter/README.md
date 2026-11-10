@@ -5,7 +5,7 @@ A plain Bun process, with no React, React Native, Expo, Effect or store library.
 ## Responsibilities
 
 `src/app.ts` mounts an application-owned counter store as an ambient `service` node.
-`src/serve.ts` owns LiveSessions and serves their controller with connectBridge.
+`src/serve.ts` uses serveLive to own serving and disposal.
 
 ## Does not own
 
@@ -13,7 +13,7 @@ The daemon or transports on the developer side; the CLI starts and stops those.
 
 ## Start reading
 
-1. `src/app.ts`: minimal AppHost, mountStore and Increment action.
+1. `src/app.ts`: defineStoreNode, defineStoreApp and Increment action.
 2. `src/serve.ts`: live session and WebSocket connection lifecycle.
 3. `../../test/framework-free.test.ts`: real process/CLI acceptance journey.
 

@@ -15,7 +15,7 @@ import {
   reportToConsole,
   systemTimers,
   type Timers,
-} from "@reflex/runtime"
+} from "@reflex/runtime/internal"
 import { type Client, createClient } from "./client.ts"
 import { authenticateLocal, type LocalCipher } from "./local-auth.ts"
 import { socketShutdown } from "./socket-shutdown.ts"

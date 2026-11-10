@@ -1,24 +1,24 @@
-import { useCoreStack, useSession, useShownToken } from "@reflex/expo"
-import type { AppHost } from "@reflex/runtime"
+import { useRuntime } from "@reflex/react/advanced"
+import { useCoreStack, useShownToken } from "@reflex/expo/internal"
+import app from "./app.ts"
+import * as Effect from "effect/Effect"
+import * as Layer from "effect/Layer"
+import { fixtureApi, fixtureSettings, seedProducts } from "@reflex/example-inventory/fixtures.ts"
 import { router } from "expo-router"
 import { useEffect } from "react"
 
-/**
- * A host whose start for `LATE_FAILURE_SCENARIO` fails only when told to, so that
- * the journey can replace a start while it is pending.
- */
 export const LATE_FAILURE_SCENARIO = "e2e-late-failure"
-
-export const withLateFailure = (host: AppHost): AppHost => ({
-  ...host,
-  scenarios: [...host.scenarios, { name: LATE_FAILURE_SCENARIO, virtualTime: false }],
-  start: (name, options) => {
-    if (name !== LATE_FAILURE_SCENARIO) {
-      return host.start(name, options)
-    }
-    return new Promise((_, reject) => {
-      globals.__failLateStart = () => reject(new Error("late failure"))
-    })
+const lateFailure = Layer.effectDiscard(
+  Effect.callback<never>((resume) => {
+    globals.__failLateStart = () => resume(Effect.die(new Error("late failure")))
+  }),
+)
+export const testHost = app.withScenarios({
+  [LATE_FAILURE_SCENARIO]: {
+    layer: Layer.merge(
+      Layer.merge(fixtureApi({ products: seedProducts }), fixtureSettings),
+      lateFailure,
+    ),
   },
 })
 
@@ -30,7 +30,7 @@ export const E2EBridge = ({
 }: {
   readonly setScenario: (scenario: string) => void
 }) => {
-  const { runtime } = useSession()
+  const runtime = useRuntime()
   const stack = useCoreStack()
   const shownToken = useShownToken()
   useEffect(() => {

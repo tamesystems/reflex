@@ -6,7 +6,7 @@
 import { afterEach, expect, setDefaultTimeout, test } from "bun:test"
 import { BridgeCloseCode, ErrorCode, type RuntimeEvent } from "@reflex/protocol"
 import { type Client, createLoopbackClient } from "@reflex/rpc"
-import type { Controller } from "@reflex/runtime"
+import type { Controller } from "@reflex/runtime/internal"
 import { COUNTER_APP_MODULE } from "./counter-app.ts"
 import { type BridgedOptions, type Device, openBridged, openDevice } from "./live-bridge.ts"
 import type { DeviceReport } from "./live-device.ts"

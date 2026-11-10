@@ -68,7 +68,8 @@ packages/
   runtime/    Node registry, operations, waits, event log (runtime.ts), the
               SessionController that starts, resets and closes sessions (controller.ts),
               and restrictController, which holds any controller to a policy.
-              store-node.ts wraps existing stores with public JSON projections, Standard Schema
+              store-node.ts defines typed store nodes; store-app.ts owns their app lifetime.
+              node-handle.ts is the shared consumer contract. The store adapter wraps existing stores with public JSON projections, Standard Schema
               validation and Promise operations. No Effect, no platform APIs.
               Start: runtime.ts, then controller.ts.
   rpc/        JSON-RPC 2.0 over newline-delimited JSON. server.ts is one peer's
@@ -194,8 +195,7 @@ reported as `running`, with `settled: false`, and the command still succeeds. On
 
 ```text
 inventory-list.ts   OpenProduct's handler calls nav.push("InventoryDetail", …)
-navigation.ts       build the screen in a scope of its own, push it, set focus,
-                    start its onFocus as a tracked operation; the Navigation
+navigation.ts       build the screen in a scope of its own, push it, set focus (the runtime starts onFocus as a tracked operation); the Navigation
                     node's state (the stack) changes
 react.tsx           useCoreStack sees the new stack; RouterProjection hands it to
 projection-         ProjectionController.onStack ─► syncRouter (pure, projection.ts)
@@ -442,3 +442,24 @@ decision is in its ADR; what is still to do is in [roadmap.md](roadmap.md).
   scopes and fibers, so popping a screen interrupts its work; `TestClock` for virtual time.
   Effect is how the example app is built, not what the protocol requires
   ([ADR 0002](decisions/0002-the-runtime-is-effect-free.md)).
+
+## 8. Author-facing contracts
+
+[ADR 0020](decisions/0020-type-bearing-userland-contracts.md) records the value-based API.
+Effect capabilities and store definitions retain exact consumer action maps and state.
+NodeHandle is structural and framework-free; outcomes adapt existing operations/refusals
+without changing protocol messages. The test client's transport binds the definition's
+own serializers. Apps register node definitions for typed journey membership.
+
+Screen capabilities own params and initial state. Navigation derives screen factories;
+Expo's registration derives both mapping directions. React owns commit-time mounting and
+history-entry retention. Runtime setFocus invokes the adapter lifecycle only on arrival;
+routers and core navigation call this same operation.
+
+Public roots expose author APIs. Effect and React integration helpers are under `/internal`;
+React raw runtime access is under `/advanced`. These subpaths keep their package's existing
+dependency direction. Expo's dev entry alone may reach the live bridge, behind `__DEV__`;
+its explicit Effect entry and routes-effect helper may import Effect. Generic entries remain
+Effect-free. Vite's live/vite entry dynamically imports the dialler only in development.
+Production exclusion is checked by browser builds. UI entry files delegate optional test
+instrumentation to a development module, which production Metro removes.

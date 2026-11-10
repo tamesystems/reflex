@@ -1,5 +1,5 @@
 import { ErrorCode, LIFECYCLE_QUEUE_MAX, ProtocolError } from "@reflex/protocol"
-import type { AppHost, AppSession, BackgroundReporter, Timers } from "@reflex/runtime"
+import type { AppHost, AppSession, BackgroundReporter, Timers } from "@reflex/runtime/internal"
 import { type SessionLifecycle, SessionOwner } from "./session-owner.ts"
 
 export interface LiveSessionsOptions {

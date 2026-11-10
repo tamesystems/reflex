@@ -1,5 +1,6 @@
 import { expect, spyOn, test } from "bun:test"
-import { defineApp, defineCapability, mount, Registry, type LiveNode } from "@reflex/effect"
+import { defineApp, defineCapability, mount, type LiveNode } from "@reflex/effect"
+import { Registry } from "@reflex/effect/internal"
 import { NODE_STATE_CHARACTERS_MAX } from "@reflex/protocol"
 import { waitUntil } from "@reflex/test"
 import * as Effect from "effect/Effect"
@@ -36,7 +37,7 @@ test("a resource refusal from a UI action reaches reporting", async () => {
     if (live === undefined) {
       throw new Error("node must mount")
     }
-    send(live, "Fill")
+    void send(live, "Fill")
     await session.runtime.wait({ idle: true })
     await waitUntil(() => report.mock.calls.length > 0, "UI refusal to reach reporting")
     expect(JSON.stringify(report.mock.calls)).toContain("ResourceExhausted")

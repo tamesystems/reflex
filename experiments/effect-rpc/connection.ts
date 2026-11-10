@@ -9,7 +9,7 @@
  * cannot send. Params are still validated by our parsers. For comparison, not production.
  */
 import { paramParsers, ProtocolError, type RuntimeEvent } from "@reflex/protocol"
-import type { Controller, ControllerMethod } from "@reflex/runtime"
+import type { Controller, ControllerMethod } from "@reflex/runtime/internal"
 import * as Effect from "effect/Effect"
 import * as Fiber from "effect/Fiber"
 import * as Layer from "effect/Layer"

@@ -6,7 +6,7 @@
 import { fileURLToPath } from "node:url"
 import { afterEach, describe, expect, setDefaultTimeout, test } from "bun:test"
 import { type AccessPolicy, ErrorCode, FULL_CONTROL } from "@reflex/protocol"
-import { type Controller, createController, restrictController } from "@reflex/runtime"
+import { type Controller, createController, restrictController } from "@reflex/runtime/internal"
 import { createTestAppPool } from "@reflex/test"
 import { plainBackend } from "../examples/plain/src/app.ts"
 import effectBackend, { COUNTER_APP_MODULE } from "./counter-app.ts"
@@ -53,8 +53,8 @@ describe.each(BACKENDS)("%s backend", (_, controllerOf) => {
 
   test("dispatch runs the action and subscribers see the change in order", async () => {
     const app = await open()
-    await app.do("Add", { by: 2 })
-    await app.do("Add", { by: 3 })
+    await app.dispatchRaw("Add", { by: 2 })
+    await app.dispatchRaw("Add", { by: 3 })
     expect(app.state).toEqual({ count: 5 })
 
     const changes = app.events.flatMap((e) => (e.type === "state.changed" ? [e] : []))
@@ -65,19 +65,21 @@ describe.each(BACKENDS)("%s backend", (_, controllerOf) => {
 
   test("availability follows state", async () => {
     const app = await open()
-    expect(await app.do("Reset").catch((error: unknown) => error)).toMatchObject({
+    expect(await app.dispatchRaw("Reset").catch((error: unknown) => error)).toMatchObject({
       code: ErrorCode.ActionUnavailable,
     })
-    await app.do("Add", { by: 1 })
-    expect((await app.do("Reset")).status).toBe("completed")
+    await app.dispatchRaw("Add", { by: 1 })
+    expect((await app.dispatchRaw("Reset")).status).toBe("completed")
   })
 
   test("invalid input and unknown actions are rejected without touching state", async () => {
     const app = await open()
-    expect(await app.do("Add", { by: "x" }).catch((error: unknown) => error)).toMatchObject({
+    expect(
+      await app.dispatchRaw("Add", { by: "x" }).catch((error: unknown) => error),
+    ).toMatchObject({
       code: ErrorCode.InvalidInput,
     })
-    expect(await app.do("Nope").catch((error: unknown) => error)).toMatchObject({
+    expect(await app.dispatchRaw("Nope").catch((error: unknown) => error)).toMatchObject({
       code: ErrorCode.ActionNotFound,
     })
     await app.inspect()
@@ -87,7 +89,7 @@ describe.each(BACKENDS)("%s backend", (_, controllerOf) => {
   test("stale revisions are rejected", async () => {
     const app = await open()
     const { node } = await app.inspect()
-    await app.do("Add", { by: 1 })
+    await app.dispatchRaw("Add", { by: 1 })
     expect(
       await app.client
         .request("app.dispatch", {
@@ -102,7 +104,7 @@ describe.each(BACKENDS)("%s backend", (_, controllerOf) => {
   test("wait resolves on a later state and times out with context", async () => {
     const app = await open()
     const waiting = app.waitFor({ match: { count: 7 } })
-    await app.do("Add", { by: 7 })
+    await app.dispatchRaw("Add", { by: 7 })
     await waiting
     expect(
       await app.waitFor({ match: { count: 8 }, timeoutMs: 10 }).catch((error: unknown) => error),
@@ -126,7 +128,7 @@ describe.each(BACKENDS)("%s backend, held to an access policy,", (_, controllerO
     expect(await app.client.request("app.describe", {})).toMatchObject({
       access: { kind: "observe" },
     })
-    await expect(app.do("Add", { by: 1 })).rejects.toMatchObject({
+    await expect(app.dispatchRaw("Add", { by: 1 })).rejects.toMatchObject({
       code: ErrorCode.NotPermitted,
     })
     await expect(app.reset()).rejects.toMatchObject({ code: ErrorCode.NotPermitted })
@@ -138,9 +140,9 @@ describe.each(BACKENDS)("%s backend, held to an access policy,", (_, controllerO
 
   test("an allowlist runs the actions it names, and only those", async () => {
     const app = await open({ kind: "actions", actions: ["Add"] })
-    await app.do("Add", { by: 2 })
+    await app.dispatchRaw("Add", { by: 2 })
     expect(app.state).toEqual({ count: 2 })
-    await expect(app.do("Reset")).rejects.toMatchObject({ code: ErrorCode.NotPermitted })
+    await expect(app.dispatchRaw("Reset")).rejects.toMatchObject({ code: ErrorCode.NotPermitted })
     await expect(app.client.request("app.advanceTime", { durationMs: 1 })).rejects.toMatchObject({
       code: ErrorCode.NotPermitted,
     })

@@ -7,7 +7,7 @@ import {
   BridgeCloseCode,
   FRAME_CHARACTERS_MAX,
 } from "@reflex/protocol"
-import { createController, type Timers } from "@reflex/runtime"
+import { createController, type Timers } from "@reflex/runtime/internal"
 import { nextTurn } from "@reflex/test"
 import app from "../../../examples/inventory/src/app.ts"
 import { type BridgeSocket, type BridgeStatus, connectBridge } from "../src/bridge.ts"

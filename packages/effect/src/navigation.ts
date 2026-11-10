@@ -5,7 +5,7 @@ import {
   NAVIGATION_STACK_DEPTH_MAX,
   UNFINISHED_SCREEN_WORK_MAX,
 } from "@reflex/protocol"
-import type { Runtime } from "@reflex/runtime"
+import type { Runtime } from "@reflex/runtime/internal"
 import * as Cause from "effect/Cause"
 import * as Context from "effect/Context"
 import type * as Duration from "effect/Duration"
@@ -19,6 +19,8 @@ import * as Scope from "effect/Scope"
 import * as Semaphore from "effect/Semaphore"
 import {
   defineCapability,
+  mount,
+  type Capability,
   type LiveNode,
   mountWithAccess,
   Registry,
@@ -38,7 +40,7 @@ type RouteSchemas = { readonly [route: string]: WireCodec<Erased> }
 type ParamsOf<Routes extends RouteSchemas, K extends keyof Routes> = Schema.Schema.Type<Routes[K]>
 
 /** All the navigator needs of a screen, whatever its state and actions are. */
-type ScreenNode = Pick<LiveNode<unknown, never>, "id" | "focused" | "withdraw">
+type ScreenNode = Pick<LiveNode<unknown, never>, "id" | "dispose">
 
 type ScreenFactory<Params, R> = (params: Params) => Effect.Effect<ScreenNode, never, R>
 
@@ -92,6 +94,15 @@ export interface Navigator<Routes extends RouteSchemas> {
   readonly back: Effect.Effect<void>
 }
 
+/** The navigation service requirement is independent of the screen contract graph. */
+export class NavigationService extends Context.Service<
+  NavigationService,
+  {
+    readonly push: (route: string, params: unknown) => Effect.Effect<void, NavigationRefused>
+    readonly back: Effect.Effect<void>
+  }
+>()("@reflex/effect/Navigation") {}
+
 const NavigationState = Schema.Struct({
   stack: Schema.Array(
     Schema.Struct({
@@ -118,10 +129,7 @@ type CancelPolicy = "abandon" | "finish"
  *
  * Each route instance owns a scope, so leaving a screen cancels its work.
  */
-export const defineNavigation = <const Routes extends RouteSchemas>(
-  key: string,
-  routes: Routes,
-) => {
+const defineSchemaNavigation = <const Routes extends RouteSchemas>(key: string, routes: Routes) => {
   const Tag = Context.Service<Navigator<Routes>>(key)
 
   const layer = <R>(options: {
@@ -130,15 +138,104 @@ export const defineNavigation = <const Routes extends RouteSchemas>(
     }[keyof Routes]
     readonly screens: { readonly [K in keyof Routes]: ScreenFactory<ParamsOf<Routes, K>, R> }
   }): Layer.Layer<
-    Navigator<Routes>,
+    Navigator<Routes> | NavigationService,
     never,
-    Exclude<R, Navigator<Routes> | Scope.Scope> | Registry
+    Exclude<R, Navigator<Routes> | NavigationService | Scope.Scope> | Registry
   > =>
     // Screens may require the navigator being built here, which `provideService`
     // below satisfies. The compiler cannot see that through a generic `R`.
-    Layer.effect(Tag, buildNavigator(Tag, routes, options)) as never
+    Layer.effect(
+      NavigationService,
+      Effect.map(Tag, (nav) => ({
+        push: (route, params) => nav.push(route, params as ParamsOf<Routes, keyof Routes>),
+        back: nav.back,
+      })),
+    ).pipe(Layer.provideMerge(Layer.effect(Tag, buildNavigator(Tag, routes, options)))) as never
 
-  return { Tag, layer }
+  return {
+    Tag,
+    routes,
+    layer,
+    push: <K extends keyof Routes & string>(
+      route: K,
+      ...args: Record<string, never> extends ParamsOf<Routes, K>
+        ? [params?: ParamsOf<Routes, K>]
+        : [params: ParamsOf<Routes, K>]
+    ): Effect.Effect<void, NavigationRefused, NavigationService> =>
+      Effect.flatMap(NavigationService, (nav) =>
+        nav.push(route, (args[0] ?? {}) as ParamsOf<Routes, K>),
+      ),
+    back: Effect.flatMap(NavigationService, (nav) => nav.back),
+  }
+}
+
+/** A screen contract carries its params and initial state; the navigator mounts it. */
+type ScreenDefinitions = Record<
+  string,
+  Capability<Erased, Erased, Erased, Erased> & { readonly initial: (params: Erased) => Erased }
+>
+type ScreenParams<D extends ScreenDefinitions> = { readonly [K in keyof D]: D[K]["params"] }
+type ScreenRequirements<D extends ScreenDefinitions> =
+  D[keyof D] extends Capability<Erased, Erased, infer R, Erased> ? R : never
+
+/** Advanced schema/factory navigation remains available for custom screen ownership. */
+export const defineNavigationFactories = defineSchemaNavigation
+
+const buildScreenNavigation = <const D extends ScreenDefinitions>(key: string, screens: D) => {
+  const params = Object.fromEntries(
+    Object.entries(screens).map(([name, screen]) => [name, screen.params]),
+  ) as ScreenParams<D>
+  const navigation = defineSchemaNavigation(key, params)
+  const factories = Object.fromEntries(
+    Object.entries(screens).map(([name, screen]) => [
+      name,
+      (params: unknown) => {
+        assert(screen.initial !== undefined, `Screen "${name}" must define initial(params)`)
+        return mount(screen, screen.initial(params))
+      },
+    ]),
+  ) as unknown as {
+    readonly [K in keyof D]: ScreenFactory<
+      Schema.Schema.Type<D[K]["params"]>,
+      ScreenRequirements<D>
+    >
+  }
+  return {
+    ...navigation,
+    screens,
+    layer: (options: {
+      readonly initial: {
+        readonly [K in keyof D]: {
+          readonly route: K
+          readonly params: Schema.Schema.Type<D[K]["params"]>
+        }
+      }[keyof D]
+    }) => navigation.layer({ ...options, screens: factories }),
+  }
+}
+
+/** Resolve screens after module initialization, so features may navigate through this value. */
+export const defineNavigation = <const D extends ScreenDefinitions>(
+  key: string,
+  screens: () => D,
+) => {
+  type Built = ReturnType<typeof buildScreenNavigation<D>>
+  let built: Built | undefined
+  const get = (): Built => (built ??= buildScreenNavigation(key, screens()))
+  return {
+    get screens(): D {
+      return screens()
+    },
+    layer: (options: Parameters<Built["layer"]>[0]) => get().layer(options),
+    push: <K extends keyof D & string>(
+      route: K,
+      ...args: Record<string, never> extends ParamsOf<ScreenParams<D>, K>
+        ? [params?: ParamsOf<ScreenParams<D>, K>]
+        : [params: ParamsOf<ScreenParams<D>, K>]
+    ): Effect.Effect<void, NavigationRefused, NavigationService> =>
+      Effect.suspend(() => get().push(route, ...args)),
+    back: Effect.suspend(() => get().back),
+  }
 }
 
 const buildNavigator = <Routes extends RouteSchemas>(
@@ -166,7 +263,13 @@ const buildNavigator = <Routes extends RouteSchemas>(
       // `context` above holds everything else a screen requires, and the fiber that
       // runs this is forked with it, so the navigator is the last requirement.
       provide: (effect, navigator) =>
-        Effect.provideService(effect, Tag, navigator) as Effect.Effect<ScreenNode>,
+        Effect.provideService(effect, Tag, navigator).pipe(
+          Effect.provideService(NavigationService, {
+            push: (route, params) =>
+              navigator.push(route, params as ParamsOf<Routes, keyof Routes>),
+            back: navigator.back,
+          }),
+        ) as Effect.Effect<ScreenNode>,
     })
     const Navigation = navigationCapability(routes, stack)
     const { access } = yield* mountWithAccess(Navigation, { stack: [] })
@@ -296,7 +399,7 @@ class RouteStack<Routes extends RouteSchemas> implements Navigator<Routes> {
             if (Exit.isSuccess(exit)) {
               return Effect.void
             }
-            screen.withdraw()
+            screen.dispose()
             return this.closeScreen(scope, exit)
           }),
           Effect.catchCause(refuseOversizedStack),
@@ -394,7 +497,7 @@ class RouteStack<Routes extends RouteSchemas> implements Navigator<Routes> {
       yield* this.commit(this.entries.slice(0, -1))
       // Before its cleanup, which is app code: it can fail, or take its time.
       this.focusTop()
-      top.screen.withdraw()
+      top.screen.dispose()
       yield* this.closeScreen(top.scope, Exit.void)
     })
   }
@@ -433,6 +536,5 @@ class RouteStack<Routes extends RouteSchemas> implements Navigator<Routes> {
   private focusTop(): void {
     const top = defined(this.entries.at(-1), "the root screen is never popped")
     this.options.registry.setFocus(top.screen.id)
-    top.screen.focused()
   }
 }

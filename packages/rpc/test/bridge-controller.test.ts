@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from "bun:test"
-import { defineApp, defineCapability, mount, Registry } from "@reflex/effect"
+import { defineApp, defineCapability, mount } from "@reflex/effect"
+import { Registry } from "@reflex/effect/internal"
 import {
   BRIDGE_WAITERS_MAX,
   CANCEL_NOTIFICATION,
@@ -15,7 +16,7 @@ import {
   createLoopbackClient,
   type EventListener,
 } from "@reflex/rpc"
-import { type Controller, createController, type Timers } from "@reflex/runtime"
+import { type Controller, createController, type Timers } from "@reflex/runtime/internal"
 import { nextTurn, waitUntil } from "@reflex/test"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"

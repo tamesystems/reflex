@@ -32,7 +32,12 @@ import {
   serveSocket,
   serveStdio,
 } from "@reflex/rpc"
-import { type AppHost, type Controller, createController, reportToConsole } from "@reflex/runtime"
+import {
+  type AppHost,
+  type Controller,
+  createController,
+  reportToConsole,
+} from "@reflex/runtime/internal"
 import { type BridgeServer, loadOrCreateToken, serveBridge } from "./bridge-server.ts"
 import { type Config, stopCommand } from "./config.ts"
 import {

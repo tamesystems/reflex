@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { UNFINISHED_SESSIONS_MAX, ErrorCode } from "@reflex/protocol"
-import { type AppHost, type AppSession, createRuntime, type Timers } from "@reflex/runtime"
+import { type AppHost, type AppSession, createRuntime, type Timers } from "@reflex/runtime/internal"
 import { nextTurn } from "@reflex/test"
 import { type SessionLifecycle, SessionOwner } from "../src/session-owner.ts"
 

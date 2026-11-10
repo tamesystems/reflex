@@ -30,7 +30,7 @@ const violations = (directory: string, permit: (specifier: string) => boolean) =
 const allowing =
   (...packages: ReadonlyArray<string>) =>
   (specifier: string): boolean =>
-    packages.includes(specifier)
+    packages.includes(specifier.replace(/\/internal$/, ""))
 
 test("protocol depends on nothing", () => {
   expect(violations("packages/protocol/src", allowing())).toEqual([])
@@ -88,6 +88,7 @@ test("React bindings have no native or Expo dependency", () => {
 test("Expo owns only router integration", () => {
   const permit = allowing(
     "@reflex/effect",
+    "@reflex/live",
     "@reflex/protocol",
     "@reflex/runtime",
     "@reflex/live/session",
@@ -98,13 +99,14 @@ test("Expo owns only router integration", () => {
     "expo-router/build/global-state/internalNavigationEvents",
     "react",
   )
-  expect(violations("packages/expo/src", permit)).toEqual([])
+  expect(violations("packages/expo/src", (s) => permit(s) || isEffect(s))).toEqual([])
 })
 
 test("application core never imports a UI or device API", () => {
   const found = violations(
     "examples/inventory/src",
-    (s) => isEffect(s) || s === "@reflex/effect" || s === "@reflex/protocol",
+    (s) =>
+      isEffect(s) || s.replace(/\/internal$/, "") === "@reflex/effect" || s === "@reflex/protocol",
   )
   expect(found).toEqual([])
 })
@@ -136,7 +138,7 @@ test("plain example has no Effect or UI dependency", () => {
 })
 test("only explicit capability entries imports Effect at runtime", () => {
   for (const file of [...sources("packages/expo/src"), ...sources("packages/react/src")]) {
-    if (file.endsWith("effect.tsx")) {
+    if (file.endsWith("effect.tsx") || file.endsWith("routes-effect.ts")) {
       continue
     }
     expect(importsOf(file).filter((s) => s === "@reflex/effect" || isEffect(s))).toEqual([])

@@ -25,7 +25,7 @@ import {
   reportToConsole,
   systemTimers,
   type Timers,
-} from "@reflex/runtime"
+} from "@reflex/runtime/internal"
 import { createConnection } from "./server.ts"
 
 export interface RequestOptions {

@@ -10,7 +10,7 @@ import {
   restrictClient,
   serveSocket,
 } from "@reflex/rpc"
-import { createController, restrictController } from "@reflex/runtime"
+import { createController, restrictController } from "@reflex/runtime/internal"
 import { waitUntil } from "@reflex/test"
 import app from "../../../examples/inventory/src/app.ts"
 

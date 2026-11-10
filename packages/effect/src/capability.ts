@@ -18,7 +18,17 @@ import {
   type OperationOutcome,
   ProtocolError,
 } from "@reflex/protocol"
-import type { Invocation, NodeAdapter, Runtime } from "@reflex/runtime"
+import {
+  actionOutcome,
+  decodeActionInput,
+  bindActions,
+  type ActionOutcome,
+  type NodeHandle,
+  type ConsumerDefinition,
+  type Invocation,
+  type NodeAdapter,
+  type Runtime,
+} from "@reflex/runtime/internal"
 import * as Arbitrary from "effect/Arbitrary"
 import * as Cause from "effect/Cause"
 import * as Context from "effect/Context"
@@ -27,6 +37,7 @@ import * as Exit from "effect/Exit"
 import * as FiberSet from "effect/FiberSet"
 import * as Option from "effect/Option"
 import * as Schema from "effect/Schema"
+import type * as Redacted from "effect/Redacted"
 import type * as Scope from "effect/Scope"
 import type { Erased } from "./erased.ts"
 import { redact } from "./redaction.ts"
@@ -42,9 +53,9 @@ const NO_INPUT_SCHEMA: JsonSchema = { type: "object", additionalProperties: fals
 export class Registry extends Context.Service<Registry, Runtime>()("@reflex/effect/Registry") {}
 
 /** State's single write path. Handlers receive it; nothing else can write. */
-export interface StateAccess<S> {
+export interface StateAccess<S, Next = S> {
   readonly get: Effect.Effect<S>
-  update(transition: (state: S) => S): Effect.Effect<void>
+  update(transition: (state: Next) => Next): Effect.Effect<void>
 }
 
 declare const noInput: unique symbol
@@ -52,19 +63,19 @@ declare const noInput: unique symbol
 /** What an action without an input gets. Distinct from `unknown`, a real input type. */
 export type NoInput = typeof noInput
 
-export interface ActionDefinition<S, I, E, R> {
+export interface ActionDefinition<S, I, E, R, Next = S, W = E, In = I> {
   readonly description?: string
   /** Omit for actions that take no input. */
-  readonly input?: WireCodec<I>
+  readonly input?: Schema.Codec<I, In>
   /** Declare the failure's shape to carry it over the wire as `error.data`. */
-  readonly error?: WireCodec<E>
+  readonly error?: Schema.Codec<E, W>
   /** Return `true`, or a reason the action cannot run in this state. */
   readonly available?: (state: S) => true | string
   /**
    * Runs synchronously up to its first suspension. To exclude a second dispatch
    * through `available`, update state before suspending.
    */
-  readonly handler: (input: I, state: StateAccess<S>) => Effect.Effect<unknown, E, R>
+  readonly handler: (input: I, state: StateAccess<S, Next>) => Effect.Effect<unknown, E, R>
 }
 
 // Actions differ in I, E and R, and `Requirements` below is what recovers R.
@@ -77,7 +88,31 @@ type Requirements<A> = A[keyof A] extends infer D
     : never
   : never
 
-export interface Capability<S, A extends ActionsOf<S>, R> {
+export type PublicState<T> =
+  T extends Redacted.Redacted<unknown>
+    ? string
+    : T extends ReadonlyMap<infer K, infer V>
+      ? readonly (readonly [PublicState<K>, PublicState<V>])[]
+      : T extends ReadonlySet<infer Item>
+        ? readonly PublicState<Item>[]
+        : T extends Date
+          ? string
+          : T extends readonly (infer Item)[]
+            ? readonly PublicState<Item>[]
+            : T extends object
+              ? {
+                  readonly [K in keyof T as K extends string
+                    ? T[K] extends (...args: never[]) => unknown
+                      ? never
+                      : K
+                    : never]: PublicState<T[K]>
+                }
+              : T
+
+export interface Capability<S, A extends ActionsOf<S>, R, P = Record<string, never>, W = S>
+  extends ConsumerDefinition<PublicState<W>, ActionCalls<A>> {
+  readonly params: WireCodec<P>
+  readonly initial: ((params: P) => S) | undefined
   readonly name: string
   readonly type: NodeType
   readonly state: WireCodec<S>
@@ -86,43 +121,194 @@ export interface Capability<S, A extends ActionsOf<S>, R> {
 }
 
 /** Binds `S` so that each action infers its own input, error and services. */
-type ActionBuilder<S> = <I = NoInput, E = never, R = never>(
-  definition: ActionDefinition<S, I, E, R>,
-) => ActionDefinition<S, I, E, R>
+type DeclaredAction<S, I, E, R, Next = S, W = E, In = I> = Omit<
+  ActionDefinition<S, I, E, R, Next, W, In>,
+  "handler" | "error"
+> & {
+  readonly error: Schema.Codec<E, W>
+  readonly handler: (input: I, state: StateAccess<S, Next>) => Effect.Effect<unknown, NoInfer<E>, R>
+}
+interface GuardedActionBuilder<S, N> {
+  <I = NoInput, R = never, In = I>(
+    definition: ActionDefinition<N, I, never, R, S, never, In> & { readonly error?: never },
+  ): ActionDefinition<S, I, never, R, S, never, In>
+  <I = NoInput, E = never, R = never, W = E, In = I>(
+    definition: DeclaredAction<N, I, E, R, S, W, In>,
+  ): ActionDefinition<S, I, E, R, S, W, In>
+  reduce<I = NoInput, In = I>(
+    definition: Omit<ActionDefinition<N, I, never, never, S, never, In>, "handler"> & {
+      readonly reducer: (input: I, state: N) => S
+    },
+  ): ActionDefinition<S, I, never, never, S, never, In>
+}
+interface ActionBuilder<S> {
+  <I = NoInput, R = never, In = I>(
+    definition: ActionDefinition<S, I, never, R, S, never, In> & { readonly error?: never },
+  ): ActionDefinition<S, I, never, R, S, never, In>
+  <I = NoInput, E = never, R = never, W = E, In = I>(
+    definition: DeclaredAction<S, I, E, R, S, W, In>,
+  ): ActionDefinition<S, I, E, R, S, W, In>
+  when<K extends S extends { readonly _tag: infer T } ? T & string : never>(
+    tag: K,
+    reason?: string,
+  ): GuardedActionBuilder<S, Extract<S, { readonly _tag: K }>>
+}
+
+const actionBuilder = <S>(): ActionBuilder<S> =>
+  Object.assign(
+    <I = NoInput, E = never, R = never>(definition: ActionDefinition<S, I, E, R>) => definition,
+    {
+      when: <K extends S extends { readonly _tag: infer T } ? T & string : never>(
+        tag: K,
+        reason = `Requires ${tag} state`,
+      ) => {
+        type N = Extract<S, { readonly _tag: K }>
+        const matches = (state: S): state is N =>
+          typeof state === "object" && state !== null && "_tag" in state && state._tag === tag
+        const build = <I = NoInput, E = never, R = never>(
+          definition: ActionDefinition<N, I, E, R, S, Erased, Erased>,
+        ): ActionDefinition<S, I, E, R, S, Erased, Erased> => ({
+          ...definition,
+          available: (state) => (matches(state) ? (definition.available?.(state) ?? true) : reason),
+          handler: (input, state) =>
+            definition.handler(input, {
+              get: Effect.flatMap(state.get, (current) =>
+                matches(current) ? Effect.succeed(current) : Effect.interrupt,
+              ),
+              update: state.update,
+            }),
+        })
+        return Object.assign(build, {
+          reduce: <I = NoInput>(
+            definition: Omit<ActionDefinition<N, I, never, never, S>, "handler"> & {
+              readonly reducer: (input: I, state: N) => S
+            },
+          ) =>
+            build({
+              ...definition,
+              handler: (input, state) =>
+                state.update((current) =>
+                  matches(current) ? definition.reducer(input, current) : current,
+                ),
+            }),
+        })
+      },
+    },
+  ) as ActionBuilder<S>
 
 /**
  * Declare state and actions once. Validation, JSON Schema, availability and
  * input generators all derive from this definition.
  */
-export const defineCapability = <S, A extends ActionsOf<S>, R = never>(definition: {
-  readonly name: string
+interface CapabilityDefinition<S, A extends ActionsOf<S>, R, P, W, Name extends string> {
+  readonly params?: WireCodec<P>
+  readonly initial?: (params: P) => NoInfer<S>
+  readonly name: Name
   readonly type?: NodeType
-  readonly state: WireCodec<S>
+  readonly state: Schema.Codec<S, W>
   readonly actions: (action: ActionBuilder<S>) => A
   /** Runs each time the node gains focus; use it to load or refresh. */
   readonly onFocus?: (state: StateAccess<S>) => Effect.Effect<unknown, unknown, R>
-}): Capability<S, A, R | Requirements<A>> => ({
-  name: definition.name,
-  type: definition.type ?? "screen",
-  state: definition.state,
-  actions: definition.actions((action) => action),
-  onFocus: definition.onFocus,
-})
+}
+
+export function defineCapability<
+  S,
+  A extends ActionsOf<S>,
+  R = never,
+  P = Record<string, never>,
+  W = S,
+  const Name extends string = string,
+>(
+  definition: CapabilityDefinition<S, A, R, P, W, Name> & {
+    readonly initial: (params: P) => NoInfer<S>
+  },
+): Capability<S, A, R | Requirements<A>, P, W> & {
+  readonly name: Name
+  readonly initial: (params: P) => S
+}
+export function defineCapability<
+  S,
+  A extends ActionsOf<S>,
+  R = never,
+  P = Record<string, never>,
+  W = S,
+  const Name extends string = string,
+>(
+  definition: Omit<CapabilityDefinition<S, A, R, P, W, Name>, "initial"> & {
+    readonly initial?: never
+  },
+): Capability<S, A, R | Requirements<A>, P, W> & { readonly name: Name }
+export function defineCapability<
+  S,
+  A extends ActionsOf<S>,
+  R = never,
+  P = Record<string, never>,
+  W = S,
+  const Name extends string = string,
+>(
+  definition: CapabilityDefinition<S, A, R, P, W, Name>,
+): Capability<S, A, R | Requirements<A>, P, W> & { readonly name: Name } {
+  const actions = definition.actions(actionBuilder<S>())
+  return {
+    params: definition.params ?? (Schema.Record(Schema.String, Schema.Never) as WireCodec<P>),
+    initial: definition.initial,
+    name: definition.name,
+    type: definition.type ?? "screen",
+    state: definition.state,
+    actions,
+    client: {
+      input: (name, args) => {
+        const action = defined(actions[name], "action names come from the definition")
+        return action.input === undefined ? undefined : (args[0] as Json)
+      },
+      // State was validated and redacted by the producing adapter. Journeys observe its wire view.
+      state: (raw) => raw as PublicState<W>,
+      actions: (run) =>
+        bindActions<ActionCalls<A>>(Object.keys(actions), (name, args) =>
+          actionOutcome(() => {
+            const action = defined(actions[name], "action names come from the definition")
+            return run(name, action.input === undefined ? undefined : (args[0] as Json))
+          }),
+        ),
+    },
+    onFocus: definition.onFocus,
+  }
+}
 
 /** A live instance. The same object serves the UI and the protocol. */
-export interface LiveNode<S, A> {
+export type NodeOf<C> = C extends { readonly state: WireCodec<infer S>; readonly actions: infer A }
+  ? LiveNode<S, A>
+  : never
+
+export type ActionCalls<A> = {
+  readonly [K in keyof A]: (
+    ...args: ConsumerArgs<A[K]>
+  ) => Promise<ActionOutcome<ActionError<A[K]>>>
+}
+type ConsumerArgs<D> =
+  D extends ActionDefinition<Erased, infer I, Erased, Erased, Erased, Erased, infer In>
+    ? [I] extends [NoInput]
+      ? []
+      : [input: PublicState<In>]
+    : never
+type ActionError<D> =
+  D extends ActionDefinition<Erased, Erased, Erased, Erased, Erased, infer W>
+    ? PublicState<W>
+    : never
+
+export interface LiveNode<S, A> extends NodeHandle<S, ActionCalls<A>> {
   readonly id: NodeId
   readonly name: string
   /** Stable between changes, as `useSyncExternalStore` requires. */
   getSnapshot(): S
   subscribe(listener: () => void): () => void
   /** Goes through the same validation and tracking as a remote dispatch. */
-  send<K extends keyof A & string>(action: K, ...args: SendArgs<A[K]>): Promise<OperationInfo>
-  /** Start `onFocus`. Called by whatever owns focus. */
-  focused(): void
-  /** Refuse further actions and leave the registry. Closing its scope does this too. */
-  withdraw(): void
+  send(...args: ActionArgs<A>): Promise<OperationInfo>
 }
+
+export type ActionArgs<A> = {
+  [K in keyof A & string]: [action: K, ...args: SendArgs<A[K]>]
+}[keyof A & string]
 
 export type SendArgs<D> =
   D extends ActionDefinition<Erased, infer I, Erased, Erased>
@@ -132,10 +318,10 @@ export type SendArgs<D> =
     : never
 
 /** A screen of a known capability behind a protocol handle, for UI bindings. */
-export const liveNodeOf = <S, A extends ActionsOf<S>, R>(
+export const liveNodeOf = <S, A extends ActionsOf<S>, R, P, W>(
   runtime: Runtime,
   nodeId: NodeId,
-  capability: Capability<S, A, R>,
+  capability: Capability<S, A, R, P, W>,
 ): LiveNode<S, A> | undefined => {
   const live = runtime.liveOf(nodeId)
   if (live instanceof NodeInstance && live.isInstanceOf(capability)) {
@@ -154,15 +340,15 @@ export interface MountedNode<S, A> {
  * Create and register a live node. It lives as long as the surrounding scope;
  * closing that scope interrupts its running actions and unregisters it.
  */
-export const mount = <S, A extends ActionsOf<S>, R>(
-  capability: Capability<S, A, R>,
+export const mount = <S, A extends ActionsOf<S>, R, P, W>(
+  capability: Capability<S, A, R, P, W>,
   initial: S,
 ): Effect.Effect<LiveNode<S, A>, never, R | Registry | Scope.Scope> =>
   Effect.map(mountWithAccess(capability, initial), ({ node }) => node)
 
 /** Like `mount`, for owners that also write state from outside an action. */
-export const mountWithAccess = <S, A extends ActionsOf<S>, R>(
-  capability: Capability<S, A, R>,
+export const mountWithAccess = <S, A extends ActionsOf<S>, R, P, W>(
+  capability: Capability<S, A, R, P, W>,
   initial: S,
 ): Effect.Effect<MountedNode<S, A>, never, R | Registry | Scope.Scope> =>
   Effect.gen(function* () {
@@ -179,7 +365,7 @@ export const mountWithAccess = <S, A extends ActionsOf<S>, R>(
       },
     })
     instance.register()
-    yield* Effect.addFinalizer(() => Effect.sync(() => instance.withdraw()))
+    yield* Effect.addFinalizer(() => Effect.sync(() => instance.dispose()))
     return { node: instance, access: instance.access }
   })
 
@@ -338,6 +524,18 @@ const toOutcome = (
   }
   const failure = Cause.findErrorOption(exit.cause)
   if (Option.isSome(failure)) {
+    if (schema === undefined) {
+      return {
+        status: "failed",
+        error: {
+          tag: "UndeclaredFailure",
+          defect: true,
+          message: boundedText(
+            `Undeclared failure: ${describeFailure(failure.value, undefined).message}`,
+          ),
+        },
+      }
+    }
     return { status: "failed", error: describeFailure(failure.value, schema) }
   }
   const message = summarizeCause(exit.cause)
@@ -394,17 +592,19 @@ interface CompiledAction<S> {
   readonly encode: (input: unknown) => Json
 }
 
-class NodeInstance<S, A extends ActionsOf<S>, R> implements NodeAdapter, LiveNode<S, A> {
+class NodeInstance<S, A extends ActionsOf<S>, R, P, W> implements NodeAdapter, LiveNode<S, A> {
   readonly id: NodeId
   readonly type: NodeType
   readonly name: string
   readonly live = this
+  readonly actions: ActionCalls<A>
   private state: S
   /** Encoded state, kept until the next change. */
   private encoded: Json
   private readonly encodeState: (state: S) => Json
   private readonly compiled: ReadonlyMap<string, CompiledAction<S>>
   private readonly listeners = new Set<() => void>()
+  private readonly availabilityListeners = new Set<() => void>()
   private focus: FocusWork = { kind: "idle" }
   private unregister: () => void = () => undefined
 
@@ -414,10 +614,20 @@ class NodeInstance<S, A extends ActionsOf<S>, R> implements NodeAdapter, LiveNod
   }
 
   constructor(
-    private readonly capability: Capability<S, A, R>,
+    private readonly capability: Capability<S, A, R, P, W>,
     initial: S,
     private readonly host: NodeHost<R>,
   ) {
+    this.actions = bindActions<ActionCalls<A>>(Object.keys(capability.actions), (name, args) =>
+      actionOutcome(() =>
+        this.host.registry.dispatch({
+          nodeId: this.id,
+          action: name,
+          await: true,
+          ...(capability.actions[name]?.input === undefined ? {} : { input: args[0] as Json }),
+        }),
+      ),
+    )
     this.type = capability.type
     this.name = capability.name
     this.id = host.registry.nextId(capability.type, capability.name)
@@ -458,7 +668,7 @@ class NodeInstance<S, A extends ActionsOf<S>, R> implements NodeAdapter, LiveNod
     return this.encoded
   }
 
-  actions(): { readonly [name: string]: ActionDescriptor } {
+  describeActions(): { readonly [name: string]: ActionDescriptor } {
     return Object.fromEntries(
       [...this.compiled].map(([key, action]) => [key, this.describeAction(action)]),
     )
@@ -469,7 +679,7 @@ class NodeInstance<S, A extends ActionsOf<S>, R> implements NodeAdapter, LiveNod
       this.compiled.get(key),
       "the runtime checked the action exists",
     )
-    const input = decode(raw)
+    const input = decodeActionInput(this.name, key, raw, decode)
     return () =>
       this.run(
         Effect.suspend(() => definition.handler(input, this.access)),
@@ -493,10 +703,7 @@ class NodeInstance<S, A extends ActionsOf<S>, R> implements NodeAdapter, LiveNod
    * Async so that an input that will not encode is a rejection, like any other
    * refusal. Inputs are encoded whole: a password in an input is meant to arrive.
    */
-  async send<K extends keyof A & string>(
-    action: K,
-    ...args: SendArgs<A[K]>
-  ): Promise<OperationInfo> {
+  async send(...[action, ...args]: ActionArgs<A>): Promise<OperationInfo> {
     const compiled = defined(this.compiled.get(action), "action names are typed")
     const target = { nodeId: this.id, action, await: true }
     if (compiled.definition.input === undefined) {
@@ -507,6 +714,36 @@ class NodeInstance<S, A extends ActionsOf<S>, R> implements NodeAdapter, LiveNod
     return this.host.registry.dispatch({ ...target, input: compiled.encode(value) })
   }
 
+  availability(action: keyof A & string): true | string {
+    if (this.focus.kind === "retired" || this.host.registry.closed) {
+      return "The node is disposed"
+    }
+    if (this.type === "screen" && this.host.registry.focus !== this.id) {
+      return "The screen is not focused"
+    }
+    return this.capability.actions[action]?.available?.(this.state) ?? true
+  }
+
+  subscribeAvailability = (listener: () => void): (() => void) => {
+    if (this.availabilityListeners.size >= NODE_LISTENERS_MAX) {
+      throw new ProtocolError(ErrorCode.ResourceExhausted, "Too many guard listeners on one node")
+    }
+    this.availabilityListeners.add(listener)
+    return () => {
+      this.availabilityListeners.delete(listener)
+    }
+  }
+
+  availabilityChanged(): void {
+    for (const listener of [...this.availabilityListeners]) {
+      try {
+        listener()
+      } catch (error) {
+        this.host.registry.report(error)
+      }
+    }
+  }
+
   register(): void {
     this.unregister = this.host.registry.register(this)
   }
@@ -515,14 +752,16 @@ class NodeInstance<S, A extends ActionsOf<S>, R> implements NodeAdapter, LiveNod
    * Out of reach and stopping from here on, ahead of a cleanup that may take its time.
    * Nothing may start here again, including a queued refocus.
    */
-  withdraw(): void {
+  dispose(): void {
     this.focus = { kind: "retired" }
+    this.availabilityChanged()
+    this.availabilityListeners.clear()
     this.unregister()
     this.unregister = () => undefined
     this.host.interruptAll()
   }
 
-  focused(): void {
+  onFocus(): void {
     const { focus } = this
     switch (focus.kind) {
       case "idle":
@@ -595,6 +834,7 @@ class NodeInstance<S, A extends ActionsOf<S>, R> implements NodeAdapter, LiveNod
     for (const listener of [...this.listeners]) {
       this.notify(listener)
     }
+    this.availabilityChanged()
   }
 
   /** The state has changed: one listener's failure cannot undo that for the others. */

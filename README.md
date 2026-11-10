@@ -32,7 +32,7 @@ live bridge need no React, React Native or Expo.
 ```
 
 - **Protocol and runtime**: JSON contracts, a registry of nodes, operations and events,
-  and `mountStore` for existing stores with Standard Schema inputs.
+  and type-bearing store definitions with Standard Schema inputs.
 - **Effect integration**: `defineCapability`, `defineNavigation`, `defineApp`.
 - **CLI**: background sessions, the device bridge and the MCP server.
 - **Live serving**: `@reflex/live` connects any JS app to the bridge with a global WebSocket.
@@ -48,24 +48,22 @@ Behavior is declared once; validation, JSON Schema, availability and input gener
 derive from it. From `examples/inventory/src/features/inventory-detail.ts`:
 
 ```ts
-SetQuantity: action({
-  description: "Set the quantity directly",
+SetQuantity: action.when("editing").reduce({
   input: Schema.Struct({ quantity: Quantity }),
-  available: whenEditing, // true, or why not: "Product is loading"
-  handler: ({ quantity }, state) => edit(state, (s) => ({ ...s, quantity })),
+  reducer: ({ quantity }, state) => ({ ...state, quantity }),
 }),
 ```
 
-A journey drives the app through the real protocol, on virtual time. From
+A journey drives the app through the real protocol, with inferred inputs and state. From
 `examples/inventory/test/journey.test.ts`:
 
 ```ts
-const session = await pool.open(app, { scenario: "slow-network" })
-await session.do("OpenProduct", { productId: "product-123" })
-const operation = await session.start("Save")
-await session.advanceTime(5_000) // returns at once: the clock is virtual
-await session.waitFor({ operationId: operation.operationId })
-expect(session.state).toMatchObject({ _tag: "editing", error: "Save timed out" })
+const session = await pool.open(app, { scenario: "inventory-with-products" })
+const list = await session.focused(InventoryList, { _tag: "ready" })
+await list.actions.OpenProduct({ productId: "product-123" })
+const detail = await session.focused(InventoryDetail, { _tag: "editing" })
+await detail.actions.SetQuantity({ quantity: 12 })
+expect((await detail.actions.Save()).status).toBe("completed")
 ```
 
 ## Start here

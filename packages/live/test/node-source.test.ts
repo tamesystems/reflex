@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { ErrorCode } from "@reflex/protocol"
-import { createRuntime, mountStore } from "@reflex/runtime"
+import { createRuntime, mountStore } from "@reflex/runtime/internal"
 import { nodeSource, reportFocus } from "../src/node-source.ts"
 
 test("generic source binds an adapter without a live object and caches by revision", async () => {
@@ -13,7 +13,7 @@ test("generic source binds an adapter without a live object and caches by revisi
     type: "service",
     name: "Bare",
     snapshot: () => ({ count }),
-    actions: () => ({ Add: { available: true, inputSchema: {} } }),
+    describeActions: () => ({ Add: { available: true, inputSchema: {} } }),
     subscribe: (listener) => {
       changed = listener
       return () => undefined
@@ -61,4 +61,35 @@ test("external router focus gates screens; old cleanup cannot clear newer focus"
   expect(runtime.focus).toBeNull()
   first.dispose()
   second.dispose()
+})
+
+test("existing-router focus starts Effect onFocus once per arrival", async () => {
+  const { defineCapability, mount } = await import("@reflex/effect")
+  const { Registry } = await import("@reflex/effect/internal")
+  const Effect = await import("effect/Effect")
+  const Schema = await import("effect/Schema")
+  const runtime = createRuntime({ sessionId: "external-focus" })
+  const Screen = defineCapability({
+    name: "Screen",
+    state: Schema.Number,
+    actions: () => ({}),
+    onFocus: (state) => state.update((count) => count + 1),
+  })
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const node = yield* mount(Screen, 0)
+        const leave = reportFocus(runtime, node.id)
+        yield* Effect.promise(() => runtime.wait({ idle: true }))
+        expect(node.getSnapshot()).toBe(1)
+        reportFocus(runtime, node.id)
+        yield* Effect.promise(() => runtime.wait({ idle: true }))
+        expect(node.getSnapshot()).toBe(1)
+        leave()
+        reportFocus(runtime, node.id)
+        yield* Effect.promise(() => runtime.wait({ idle: true }))
+        expect(node.getSnapshot()).toBe(2)
+      }).pipe(Effect.provideService(Registry, runtime)),
+    ),
+  )
 })

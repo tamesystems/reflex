@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { createController } from "@reflex/runtime"
+import { createController } from "@reflex/runtime/internal"
 import { defineApp } from "@reflex/effect"
 import { createLoopbackClient } from "@reflex/rpc"
 import { INVENTORY_HTTP_BODY_BYTES_MAX, INVENTORY_HTTP_TIMEOUT_MS } from "../src/limits.ts"
