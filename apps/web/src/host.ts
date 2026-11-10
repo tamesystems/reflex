@@ -1,8 +1,9 @@
 import { defineStoreApp, defineStoreNode } from "@reflex/runtime"
 
-const counter = (name: string) =>
+const counter = <const Name extends string>(name: Name) =>
   defineStoreNode({
     name,
+    type: "screen",
     store: () => {
       let state = { count: 0 }
       const listeners = new Set<() => void>()
@@ -27,4 +28,4 @@ const counter = (name: string) =>
   })
 export const List = counter("List")
 export const Detail = counter("Detail")
-export const host = defineStoreApp({ name: "router-counter", nodes: {} })
+export const host = defineStoreApp({ name: "router-counter", routes: { List, Detail } })

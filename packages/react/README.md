@@ -1,20 +1,24 @@
 # @reflex/react
 
-React bindings for any AppHost, with no router, Effect, Expo or React Native dependency.
+`ReflexProvider` owns the session and resets its subtree when session identity changes.
+`useNode(Definition, { focus: true })` composes an ambient node's state, guards and actions.
+Router adapters expose the same view through `useScreen`:
 
-`ReflexProvider` owns sessions and resets its subtree when session identity changes.
-`useNode(Definition)` retains inferred store state/actions; `useNodeState(node)` subscribes
-to structural state sources. `useAction(node, "Save")` returns typed `run`, guard availability
-and reason, pending state and outcome. Use the definition's guard to disable the UI.
-`useSession()` exposes scenario/reset controls. `useNodeFocus` reports existing-router focus.
+```tsx
+const view = useNode(Counter, { focus: true })
+if (view.status === "pending") return <p>Loading…</p>
+return <button disabled={!view.actions.Add.available} onClick={() => view.actions.Add.run({ by: 1 })}>{view.state.count}</button>
+```
 
-`useMountedNode` mounts after commit with component or history-entry lifetime. Retention
-ends with the session. Raw access is explicit: `/advanced` exports `useRuntime` and
-`useRawNode`. `/internal` contains route selection and the raw session for sibling bindings.
-The optional `/effect` entry adds capability lookup for custom route bindings.
+Action views have `run`, `available`, `reason` and `pending`. They report unexpected
+failures even when a UI ignores a returned promise. `useNodeState(nonNullNode)` returns
+non-null state. `useAction` and `useNodeFocus` remain granular integration hooks.
+`useNode` subscribes to registry membership; guard subscriptions are independent of public
+state equality. `useSession(app)` uses the app as a type witness for scenario controls,
+including when the provider uses a development host wrapping it.
 
-Use Expo's `developmentBridge()` or Vite's live/vite equivalent as the provider's `bridge`.
-Only one connector type, `Bridge`, is exported. The generic entry never imports the dialler.
-
-Start with [adopting](../../docs/adopting.md), then `src/react.tsx` and `src/route-binding.ts`.
-Session replacement unmounts owned nodes; focus cleanup never clears a newer screen.
+`/advanced` is the documented application escape hatch for raw runtime/source access and
+secondary dispatch. `/internal` is the sibling adapter seam for route selection and raw
+sessions; it is separate to avoid making implementation plumbing part of the app API.
+The optional `/effect` entry supplies capability lookup for custom bindings. The default
+entry imports no Effect, router, native framework, or bridge dialler.

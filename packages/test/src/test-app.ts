@@ -20,7 +20,7 @@ import { createJourneyClient, type JourneyClient } from "./journey-client.ts"
 
 type DefinitionsOf<H> = H extends { readonly nodes: infer N }
   ? Extract<N[keyof N], ConsumerDefinition>
-  : ConsumerDefinition
+  : never
 const JOURNEY_STEP_TIMEOUT_MS_DEFAULT = 2_000
 /** A journey is short. More than this means something is looping. */
 const OBSERVED_EVENTS_MAX = 20_000
@@ -195,10 +195,15 @@ class Journey implements TestApp {
   ) {
     this.client = createLoopbackClient(controller)
     const journey = createJourneyClient({
-      inspect: async (name) =>
-        name === undefined
-          ? defined((await this.inspect()).node ?? undefined, "A focused journey has a node")
-          : this.inspectRaw(name),
+      inspect: async (name, nodeId) =>
+        nodeId !== undefined
+          ? defined(
+              (await this.client.request("app.inspect", { nodeId })).node ?? undefined,
+              "The journey node is still mounted",
+            )
+          : name === undefined
+            ? defined((await this.inspect()).node ?? undefined, "A focused journey has a node")
+            : this.inspectRaw(name),
       wait: (name, match) => this.precondition(name, match),
       dispatch: async (nodeId, action, input) => {
         const { operationId } = await this.client.request("app.dispatch", {

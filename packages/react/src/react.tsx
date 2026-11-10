@@ -1,4 +1,4 @@
-import { assertNever, ErrorCode, type NodeId } from "@reflex/protocol"
+import { assertNever, ErrorCode, ROUTER_RETAINED_ENTRIES_MAX, type NodeId } from "@reflex/protocol"
 import {
   type ActionOutcome,
   type ScenarioName,
@@ -17,7 +17,6 @@ import {
 } from "@reflex/live/session"
 import * as React from "react"
 import { findRouteNode, type RouteEntry } from "./route-binding.ts"
-export { send } from "@reflex/live/session"
 export interface RouteBinding {
   readonly stack: ReadonlyArray<RouteEntry>
   readonly token: string | null
@@ -46,9 +45,8 @@ export const useSession = <H extends AppHost = AppHost>(
   if (controls === null) {
     throw new Error("useSession requires ReflexProvider")
   }
-  if (host !== undefined && controls.host !== host) {
-    throw new Error("useSession(app) must name the provider host")
-  }
+  // The app is a type witness: providers may wrap a host with development services.
+  void host
   return { scenario: controls.scenario as ScenarioName<H>, reset: controls.reset }
 }
 export const useRuntime = (): Runtime => useRuntimeSession().runtime
@@ -164,8 +162,14 @@ export interface StateSource<S> {
 }
 
 /** Subscribe to a node the way any external store is subscribed to. */
-export const useNodeState = <S,>(node: StateSource<S> | null): S | null =>
-  React.useSyncExternalStore(node?.subscribe ?? noSubscription, () => node?.getSnapshot() ?? null)
+export function useNodeState<S>(node: StateSource<S>): S
+export function useNodeState<S>(node: StateSource<S> | null): S | null
+export function useNodeState<S>(node: StateSource<S> | null): S | null {
+  return React.useSyncExternalStore(
+    node?.subscribe ?? noSubscription,
+    () => node?.getSnapshot() ?? null,
+  )
+}
 
 /** Report focus from an existing router; cleanup never clears a newer screen's focus. */
 export const useNodeFocus = (node: { readonly id: NodeId } | null, focused: boolean): void => {
@@ -259,9 +263,14 @@ export const useAction = <
 }
 
 /** Resolve a definition mounted by the app, retaining its exact consumer contract. */
-export const useNode = <N,>(definition: { resolve(runtime: Runtime): N | undefined }): N | null => {
+export const useNodeHandle = <N,>(definition: {
+  resolve(runtime: Runtime): N | undefined
+}): N | null => {
   const { runtime } = useRuntimeSession()
-  return definition.resolve(runtime) ?? null
+  return React.useSyncExternalStore(
+    React.useCallback((listener) => runtime.subscribe(() => listener()), [runtime]),
+    () => definition.resolve(runtime) ?? null,
+  )
 }
 
 interface OwnedNode {
@@ -288,17 +297,52 @@ const OwnedNodes = ({ children }: { readonly children: React.ReactNode }) => {
   return <OwnershipContext.Provider value={nodes}>{children}</OwnershipContext.Provider>
 }
 
+const historyEntries = new WeakMap<Map<string, Ownership>, { keys: string[]; index: number }>()
+const retainHistoryEntry = (
+  owner: Map<string, Ownership>,
+  key: string,
+  kind: "POP" | "PUSH" | "REPLACE" | undefined,
+): void => {
+  if (kind === undefined) {
+    return
+  }
+  const history = historyEntries.get(owner) ?? { keys: [], index: -1 }
+  historyEntries.set(owner, history)
+  const existing = history.keys.indexOf(key)
+  if (existing >= 0) {
+    history.index = existing
+    return
+  }
+  const discard =
+    kind === "REPLACE"
+      ? history.keys.splice(Math.max(0, history.index))
+      : history.keys.splice(history.index + 1)
+  for (const obsolete of discard) {
+    const entry = owner.get(obsolete)
+    if (entry !== undefined && entry.users === 0) {
+      owner.delete(obsolete)
+      entry.node.dispose()
+    }
+  }
+  history.keys.push(key)
+  if (history.keys.length > ROUTER_RETAINED_ENTRIES_MAX) {
+    history.keys.shift()
+  }
+  history.index = history.keys.length - 1
+}
+
 /** Mount after commit; history entries are retained until the session ends. */
 export const useMountedNode = <N extends OwnedNode>(
   definition: { mount(runtime: Runtime): N },
   options: {
     readonly key: string
     readonly lifetime?: "component" | "history-entry"
+    readonly navigationType?: "POP" | "PUSH" | "REPLACE"
   },
 ): N | null => {
   const { runtime } = useRuntimeSession()
   const owner = React.useContext(OwnershipContext)
-  const { key, lifetime = "component" } = options
+  const { key, lifetime = "component", navigationType } = options
   const [mounted, setMounted] = React.useState<{ key: string; definition: object; node: N } | null>(
     null,
   )
@@ -306,11 +350,23 @@ export const useMountedNode = <N extends OwnedNode>(
     if (owner === null) {
       throw new Error("useMountedNode requires ReflexProvider")
     }
+    retainHistoryEntry(owner, key, navigationType)
     let entry = owner.get(key)
     if (entry !== undefined && entry.definition !== definition) {
       throw new Error(`History entry "${key}" already owns another definition`)
     }
     if (entry === undefined) {
+      if (lifetime === "history-entry") {
+        for (const [oldKey, old] of owner) {
+          if (owner.size < ROUTER_RETAINED_ENTRIES_MAX) {
+            break
+          }
+          if (old.users === 0) {
+            owner.delete(oldKey)
+            old.node.dispose()
+          }
+        }
+      }
       entry = {
         definition,
         node: definition.mount(runtime),
@@ -330,6 +386,99 @@ export const useMountedNode = <N extends OwnedNode>(
         owned.node.dispose()
       }
     }
-  }, [runtime, owner, definition, key, lifetime])
+  }, [runtime, owner, definition, key, lifetime, navigationType])
   return mounted?.key === key && mounted.definition === definition ? mounted.node : null
+}
+
+export type ActionViews<A> = {
+  readonly [K in keyof A]: {
+    readonly run: A[K]
+    readonly available: boolean
+    readonly reason: string | null
+    readonly pending: boolean
+  }
+}
+type ViewActions = Record<string, (...args: never) => Promise<ActionOutcome<unknown>>>
+export type NodeView<S, A> =
+  | { readonly status: "pending"; readonly state: null; readonly actions: null }
+  | { readonly status: "ready"; readonly state: S; readonly actions: ActionViews<A> }
+const noPending: ReadonlyMap<string, number> = new Map()
+
+/** Compose state, independent guards and action progress with one fixed set of hooks. */
+export const useNodeView = <S, A extends ViewActions>(
+  node: {
+    readonly actions: A
+    getSnapshot(): S
+    subscribe(listener: () => void): () => void
+    subscribeAvailability(listener: () => void): () => void
+    availability(action: keyof A & string): true | string
+  } | null,
+): NodeView<S, A> => {
+  const state = useNodeState(node)
+  const guards = React.useSyncExternalStore(node?.subscribeAvailability ?? noSubscription, () =>
+    node === null
+      ? ""
+      : JSON.stringify(Object.keys(node.actions).map((name) => node.availability(name))),
+  )
+  const [progress, setProgress] = React.useState<{
+    node: typeof node
+    counts: ReadonlyMap<string, number>
+  }>({ node, counts: noPending })
+  const pending = progress.node === node ? progress.counts : noPending
+  const actions = React.useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(node?.actions ?? {}).map(([name, invoke], index) => {
+          const verdict =
+            (JSON.parse(guards) as readonly (true | string)[])[index] ?? "Screen is not mounted"
+          return [
+            name,
+            {
+              available: verdict === true,
+              reason: verdict === true ? null : verdict,
+              pending: (pending.get(name) ?? 0) > 0,
+              run: async (...args: never[]) => {
+                setProgress((previous) => {
+                  const counts = previous.node === node ? previous.counts : noPending
+                  return { node, counts: new Map(counts).set(name, (counts.get(name) ?? 0) + 1) }
+                })
+                try {
+                  return await (invoke as (...input: unknown[]) => Promise<ActionOutcome<unknown>>)(
+                    ...args,
+                  )
+                } finally {
+                  setProgress((previous) =>
+                    previous.node === node
+                      ? {
+                          node,
+                          counts: new Map(previous.counts).set(
+                            name,
+                            Math.max(0, (previous.counts.get(name) ?? 1) - 1),
+                          ),
+                        }
+                      : previous,
+                  )
+                }
+              },
+            },
+          ]
+        }),
+      ) as unknown as ActionViews<A>,
+    [node, guards, pending],
+  )
+  return node === null
+    ? { status: "pending", state: null, actions: null }
+    : { status: "ready", state: state as S, actions }
+}
+
+/** Ambient lookup subscribes to membership and optionally owns focus while displayed. */
+export const useNode = <S, A extends ViewActions>(
+  definition: {
+    resolve(runtime: Runtime): import("@reflex/runtime/internal").NodeHandle<S, A> | undefined
+  },
+  options: { readonly focus?: boolean } = {},
+): NodeView<S, A> => {
+  const node = useNodeHandle(definition)
+  useNodeFocus(node, options.focus === true)
+  return useNodeView(node)
 }

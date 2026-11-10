@@ -15,10 +15,12 @@ import {
 } from "@reflex/protocol"
 import {
   actionOutcome,
+  reportActionOutcome,
   decodeActionInput,
   bindActions,
   type ActionOutcome,
   type NodeHandle,
+  type DeepReadonly,
 } from "./node-handle.ts"
 import type { Invocation } from "./operations.ts"
 import type { NodeAdapter, Runtime } from "./runtime.ts"
@@ -71,7 +73,7 @@ export interface StoreInput<T, I = T> {
 }
 
 /** Supply the validator's *input* JSON Schema, including its strictness/refinements. */
-export const standardInput = <T, I = T>(
+export const standardInput = <T, I = unknown>(
   validator: StandardValidator<T, I>,
   jsonSchema?: unknown,
 ): StoreInput<T, I> => ({
@@ -133,12 +135,11 @@ export interface StoreAction<S, I = unknown, T extends Store<S> = Store<S>, W = 
   readonly description?: string
   readonly available?: (state: S) => true | string
   handler(
-    input: I,
+    input: NoInfer<I>,
     context: {
       readonly store: T
       readonly signal: AbortSignal
-      readonly fail: (error: NoInfer<E>) => never
-    },
+    } & ([E] extends [never] ? unknown : { readonly fail: (error: NoInfer<E>) => never }),
   ): unknown
 }
 
@@ -256,34 +257,62 @@ const failedOutcome = (error: unknown): OperationOutcome => {
 }
 
 // Heterogeneous definitions erase variance only after the builder checked each action.
-// biome-ignore lint/suspicious/noExplicitAny: each action is checked by StoreActionBuilder.
-type AnyStoreAction<S> = StoreAction<S, any, Store<S>, any, any>
-type StoreArgs<D> = D extends { readonly input?: StoreInput<unknown, infer I> }
-  ? unknown extends I
-    ? []
-    : [I] extends [undefined]
+type AnyStoreAction<S> = Omit<StoreAction<S, unknown, Store<S>, unknown, never>, "error"> & {
+  readonly error?: StoreInput<unknown>
+}
+type StoreArgs<D> = D extends { readonly input: StoreInput<unknown, infer I> }
+  ? [input: I]
+  : D extends { readonly input?: StoreInput<infer I, infer W> }
+    ? [I] extends [undefined]
       ? []
-      : [input: I]
-  : []
+      : [input: W]
+    : []
 
 export type StoreActions<A> = {
   readonly [K in keyof A]: (
     ...args: StoreArgs<A[K]>
   ) => Promise<ActionOutcome<A[K] extends { readonly error?: StoreInput<infer E> } ? E : never>>
 }
-export type StoreActionBuilder<S, T extends Store<S> = Store<S>> = <
-  I = undefined,
-  W = I,
-  E = never,
->(
-  action: StoreAction<S, I, T, W, E>,
-) => StoreAction<S, I, T, W, E>
+type NoStoreInput<D> = Omit<D, "input" | "error"> & {
+  readonly input?: never
+  readonly error?: never
+}
+type HasStoreInput<D, I, W> = Omit<D, "input" | "error"> & {
+  readonly input: StoreInput<I, W>
+  readonly error?: never
+}
+export interface StoreActionBuilder<S, T extends Store<S> = Store<S>> {
+  (action: NoStoreInput<StoreAction<S, void, T, void, never>>): StoreAction<S, void, T, void, never>
+  <I, W>(
+    action: HasStoreInput<StoreAction<S, I, T, W, never>, I, W>,
+  ): StoreAction<S, I, T, W, never> & { readonly input: StoreInput<I, W> }
+  <E>(
+    action: StoreAction<S, void, T, void, E> & {
+      readonly input?: never
+      readonly error: StoreInput<E>
+    },
+  ): StoreAction<S, void, T, void, E>
+  <I, W, E>(
+    action: StoreAction<S, I, T, W, E> & {
+      readonly input: StoreInput<I, W>
+      readonly error: StoreInput<E>
+    },
+  ): StoreAction<S, I, T, W, E> & { readonly input: StoreInput<I, W> }
+}
+
+type CheckedStoreActions<A> = {
+  readonly [K in keyof A]: A[K] extends { readonly input: StoreInput<infer I, unknown> }
+    ? { readonly handler: (input: I, ...rest: never[]) => unknown }
+    : A[K] extends { readonly input?: StoreInput<infer I, unknown> }
+      ? { readonly handler: (input: I, ...rest: never[]) => unknown }
+      : { readonly handler: (input: undefined, ...rest: never[]) => unknown }
+}
 
 /** Capture a store's projection and exact action map once, creating a fresh store per mount. */
 export const defineStoreNode = <
-  // biome-ignore lint/suspicious/noExplicitAny: the concrete factory result retains its state and write methods.
+  // biome-ignore lint/suspicious/noExplicitAny: factory variance only; handler inputs are checked separately.
   T extends Store<any>,
-  P,
+  P extends Json,
   A extends Record<string, AnyStoreAction<ReturnType<T["getState"]>>>,
   const Name extends string,
 >(definition: {
@@ -291,14 +320,18 @@ export const defineStoreNode = <
   readonly type?: NodeType
   readonly store: () => T
   readonly project: (state: ReturnType<T["getState"]>) => P
-  readonly actions: (action: StoreActionBuilder<ReturnType<T["getState"]>, T>) => A
+  readonly actions: (
+    action: StoreActionBuilder<ReturnType<T["getState"]>, T>,
+  ) => A & CheckedStoreActions<A>
 }) => {
   const identity = {}
-  const actions = definition.actions((action) => action)
+  const actions = definition.actions(
+    ((action: unknown) => action) as StoreActionBuilder<ReturnType<T["getState"]>, T>,
+  )
   return {
-    client: {
+    "~reflex": {
       input: (_name: string, args: readonly unknown[]) => args[0] as Json | undefined,
-      state: (raw: Json): P => raw as P,
+      state: (raw: Json): DeepReadonly<P> => raw as DeepReadonly<P>,
       actions: (
         run: (action: string, input?: Json) => Promise<import("@reflex/protocol").OperationInfo>,
       ): StoreActions<A> =>
@@ -307,13 +340,13 @@ export const defineStoreNode = <
         ),
     },
     name: definition.name,
-    type: definition.type ?? "screen",
+    type: definition.type ?? "service",
     createStore: definition.store,
     mount(runtime: Runtime, store: T = definition.store()) {
       return mountStore(runtime, {
         identity,
         name: definition.name,
-        type: definition.type ?? "screen",
+        type: definition.type ?? "service",
         store,
         project: definition.project,
         actions,
@@ -345,7 +378,7 @@ export const mountStore = <S, P, A extends Readonly<Record<string, AnyStoreActio
 ) => new StoreNode(runtime, definition)
 
 class StoreNode<S, P, A extends Readonly<Record<string, AnyStoreAction<S>>>>
-  implements NodeAdapter, NodeHandle<P, StoreActions<A>>
+  implements NodeAdapter, NodeHandle<DeepReadonly<P>, StoreActions<A>>
 {
   readonly actions: StoreActions<A>
   readonly identity: object | undefined
@@ -370,7 +403,10 @@ class StoreNode<S, P, A extends Readonly<Record<string, AnyStoreAction<S>>>>
   ) {
     this.identity = definition.identity
     this.actions = bindActions<StoreActions<A>>(Object.keys(definition.actions), (name, args) =>
-      actionOutcome(() => this.dispatchRaw(name, args[0])),
+      reportActionOutcome(
+        actionOutcome(() => this.dispatchRaw(name, args[0])),
+        (error) => runtime.report(error),
+      ),
     )
     this.name = definition.name
     this.type = definition.type ?? "service"
@@ -386,7 +422,7 @@ class StoreNode<S, P, A extends Readonly<Record<string, AnyStoreAction<S>>>>
     }
   }
 
-  readonly getSnapshot = (): P => this.state as P
+  readonly getSnapshot = (): DeepReadonly<P> => this.state as DeepReadonly<P>
   snapshot(): Json {
     return this.state
   }
@@ -408,14 +444,6 @@ class StoreNode<S, P, A extends Readonly<Record<string, AnyStoreAction<S>>>>
       ...(input === undefined ? {} : { input: input as Json }),
       await: true,
     })
-  }
-
-  send(
-    ...[action, input]: {
-      [K in keyof A & string]: [action: K, ...args: Parameters<StoreActions<A>[K]>]
-    }[keyof A & string]
-  ) {
-    return this.dispatchRaw(action, input)
   }
 
   subscribeAvailability = (listener: () => void): (() => void) => {
@@ -480,20 +508,28 @@ class StoreNode<S, P, A extends Readonly<Record<string, AnyStoreAction<S>>>>
     return () => {
       const work = invoke((signal) =>
         Promise.resolve(
-          action.handler(input, {
-            store: this.definition.store,
-            signal,
-            fail: (error) => {
-              if (action.error === undefined) {
-                throw new Error(`Action "${name}" has no declared error`)
-              }
-              const data = publicState(action.error.decode(error))
-              const tag = isRecord(data) && typeof data._tag === "string" ? data._tag : "Failure"
-              const message =
-                isRecord(data) && typeof data.message === "string" ? data.message : tag
-              throw new StoreFailure(tag, message, data)
-            },
-          }),
+          action.handler(
+            input,
+            Object.assign(
+              {
+                store: this.definition.store,
+                signal,
+              },
+              {
+                fail: (error: unknown) => {
+                  if (action.error === undefined) {
+                    throw new Error(`Action "${name}" has no declared error`)
+                  }
+                  const data = publicState(action.error.decode(error))
+                  const tag =
+                    isRecord(data) && typeof data._tag === "string" ? data._tag : "Failure"
+                  const message =
+                    isRecord(data) && typeof data.message === "string" ? data.message : tag
+                  throw new StoreFailure(tag, message, data)
+                },
+              },
+            ),
+          ),
         ).then(() => {
           if (this.unpublishable !== null) {
             throw this.unpublishable.error
@@ -544,6 +580,7 @@ class StoreNode<S, P, A extends Readonly<Record<string, AnyStoreAction<S>>>>
     this.unpublishable = null
     const encoded = JSON.stringify(next)
     if (encoded === this.previous) {
+      this.availabilityChanged()
       return
     }
     this.state = next

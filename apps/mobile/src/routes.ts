@@ -1,9 +1,11 @@
 import { expoRoutes } from "@reflex/expo/effect"
-import { Nav } from "@reflex/example-inventory/navigation.ts"
+import { screens } from "@reflex/example-inventory/app.ts"
 
-export const routes = expoRoutes(Nav, {
-  InventoryList: "/",
-  InventoryDetail: { pathname: "/inventory/[id]", params: { productId: "id" } },
-  Settings: "/settings",
-})
-export const { toHref, fromLocation } = routes
+export const routes = expoRoutes(
+  { screens },
+  {
+    InventoryList: "/",
+    InventoryDetail: { pathname: "/inventory/[id]", params: { productId: "id" } },
+    Settings: "/settings",
+  },
+)

@@ -1,29 +1,22 @@
-import type { Runtime } from "@reflex/runtime/internal"
-import { useMountedNode, useNodeFocus } from "@reflex/react"
-import { useLocation, useMatch, useResolvedPath } from "react-router"
+import type { Runtime, NodeHandle, ActionOutcome } from "@reflex/runtime/internal"
+import { useMountedNode, useNodeFocus, useNodeView, type NodeView } from "@reflex/react"
+import { useLocation, useMatch, useResolvedPath, useNavigationType } from "react-router"
 
-/** The enclosing route's history entry owns this node until reset. */
-export const useRouteNode = <N extends { dispose(): void }>(
-  definition: { mount(runtime: Runtime): N },
-  options: {
-    readonly lifetime: "history-entry"
-    readonly entryKey?: string
-  },
-): N | null => {
-  const location = useLocation()
-  return useMountedNode(definition, {
-    key: options.entryKey ?? location.key,
-    lifetime: options.lifetime,
-  })
-}
-
-/** Read the match from the enclosing route; retained entries report their owning key. */
-export const useRouteFocus = (
-  node: { readonly id: import("@reflex/protocol").NodeId } | null,
-  entryKey?: string,
-): void => {
+/** The router supplies entry identity and focus; React owns mounting and bounded retention. */
+export const useScreen = <
+  S,
+  A extends Record<string, (...args: never) => Promise<ActionOutcome<unknown>>>,
+>(definition: {
+  mount(runtime: Runtime): NodeHandle<S, A> & { dispose(): void }
+}): NodeView<S, A> => {
   const location = useLocation()
   const path = useResolvedPath(".")
   const match = useMatch({ path: path.pathname, end: true })
-  useNodeFocus(node, match !== null && (entryKey === undefined || entryKey === location.key))
+  const node = useMountedNode(definition, {
+    key: location.key,
+    lifetime: "history-entry",
+    navigationType: useNavigationType(),
+  })
+  useNodeFocus(node, match !== null)
+  return useNodeView(node)
 }

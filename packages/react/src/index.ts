@@ -6,6 +6,7 @@ export {
   useNodeFocus,
   useMountedNode,
   useAction,
-  send,
+  useNodeView,
 } from "./react.tsx"
 export type { Bridge, StateSource } from "./react.tsx"
+export type { NodeView, ActionViews } from "./react.tsx"

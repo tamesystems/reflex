@@ -1,10 +1,8 @@
 import { defineNavigation } from "@reflex/effect"
-import { InventoryList } from "./features/inventory-list.ts"
-import { InventoryDetail } from "./features/inventory-detail.ts"
-import { Settings } from "./features/settings.ts"
+import { InventoryListScreen, InventoryDetailScreen, SettingsScreen } from "./screens.ts"
 
-export const Nav = defineNavigation("inventory/Navigation", () => ({
-  InventoryList,
-  InventoryDetail,
-  Settings,
-}))
+export const Nav = defineNavigation("inventory/Navigation", {
+  InventoryList: InventoryListScreen,
+  InventoryDetail: InventoryDetailScreen,
+  Settings: SettingsScreen,
+})

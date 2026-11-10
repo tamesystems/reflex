@@ -6,10 +6,9 @@ import {
   defineApp,
   defineCapability,
   NavigationRefused,
-  mount,
   NoParams,
 } from "@reflex/effect"
-import { defineNavigationFactories, Registry } from "@reflex/effect/internal"
+import { defineNavigationFactories, mountOwned as mount, Registry } from "@reflex/effect/internal"
 import {
   BATCH_LARGE_REPLY_CHARACTERS_MAX,
   defined,

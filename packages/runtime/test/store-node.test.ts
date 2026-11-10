@@ -43,7 +43,7 @@ test("explicit public projection excludes secrets, detaches and suppresses uncha
   store.setState({ secret: "other" })
   expect(node.getSnapshot()).toBe(before)
   expect(events.filter((event) => event.type === "state.changed")).toEqual([])
-  await node.send("Add", { by: 2 })
+  await node.dispatchRaw("Add", { by: 2 })
   expect(runtime.inspect({ name: "Counter" }).node?.state).toEqual({ count: 2 })
   expect(JSON.stringify(events)).not.toContain("hidden")
   expect(Object.isFrozen(node.getSnapshot())).toBe(true)
@@ -53,7 +53,9 @@ test("explicit public projection excludes secrets, detaches and suppresses uncha
   store.setState({ count: 99 })
   expect(runtime.sequence).toBe(sequence)
   expect(runtime.inspect({ tree: true }).tree).toEqual([])
-  await expect(node.send("Add", { by: 1 })).rejects.toMatchObject({ code: ErrorCode.NodeNotFound })
+  await expect(node.dispatchRaw("Add", { by: 1 })).rejects.toMatchObject({
+    code: ErrorCode.NodeNotFound,
+  })
 })
 
 test("published input JSON Schema agrees with Standard Schema before acceptance", async () => {
@@ -143,7 +145,7 @@ test("promise work completes only after settlement; cancellation and disposal ab
     },
   })
   const op = await runtime.dispatch({ action: "Run" })
-  await node.send("Barrier") // A later synchronous operation settles while Run remains pending.
+  await node.dispatchRaw("Barrier") // A later synchronous operation settles while Run remains pending.
   expect(runtime.operation(op.operationId).status).toBe("running")
   pending.resolve()
   expect((await runtime.wait({ operationId: op.operationId })).operation?.status).toBe("completed")
@@ -202,12 +204,18 @@ test("declared failures and synchronous or asynchronous defects remain distinct"
       },
     },
   })
-  expect(await node.send("Declared")).toMatchObject({
+  expect(await node.dispatchRaw("Declared")).toMatchObject({
     status: "failed",
     error: { tag: "Rejected", defect: false },
   })
-  expect(await node.send("Sync")).toMatchObject({ status: "failed", error: { defect: true } })
-  expect(await node.send("Async")).toMatchObject({ status: "failed", error: { defect: true } })
+  expect(await node.dispatchRaw("Sync")).toMatchObject({
+    status: "failed",
+    error: { defect: true },
+  })
+  expect(await node.dispatchRaw("Async")).toMatchObject({
+    status: "failed",
+    error: { defect: true },
+  })
   node.dispose()
 })
 
@@ -269,7 +277,7 @@ test("structural Redux-style store needs no Zustand adapter", async () => {
     project: (s) => ({ count: s }),
     actions: { Increment: { handler: () => store.dispatch() } },
   })
-  await node.send("Increment")
+  await node.dispatchRaw("Increment")
   expect(node.getSnapshot()).toEqual({ count: 1 })
   node.dispose()
   expect(listeners.size).toBe(0)
@@ -305,7 +313,7 @@ test("projection accessors are rejected without invoking them and invalid writes
       Overflow: { handler: () => store.setState("x".repeat(NODE_STATE_CHARACTERS_MAX), true) },
     },
   })
-  expect(await node.send("Overflow")).toMatchObject({
+  expect(await node.dispatchRaw("Overflow")).toMatchObject({
     status: "failed",
     error: { tag: "ResourceExhausted", defect: false },
   })
@@ -334,7 +342,7 @@ test("no-input actions reject payloads before acceptance and listeners are bound
   const { runtime, node } = setup()
   const sequence = runtime.sequence
   // Add changes availability; Reset itself takes no input.
-  await node.send("Add", { by: 1 })
+  await node.dispatchRaw("Add", { by: 1 })
   const accepted = runtime.sequence
   await expect(node.dispatchRaw("Reset", { unexpected: true })).rejects.toMatchObject({
     code: ErrorCode.InvalidInput,
@@ -414,12 +422,12 @@ test("state that cannot be published never breaks the application's own store wr
   expect(reported).toHaveLength(1)
 
   // An operation that ends with the state unpublishable says so, though its work ran.
-  expect(await node.send("Add")).toMatchObject({ status: "failed" })
+  expect(await node.dispatchRaw("Add")).toMatchObject({ status: "failed" })
 
   store.setState({ extra: undefined, count: 5 }, false)
   store.setState({ count: 5 }, true)
   expect(node.getSnapshot()).toEqual({ count: 5 })
-  expect((await node.send("Add")).status).toBe("completed")
+  expect((await node.dispatchRaw("Add")).status).toBe("completed")
   expect(node.getSnapshot()).toEqual({ count: 6 })
 
   // Recovered, so a later failure is reported again rather than staying silent.

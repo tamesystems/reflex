@@ -7,7 +7,7 @@ protocol. Generic React bindings live in `@reflex/react`; live serving in `@refl
 
 - `RouterProjection` keeps Expo Router showing the core Navigation stack and feeds accepted
   gestures, links and router actions back to the core.
-- `@reflex/expo/effect` provides `expoRoutes(Nav, registration)` and `useScreen(routes.Detail)`.
+- `@reflex/expo/effect` provides `expoRoutes({ screens }, registration)` and `useScreen(routes.Detail)`.
   Registration derives both mapping directions and validates incoming params.
 - `@reflex/expo/dev` provides `developmentBridge()`, with production exclusion.
 - Router-neutral infrastructure is available through `/internal` and @reflex/navigation,
@@ -39,8 +39,7 @@ import { RouterProjection } from "@reflex/expo"
 ```
 
 The registration maps core param names to the application's file-route names; see
-[mobile routes](../../apps/mobile/src/routes.ts). Screens use `useScreen`, `useNodeState`
-and `useAction` from the Effect entry. Pass `developmentBridge()` as the provider bridge;
+[mobile routes](../../apps/mobile/src/routes.ts). Screens use the composed `useScreen` view with explicit pending status, state and action controls from the Effect entry. Pass `developmentBridge()` as the provider bridge;
 the module owns the development guard and setting read.
 
 ## How the router is followed
@@ -67,3 +66,5 @@ the module owns the development guard and setting read.
 - `e2e:plain` proves the generic store screen's Metro graph has no Effect modules.
 
 See [development.md](../../docs/development.md) for browser, live and Hermes checks.
+
+Registration requires URL string codecs (for numbers use `NumberFromString` and domain checks), checks placeholders and encoded keys, and reports `InvalidRouteParams` with route and cause. Mapping functions are behind an internal symbol used only by RouterProjection.

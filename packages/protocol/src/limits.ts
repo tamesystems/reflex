@@ -126,3 +126,6 @@ export const LOCAL_UNACKNOWLEDGED_FRAMES_MAX = 65_536
 export const LOCAL_RECEIPT_BYTES = 16
 
 export const LOCAL_SHUTDOWN_RECEIPT_TIMEOUT_MS = 5_000
+
+/** Existing routers retain at most this many inactive history entries per session. */
+export const ROUTER_RETAINED_ENTRIES_MAX = 64

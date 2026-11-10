@@ -20,7 +20,13 @@ const focus = async (name: string) => {
   return seen
 }
 const count = async (page: Page, value: number) => {
-  await page.getByText(`Count: ${value}`, { exact: true }).waitFor()
+  await page
+    .getByText(`Count: ${value}`, { exact: true })
+    .waitFor()
+    .catch(async (error) => {
+      console.error(await page.locator("body").textContent(), await reflex("tree"))
+      throw error
+    })
   await reflex("wait", JSON.stringify({ match: { count: value } }))
   assert.equal((await reflex("ls")).state.count, value)
 }

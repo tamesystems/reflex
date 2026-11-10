@@ -2,14 +2,17 @@ import { expect, test } from "bun:test"
 import { createController } from "@reflex/runtime/internal"
 import { defineApp } from "@reflex/effect"
 import { createLoopbackClient } from "@reflex/rpc"
-import { INVENTORY_HTTP_BODY_BYTES_MAX, INVENTORY_HTTP_TIMEOUT_MS } from "../src/limits.ts"
+import {
+  INVENTORY_HTTP_BODY_BYTES_MAX,
+  INVENTORY_HTTP_TIMEOUT_MS,
+} from "../examples/inventory/src/limits.ts"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
 import * as FetchHttpClient from "effect/http/FetchHttpClient"
-import { root } from "../src/app.ts"
-import { InventoryApi } from "../src/domain.ts"
-import { fixtureSettings, seedProducts } from "../src/fixtures.ts"
-import { httpInventoryApi } from "../src/http-api.ts"
+import { root } from "../examples/inventory/src/app.ts"
+import { InventoryApi } from "../examples/inventory/src/domain.ts"
+import { fixtureSettings, seedProducts } from "../examples/inventory/src/fixtures.ts"
+import { httpInventoryApi } from "../examples/inventory/src/http-api.ts"
 
 const withFetch = (fetcher: typeof fetch) =>
   Layer.mergeAll(

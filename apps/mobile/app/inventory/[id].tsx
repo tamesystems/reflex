@@ -1,14 +1,12 @@
-import { useAction, useNodeState, useScreen } from "@reflex/expo/effect"
+import { useScreen } from "@reflex/expo/effect"
 import { routes } from "../../src/routes.ts"
 import { Text } from "react-native"
 import { Action, Screen, styles } from "../../src/ui.tsx"
 
 export default function InventoryDetailScreen() {
   const node = useScreen(routes.InventoryDetail)
-  const increment = useAction(node, "Increment")
-  const save = useAction(node, "Save")
-  const state = useNodeState(node)
-  if (node === null || state === null) {
+  const { status, state, actions } = node
+  if (status === "pending") {
     return null
   }
   if (state._tag === "loading") {
@@ -32,12 +30,8 @@ export default function InventoryDetailScreen() {
       {state._tag === "editing" && state.error !== null && (
         <Text style={styles.error}>{state.error}</Text>
       )}
-      <Action disabled={!increment.available} onPress={() => increment.run()} title="Increment" />
-      <Action
-        disabled={!save.available}
-        onPress={() => save.run()}
-        title={saving ? "Saving…" : "Save"}
-      />
+      <Action {...actions.Increment} title="Increment" />
+      <Action {...actions.Save} title={saving ? "Saving…" : "Save"} />
     </Screen>
   )
 }

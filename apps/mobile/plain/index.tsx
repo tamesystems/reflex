@@ -1,15 +1,14 @@
 import { developmentBridge } from "@reflex/expo/dev"
-import { Counter, plainBackend } from "../../../examples/plain/src/app.ts"
-import { ReflexProvider, useNode, useNodeFocus, useNodeState } from "@reflex/react"
+import { Counter, plainBackend } from "@reflex/example-plain"
+import { ReflexProvider, useNode } from "@reflex/react"
 import { registerRootComponent } from "expo"
 import { useState } from "react"
 import { Button, Text, View } from "react-native"
 
 // The existing app owns this small navigation state, without RouterProjection.
 const CounterScreen = ({ leave }: { readonly leave: () => void }) => {
-  const live = useNode(Counter)
-  const state = useNodeState(live)
-  useNodeFocus(live, true)
+  const live = useNode(Counter, { focus: true })
+  const { state } = live
   return (
     <View>
       <Text>Plain Zustand counter</Text>
@@ -18,8 +17,8 @@ const CounterScreen = ({ leave }: { readonly leave: () => void }) => {
       <Button
         title="Add one"
         onPress={() => {
-          if (live) {
-            void live.actions.Add({ by: 1 })
+          if (live.status === "ready") {
+            void live.actions.Add.run({ by: 1 })
           }
         }}
       />

@@ -142,11 +142,11 @@ Its exact Zustand/Zod dev dependencies are installed in apps/mobile; no third in
 
 ### Add a screen
 
-1. Define its state schema, params, `initial(params)`, actions and optional `onFocus` in a capability.
-2. Add the capability to navigation's screen object; its layer derives mounting.
+1. Define state, params and `initial(params)` with `defineScreen` in a contract module.
+2. Build navigation from contracts. Attach handlers with `.implement`, and pass implementations to `Nav.layer({ screens, initial })`.
 3. Add a typed journey using `session.focused(Capability, match)` and `node.actions`.
 4. Register its file path and param-name mapping with `expoRoutes` and render with `useScreen`.
-5. Use `useAction` for UI guard/pending/outcome state; never duplicate action availability.
+5. Use the composed `useScreen` view for state and action controls; granular hooks remain available.
 
 Navigate with `Nav.push`/`Nav.back` Effects from handlers. See [adopting.md](adopting.md).
 
@@ -154,7 +154,7 @@ Navigate with `Nav.push`/`Nav.back` Effects from handlers. See [adopting.md](ado
 
 A scenario is a name and a `Layer` of services in `defineApp`'s `scenarios`; set
 `virtualTime: true` to run it on a `TestClock`. To let tests and agents steer a double,
-mount a node with `type: "fixture"` and give it actions, as `fixtures.ts`'s
+declare the layer's mounted definitions with `withNodes`, and mount a node with `type: "fixture"` and give it actions, as `fixtures.ts`'s
 `FailNextSave` does. Fixture nodes are ambient, so their actions work from any screen.
 
 ### Add a CLI command
@@ -308,3 +308,10 @@ exclude the production bridge/token and keep Effect out of the plain graph. The 
 regression test was also run with lifecycle activation temporarily disabled and failed
 as intended. `hermes-smoke` was attempted but could not start because HERMES was unset;
 its VM execution remains for the configured CI job or a local VM install.
+
+### Type performance
+
+`bun run typecheck` runs `scripts/type-budget.ts` for the root graph before the mobile
+and web checks. It prints extended diagnostics and fails above the recorded instantiation
+budget plus 10%. Baselines and the budget live in docs/performance/. Inspect any increase
+before changing the budget; timings are machine-dependent, instantiation counts are the gate.

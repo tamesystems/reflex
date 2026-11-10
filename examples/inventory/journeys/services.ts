@@ -1,4 +1,4 @@
-import type { JourneyClientFor } from "@reflex/test"
+import { includes, type JourneyClientFor } from "@reflex/test"
 import type inventoryApp from "../src/app.ts"
 import { InventoryList } from "../src/features/inventory-list.ts"
 import { InventoryDetail } from "../src/features/inventory-detail.ts"
@@ -11,7 +11,7 @@ export const servicesJourney = async (
 ): Promise<void> => {
   const list = await app.focused(InventoryList, {
     _tag: "ready",
-    products: [{ id: "product-123", quantity: 5 }, {}, {}],
+    products: includes({ id: "product-123", quantity: 5 }),
   })
   await list.actions.OpenProduct({ productId: "product-123" })
   const detail = await app.focused(InventoryDetail, {
@@ -25,7 +25,7 @@ export const servicesJourney = async (
   }
   await app.back()
   const updated = await app.focused(InventoryList, {
-    products: [{ id: "product-123", quantity: 12 }, {}, {}],
+    products: includes({ id: "product-123", quantity: 12 }),
   })
   await updated.actions.OpenProduct({ productId: "product-123" })
   const reopened = await app.focused(InventoryDetail, {
@@ -35,13 +35,15 @@ export const servicesJourney = async (
   })
   await reopened.actions.SetQuantity({ quantity: 19 })
   await failNextSave()
-  const failed = await reopened.actions.Save()
+  const failed = await reopened.expectFailure.Save()
   if (failed.status !== "domain-error" || failed.error.tag !== "ApiError") {
     throw new Error("A server error must be a declared ApiError")
   }
   await app.focused(InventoryDetail, { _tag: "editing", quantity: 19, error: "Server error" })
   await app.back()
-  const saved = await app.focused(InventoryList, { products: [{ quantity: 12 }, {}, {}] })
+  const saved = await app.focused(InventoryList, {
+    products: includes({ id: "product-123", quantity: 12 }),
+  })
   await saved.actions.OpenSettings()
   const settings = await app.focused(Settings, { _tag: "ready" })
   await settings.actions.SetLowStockThreshold({ threshold: 3 })

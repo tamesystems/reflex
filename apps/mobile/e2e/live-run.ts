@@ -9,6 +9,7 @@ import { spawnSync } from "node:child_process"
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
+import { pathToFileURL } from "node:url"
 import { defined, parseBridgeSetting } from "@reflex/protocol"
 
 /** Text only the app's side of the bridge holds: its protocol is in every build. */
@@ -189,7 +190,9 @@ const compiledJourney = async (): Promise<string> => {
           name: "external-playwright",
           setup(builder) {
             builder.onResolve({ filter: /^playwright-core$/ }, () => ({
-              path: resolve(import.meta.dirname, "../node_modules/playwright-core/index.mjs"),
+              path: pathToFileURL(
+                resolve(import.meta.dirname, "../node_modules/playwright-core/index.mjs"),
+              ).href,
               external: true,
             }))
           },

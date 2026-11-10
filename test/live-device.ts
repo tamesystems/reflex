@@ -3,6 +3,7 @@
  * controller, dialling out over a WebSocket. It runs in a worker, with an event loop of
  * its own, as an app on a phone has. Only React and the screen are missing.
  */
+import { pathToFileURL } from "node:url"
 import type { AppHost, Controller } from "@reflex/runtime/internal"
 import { systemTimers } from "@reflex/runtime/internal"
 import { type Bridge, type BridgeStatus, connectBridge } from "../packages/live/src/bridge.ts"
@@ -68,7 +69,7 @@ const launch = () => {
 self.onmessage = async ({ data }: MessageEvent<DeviceCommand>) => {
   switch (data.type) {
     case "serve": {
-      const loaded: { default: AppHost } = await import(data.hostModule)
+      const loaded: { default: AppHost } = await import(pathToFileURL(data.hostModule).href)
       host = loaded.default
       scenario = data.scenario
       bridge = connectBridge(data.setting, {

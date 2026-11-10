@@ -79,7 +79,7 @@ packages/
               socket-writer.ts counts queued bytes until write callbacks complete;
               socket-shutdown.ts waits for the Windows shutdown reply receipt; bridge-controller.ts a Controller that
               forwards to whichever app is connected.
-  effect/     How an Effect app becomes nodes. capability.ts (defineCapability, mount),
+  effect/     How an Effect app becomes nodes. capability.ts (defineCapability, mount), screen.ts (contracts before handlers),
               navigation.ts (defineNavigation: the stack, a scope per screen),
               app.ts (defineApp: scenarios as Layers, virtual time), redaction.ts.
   test/       createTestApp journeys and explore random walks, through the real protocol.
@@ -463,3 +463,13 @@ its explicit Effect entry and routes-effect helper may import Effect. Generic en
 Effect-free. Vite's live/vite entry dynamically imports the dialler only in development.
 Production exclusion is checked by browser builds. UI entry files delegate optional test
 instrumentation to a development module, which production Metro removes.
+
+## Contract and consumer boundary
+
+Screen contracts precede handler imports (ADR 0021). Navigation layers carry screen
+definitions; scenario layers declare fixture definitions with withNodes. UI and journey
+consumers read wire state, while handlers read decoded state. Store projections are JSON
+and guards publish independently of projection equality. React owns bounded history-entry
+retention; router adapters supply only location identity and focus. Protocol probes live
+in root test/, and examples teach typed stories. Mobile E2E instrumentation lives in
+e2e/, loaded only through the compile-time entry selector in provider.tsx.

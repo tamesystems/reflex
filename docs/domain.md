@@ -122,17 +122,22 @@ the protocol name for a focus-gated node. Expo Router projection is one optional
 UI bindings and journeys consume this value; they do not reconstruct its types.
 
 **Node handle** (`NodeHandle`). The consumer's typed snapshot/subscription, action object,
-availability and disposal. Distinct from its opaque protocol id. `actions.Save()` takes no
+availability. Ownership is separate from consumer access. Distinct from its opaque protocol id. `actions.Save()` takes no
 input; `actions.SetQuantity({ quantity })` requires exactly that action's input.
 
 **Action outcome.** The local result: completed, cancelled, refused with a reason,
 domain-error with safe declared data, or defect. Wire operations retain their original
-running/completed/failed/cancelled statuses. A journey sees the encoded public state and
-error data; a local Effect UI sees the capability's domain state.
+running/completed/failed/cancelled statuses. Consumers see encoded/redacted public state and error data; handlers retain decoded state.
 
 **Guarded reducer.** `action.when(tag).reduce(...)` narrows state and rechecks its tag before
-the synchronous commit. Async guarded handlers must recheck the full state in `update`.
+the synchronous commit. Async guarded updates recheck the tag at commit. `state.when(tag)` selects another phase.
 
 **History-entry lifetime.** A React node mounted after commit and retained by the library
-under the router's location key until session end. It survives back/forward without an
-application cache. Component lifetime disposes when its owning component releases it.
+under the router's location key within a 64-entry budget. It survives back/forward without an
+application cache; a new push frees unreachable forward entries. Component lifetime disposes when its owning component releases it.
+
+**Screen contract.** State, params and initial state established before implementations.
+`.implement` attaches actions/lifecycle hooks. Navigation depends only on contracts.
+
+**Node view.** A composed React hook result with explicit pending/ready status, public
+state and per-action run/available/reason/pending controls.

@@ -8,16 +8,22 @@ export const Screen = ({ children }: { readonly children: ReactNode }) => (
 export const Action = ({
   title,
   onPress,
-  disabled,
+  run,
+  available = true,
+  pending = false,
+  disabled = false,
 }: {
   readonly title: string
-  readonly onPress: () => void
+  readonly onPress?: () => void
+  readonly run?: () => unknown
+  readonly available?: boolean
+  readonly pending?: boolean
   readonly disabled?: boolean
 }) => (
   <Pressable
     accessibilityRole="button"
-    disabled={disabled}
-    onPress={onPress}
+    disabled={disabled || !available || pending}
+    onPress={() => (run ?? onPress)?.()}
     style={[styles.action, disabled && styles.disabled]}
   >
     <Text style={styles.actionText}>{title}</Text>

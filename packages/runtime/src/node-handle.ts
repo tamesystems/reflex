@@ -7,6 +7,8 @@ import {
   ProtocolError,
 } from "@reflex/protocol"
 
+export type DeepReadonly<T> = T extends object ? { readonly [K in keyof T]: DeepReadonly<T[K]> } : T
+
 /** A local consumer sees refusals as well as the operation's eventual result. */
 export type ActionOutcome<E = never> =
   | { readonly status: "completed" }
@@ -26,7 +28,6 @@ export interface NodeHandle<S, A> {
   subscribe(listener: () => void): () => void
   subscribeAvailability(listener: () => void): () => void
   availability(action: keyof A & string): true | string
-  dispose(): void
 }
 
 /** The wire operation stays unchanged; this is its application-facing view. */
@@ -76,7 +77,7 @@ export const bindActions = <A>(
 /** The definition owns serialization; journeys supply only a transport. */
 export interface ConsumerDefinition<S = unknown, A = unknown> {
   readonly name: string
-  readonly client: {
+  readonly "~reflex": {
     input(action: string, args: readonly unknown[]): import("@reflex/protocol").Json | undefined
     state(raw: import("@reflex/protocol").Json): S
     actions(
@@ -104,4 +105,16 @@ export const decodeActionInput = <I>(
     }
     throw error
   }
+}
+
+/** Local actions always report defects, even when an event handler ignores the promise. */
+export const reportActionOutcome = async <E>(
+  work: Promise<ActionOutcome<E>>,
+  report: (error: unknown) => void,
+): Promise<ActionOutcome<E>> => {
+  const outcome = await work
+  if (outcome.status === "defect" || outcome.status === "domain-error") {
+    report(new Error(`${outcome.error.tag}: ${outcome.error.message}`))
+  }
+  return outcome
 }

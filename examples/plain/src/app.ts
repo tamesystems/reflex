@@ -10,6 +10,7 @@ export const createCounterStore = () => createStore(() => ({ count: 0, token: "p
 
 export const Counter = defineStoreNode({
   name: "Counter",
+  type: "screen",
   store: createCounterStore,
   project: ({ count }) => ({ count }),
   actions: (action) => ({

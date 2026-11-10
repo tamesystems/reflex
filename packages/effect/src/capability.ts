@@ -20,6 +20,7 @@ import {
 } from "@reflex/protocol"
 import {
   actionOutcome,
+  reportActionOutcome,
   decodeActionInput,
   bindActions,
   type ActionOutcome,
@@ -55,13 +56,32 @@ export class Registry extends Context.Service<Registry, Runtime>()("@reflex/effe
 /** State's single write path. Handlers receive it; nothing else can write. */
 export interface StateAccess<S, Next = S> {
   readonly get: Effect.Effect<S>
-  update(transition: (state: Next) => Next): Effect.Effect<void>
+  update(transition: (state: S) => Next): Effect.Effect<void>
+  when<K extends Next extends { readonly _tag: infer T } ? T & string : never>(
+    tag: K,
+  ): StateAccess<Extract<Next, { readonly _tag: K }>, Next>
 }
 
-declare const noInput: unique symbol
+/** Recheck the discriminant at commit; suspended handlers cannot overwrite a newer state. */
+const narrowAccess = <S, K extends S extends { readonly _tag: infer T } ? T & string : never>(
+  access: StateAccess<S>,
+  tag: K,
+): StateAccess<Extract<S, { readonly _tag: K }>, S> => {
+  type N = Extract<S, { readonly _tag: K }>
+  const matches = (state: S): state is N =>
+    typeof state === "object" && state !== null && "_tag" in state && state._tag === tag
+  return {
+    get: Effect.flatMap(access.get, (state) =>
+      matches(state) ? Effect.succeed(state) : Effect.interrupt,
+    ),
+    update: (transition) => access.update((state) => (matches(state) ? transition(state) : state)),
+    when: access.when,
+  }
+}
 
 /** What an action without an input gets. Distinct from `unknown`, a real input type. */
-export type NoInput = typeof noInput
+// biome-ignore lint/suspicious/noConfusingVoidType: void models a handler parameter, including ignored return values.
+export type NoInput = void
 
 export interface ActionDefinition<S, I, E, R, Next = S, W = E, In = I> {
   readonly description?: string
@@ -75,7 +95,7 @@ export interface ActionDefinition<S, I, E, R, Next = S, W = E, In = I> {
    * Runs synchronously up to its first suspension. To exclude a second dispatch
    * through `available`, update state before suspending.
    */
-  readonly handler: (input: I, state: StateAccess<S, Next>) => Effect.Effect<unknown, E, R>
+  readonly handler: (input: NoInfer<I>, state: StateAccess<S, Next>) => Effect.Effect<unknown, E, R>
 }
 
 // Actions differ in I, E and R, and `Requirements` below is what recovers R.
@@ -95,7 +115,7 @@ export type PublicState<T> =
       ? readonly (readonly [PublicState<K>, PublicState<V>])[]
       : T extends ReadonlySet<infer Item>
         ? readonly PublicState<Item>[]
-        : T extends Date
+        : T extends Date | bigint
           ? string
           : T extends readonly (infer Item)[]
             ? readonly PublicState<Item>[]
@@ -117,7 +137,7 @@ export interface Capability<S, A extends ActionsOf<S>, R, P = Record<string, nev
   readonly type: NodeType
   readonly state: WireCodec<S>
   readonly actions: A
-  readonly onFocus: ((state: StateAccess<S>) => Effect.Effect<unknown, unknown, R>) | undefined
+  readonly onFocus: ((state: StateAccess<S>) => Effect.Effect<unknown, never, R>) | undefined
 }
 
 /** Binds `S` so that each action infers its own input, error and services. */
@@ -126,28 +146,57 @@ type DeclaredAction<S, I, E, R, Next = S, W = E, In = I> = Omit<
   "handler" | "error"
 > & {
   readonly error: Schema.Codec<E, W>
-  readonly handler: (input: I, state: StateAccess<S, Next>) => Effect.Effect<unknown, NoInfer<E>, R>
+  readonly handler: (
+    input: NoInfer<I>,
+    state: StateAccess<S, Next>,
+  ) => Effect.Effect<unknown, NoInfer<E>, R>
+}
+type WithoutInputError<D> = Omit<D, "input" | "error"> & {
+  readonly input?: never
+  readonly error?: never
+}
+type WithInput<D, I, In> = Omit<D, "input" | "error"> & {
+  readonly input: Schema.Codec<I, In>
+  readonly error?: never
 }
 interface GuardedActionBuilder<S, N> {
-  <I = NoInput, R = never, In = I>(
-    definition: ActionDefinition<N, I, never, R, S, never, In> & { readonly error?: never },
-  ): ActionDefinition<S, I, never, R, S, never, In>
-  <I = NoInput, E = never, R = never, W = E, In = I>(
-    definition: DeclaredAction<N, I, E, R, S, W, In>,
-  ): ActionDefinition<S, I, E, R, S, W, In>
-  reduce<I = NoInput, In = I>(
-    definition: Omit<ActionDefinition<N, I, never, never, S, never, In>, "handler"> & {
-      readonly reducer: (input: I, state: N) => S
+  <R = never>(
+    definition: WithoutInputError<ActionDefinition<N, void, never, R, S, never, void>>,
+  ): ActionDefinition<S, void, never, R, S, never, void>
+  <I, In, R = never>(
+    definition: WithInput<ActionDefinition<N, I, never, R, S, never, In>, I, In>,
+  ): ActionDefinition<S, I, never, R, S, never, In> & { readonly input: Schema.Codec<I, In> }
+  <E, W, R = never>(
+    definition: DeclaredAction<N, void, E, R, S, W, void> & { readonly input?: never },
+  ): ActionDefinition<S, void, E, R, S, W, void>
+  <I, E, W, In, R = never>(
+    definition: DeclaredAction<N, I, E, R, S, W, In> & { readonly input: Schema.Codec<I, In> },
+  ): ActionDefinition<S, I, E, R, S, W, In> & { readonly input: Schema.Codec<I, In> }
+  reduce(
+    definition: Omit<WithoutInputError<ActionDefinition<N, void, never, never, S>>, "handler"> & {
+      readonly reducer: (input: undefined, state: N) => S
     },
-  ): ActionDefinition<S, I, never, never, S, never, In>
+  ): ActionDefinition<S, void, never, never, S>
+  reduce<I, In>(
+    definition: Omit<
+      WithInput<ActionDefinition<N, I, never, never, S, never, In>, I, In>,
+      "handler"
+    > & { readonly reducer: (input: NoInfer<I>, state: N) => S },
+  ): ActionDefinition<S, I, never, never, S, never, In> & { readonly input: Schema.Codec<I, In> }
 }
 interface ActionBuilder<S> {
-  <I = NoInput, R = never, In = I>(
-    definition: ActionDefinition<S, I, never, R, S, never, In> & { readonly error?: never },
-  ): ActionDefinition<S, I, never, R, S, never, In>
-  <I = NoInput, E = never, R = never, W = E, In = I>(
-    definition: DeclaredAction<S, I, E, R, S, W, In>,
-  ): ActionDefinition<S, I, E, R, S, W, In>
+  <R = never>(
+    definition: WithoutInputError<ActionDefinition<S, void, never, R, S, never, void>>,
+  ): ActionDefinition<S, void, never, R, S, never, void>
+  <I, In, R = never>(
+    definition: WithInput<ActionDefinition<S, I, never, R, S, never, In>, I, In>,
+  ): ActionDefinition<S, I, never, R, S, never, In> & { readonly input: Schema.Codec<I, In> }
+  <E, W, R = never>(
+    definition: DeclaredAction<S, void, E, R, S, W, void> & { readonly input?: never },
+  ): ActionDefinition<S, void, E, R, S, W, void>
+  <I, E, W, In, R = never>(
+    definition: DeclaredAction<S, I, E, R, S, W, In> & { readonly input: Schema.Codec<I, In> },
+  ): ActionDefinition<S, I, E, R, S, W, In> & { readonly input: Schema.Codec<I, In> }
   when<K extends S extends { readonly _tag: infer T } ? T & string : never>(
     tag: K,
     reason?: string,
@@ -175,7 +224,9 @@ const actionBuilder = <S>(): ActionBuilder<S> =>
               get: Effect.flatMap(state.get, (current) =>
                 matches(current) ? Effect.succeed(current) : Effect.interrupt,
               ),
-              update: state.update,
+              update: (transition) =>
+                state.update((current) => (matches(current) ? transition(current) : current)),
+              when: state.when,
             }),
         })
         return Object.assign(build, {
@@ -194,7 +245,7 @@ const actionBuilder = <S>(): ActionBuilder<S> =>
         })
       },
     },
-  ) as ActionBuilder<S>
+  ) as unknown as ActionBuilder<S>
 
 /**
  * Declare state and actions once. Validation, JSON Schema, availability and
@@ -208,7 +259,7 @@ interface CapabilityDefinition<S, A extends ActionsOf<S>, R, P, W, Name extends 
   readonly state: Schema.Codec<S, W>
   readonly actions: (action: ActionBuilder<S>) => A
   /** Runs each time the node gains focus; use it to load or refresh. */
-  readonly onFocus?: (state: StateAccess<S>) => Effect.Effect<unknown, unknown, R>
+  readonly onFocus?: (state: StateAccess<S>) => Effect.Effect<unknown, never, R>
 }
 
 export function defineCapability<
@@ -256,7 +307,7 @@ export function defineCapability<
     type: definition.type ?? "screen",
     state: definition.state,
     actions,
-    client: {
+    "~reflex": {
       input: (name, args) => {
         const action = defined(actions[name], "action names come from the definition")
         return action.input === undefined ? undefined : (args[0] as Json)
@@ -276,7 +327,9 @@ export function defineCapability<
 }
 
 /** A live instance. The same object serves the UI and the protocol. */
-export type NodeOf<C> = C extends { readonly state: WireCodec<infer S>; readonly actions: infer A }
+export type NodeOf<C> = C extends ConsumerDefinition<infer S, unknown> & {
+  readonly actions: infer A
+}
   ? LiveNode<S, A>
   : never
 
@@ -285,8 +338,9 @@ export type ActionCalls<A> = {
     ...args: ConsumerArgs<A[K]>
   ) => Promise<ActionOutcome<ActionError<A[K]>>>
 }
-type ConsumerArgs<D> =
-  D extends ActionDefinition<Erased, infer I, Erased, Erased, Erased, Erased, infer In>
+type ConsumerArgs<D> = D extends { readonly input: Schema.Codec<unknown, infer In> }
+  ? [input: PublicState<In>]
+  : D extends ActionDefinition<Erased, infer I, Erased, Erased, Erased, Erased, infer In>
     ? [I] extends [NoInput]
       ? []
       : [input: PublicState<In>]
@@ -302,7 +356,11 @@ export interface LiveNode<S, A> extends NodeHandle<S, ActionCalls<A>> {
   /** Stable between changes, as `useSyncExternalStore` requires. */
   getSnapshot(): S
   subscribe(listener: () => void): () => void
-  /** Goes through the same validation and tracking as a remote dispatch. */
+}
+
+/** Resource ownership and decoded dispatch are reserved for integrations. */
+export interface OwnedLiveNode<S, A> extends LiveNode<S, A> {
+  dispose(): void
   send(...args: ActionArgs<A>): Promise<OperationInfo>
 }
 
@@ -322,17 +380,17 @@ export const liveNodeOf = <S, A extends ActionsOf<S>, R, P, W>(
   runtime: Runtime,
   nodeId: NodeId,
   capability: Capability<S, A, R, P, W>,
-): LiveNode<S, A> | undefined => {
+): LiveNode<PublicState<W>, A> | undefined => {
   const live = runtime.liveOf(nodeId)
   if (live instanceof NodeInstance && live.isInstanceOf(capability)) {
     // Identity of the capability object is what proves `S` and `A`: names can repeat.
-    return live as unknown as LiveNode<S, A>
+    return live as unknown as LiveNode<PublicState<W>, A>
   }
   return undefined
 }
 
-export interface MountedNode<S, A> {
-  readonly node: LiveNode<S, A>
+export interface MountedNode<S, A, W = S> {
+  readonly node: OwnedLiveNode<PublicState<W>, A>
   readonly access: StateAccess<S>
 }
 
@@ -343,14 +401,22 @@ export interface MountedNode<S, A> {
 export const mount = <S, A extends ActionsOf<S>, R, P, W>(
   capability: Capability<S, A, R, P, W>,
   initial: S,
-): Effect.Effect<LiveNode<S, A>, never, R | Registry | Scope.Scope> =>
-  Effect.map(mountWithAccess(capability, initial), ({ node }) => node)
+  options: { readonly focus?: boolean } = {},
+): Effect.Effect<LiveNode<PublicState<W>, A>, never, R | Registry | Scope.Scope> =>
+  Effect.flatMap(mountWithAccess(capability, initial), ({ node }) =>
+    Effect.map(Registry, (runtime) => {
+      if (options.focus === true) {
+        runtime.setFocus(node.id)
+      }
+      return node
+    }),
+  )
 
 /** Like `mount`, for owners that also write state from outside an action. */
 export const mountWithAccess = <S, A extends ActionsOf<S>, R, P, W>(
   capability: Capability<S, A, R, P, W>,
   initial: S,
-): Effect.Effect<MountedNode<S, A>, never, R | Registry | Scope.Scope> =>
+): Effect.Effect<MountedNode<S, A, W>, never, R | Registry | Scope.Scope> =>
   Effect.gen(function* () {
     const registry = yield* Registry
     const context = yield* Effect.context<R>()
@@ -592,7 +658,9 @@ interface CompiledAction<S> {
   readonly encode: (input: unknown) => Json
 }
 
-class NodeInstance<S, A extends ActionsOf<S>, R, P, W> implements NodeAdapter, LiveNode<S, A> {
+class NodeInstance<S, A extends ActionsOf<S>, R, P, W>
+  implements NodeAdapter, OwnedLiveNode<PublicState<W>, A>
+{
   readonly id: NodeId
   readonly type: NodeType
   readonly name: string
@@ -611,6 +679,7 @@ class NodeInstance<S, A extends ActionsOf<S>, R, P, W> implements NodeAdapter, L
   readonly access: StateAccess<S> = {
     get: Effect.sync(() => this.state),
     update: (transition) => Effect.sync(() => this.apply(transition)),
+    when: (tag) => narrowAccess(this.access, tag),
   }
 
   constructor(
@@ -619,13 +688,16 @@ class NodeInstance<S, A extends ActionsOf<S>, R, P, W> implements NodeAdapter, L
     private readonly host: NodeHost<R>,
   ) {
     this.actions = bindActions<ActionCalls<A>>(Object.keys(capability.actions), (name, args) =>
-      actionOutcome(() =>
-        this.host.registry.dispatch({
-          nodeId: this.id,
-          action: name,
-          await: true,
-          ...(capability.actions[name]?.input === undefined ? {} : { input: args[0] as Json }),
-        }),
+      reportActionOutcome(
+        actionOutcome(() =>
+          this.host.registry.dispatch({
+            nodeId: this.id,
+            action: name,
+            await: true,
+            ...(capability.actions[name]?.input === undefined ? {} : { input: args[0] as Json }),
+          }),
+        ),
+        (error) => this.host.registry.report(error),
       ),
     )
     this.type = capability.type
@@ -652,7 +724,7 @@ class NodeInstance<S, A extends ActionsOf<S>, R, P, W> implements NodeAdapter, L
     return this.capability === capability
   }
 
-  getSnapshot = (): S => this.state
+  getSnapshot = (): PublicState<W> => this.encoded as PublicState<W>
 
   subscribe = (listener: () => void): (() => void) => {
     if (this.listeners.size >= NODE_LISTENERS_MAX) {
@@ -862,3 +934,20 @@ class NodeInstance<S, A extends ActionsOf<S>, R, P, W> implements NodeAdapter, L
     }
   }
 }
+
+/** Explicit advanced decoded-input seam; ordinary consumers call node.actions. */
+export const dispatchDecoded = <S, A>(
+  node: LiveNode<S, A>,
+  ...args: NoInfer<ActionArgs<A>>
+): Promise<OperationInfo> => {
+  if (!(node instanceof NodeInstance)) {
+    throw new Error("Decoded dispatch requires an Effect node")
+  }
+  return (node as unknown as OwnedLiveNode<S, A>).send(...args)
+}
+
+/** Integration ownership for factories that retire a node before closing its scope. */
+export const mountOwned = <S, A extends ActionsOf<S>, R, P, W>(
+  capability: Capability<S, A, R, P, W>,
+  initial: S,
+) => Effect.map(mountWithAccess(capability, initial), ({ node }) => node)

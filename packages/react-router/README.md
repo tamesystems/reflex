@@ -1,21 +1,20 @@
 # @reflex/react-router
 
-Existing-route binding for React Router 8.5.1 and React >=19.2.7 <20. Keep the application's
-router beneath ReflexProvider; Reflex does not own navigation.
+Keep React Router beneath `ReflexProvider`. A leaf route uses one hook:
 
 ```tsx
-const node = useRouteNode(Detail, { lifetime: "history-entry" })
-useRouteFocus(node)
-const state = useNodeState(node)
+const view = useScreen(Detail)
+if (view.status === "pending") return <p>Loading…</p>
+return <button disabled={!view.actions.Save.available} onClick={() => view.actions.Save.run()}>Save</button>
 ```
 
-`useRouteNode` mounts after commit, keyed by location.key, retaining state for browser
-back/forward until session end. No application entry cache is required. `useRouteFocus`
-reads the enclosing match. Retained route elements supply `entryKey` in the mount options
-and as the focus hook's second argument, so hidden same-URL entries cannot take focus.
-Use leaf screens; layouts should not compete for focus.
+Mounting happens after commit. The hook reports focus while the leaf matches, and uses
+the router's location key internally. No entry key, separate focus hook, or app cache is
+needed. Entries survive back/forward within a 64-entry budget. New pushes dispose
+unreachable forward entries; evicted older entries mount afresh if visited again.
+Register router-mounted definitions with `defineStoreApp({ name, routes: { Detail } })`;
+ambient nodes belong in `nodes` and start eagerly.
 
-The package has no Expo, React Native, Effect or private router imports. React owns the
-mounting/disposal mechanics; the adapter supplies router identity and match information.
-Core-owned data-router projection is deferred (ADR 0018). See [adopting](../../docs/adopting.md)
-and [web](../../apps/web/src/main.tsx).
+The adapter imports no Effect, Expo, React Native, or private router modules. It currently
+accepts synchronous mount definitions; a service-layer Effect route adapter is outstanding.
+See [ADR 0021](../../docs/decisions/0021-contracts-before-implementations.md).

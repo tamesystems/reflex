@@ -4,11 +4,12 @@ import {
   type Capability,
   defineApp,
   defineCapability,
-  mount,
   NoParams,
 } from "@reflex/effect"
 import {
   defineNavigationFactories,
+  mountOwned as mount,
+  dispatchDecoded,
   liveNodeOf,
   REDACTED_TEXT,
   redact,
@@ -658,8 +659,8 @@ test("a live node gives the UI stable snapshots and a typed send", async () => {
         const first = node.getSnapshot()
         expect(node.getSnapshot()).toBe(first)
         node.subscribe(() => seen.push(node.getSnapshot().count))
-        yield* Effect.promise(() => node.send("Add", { by: 2 }))
-        yield* Effect.promise(() => node.send("Clear"))
+        yield* Effect.promise(() => dispatchDecoded(node, "Add", { by: 2 }))
+        yield* Effect.promise(() => dispatchDecoded(node, "Clear"))
       }),
     ),
     scenarios: { default: { layer: Layer.empty } },
@@ -731,7 +732,7 @@ test("a screen's send rejects on an input that will not encode, rather than thro
     root: Layer.effectDiscard(
       Effect.gen(function* () {
         const node = yield* mount(Bounded, {})
-        sending = node.send("Go", { n: 1.5 })
+        sending = dispatchDecoded(node, "Go", { n: 1.5 })
       }),
     ),
     scenarios: { default: { layer: Layer.empty } },
@@ -889,7 +890,7 @@ test("a secret in an action's input reaches the handler, and goes no further", a
         const node = yield* mount(Login, {})
         const registry = yield* Registry
         registry.setFocus(node.id)
-        signing = node.send("SignIn", { password: Redacted.make("hunter2") })
+        signing = dispatchDecoded(node, "SignIn", { password: Redacted.make("hunter2") })
       }),
     ),
     scenarios: { default: { layer: Layer.empty } },
@@ -998,12 +999,12 @@ test("an action taking anything is sent its input; one taking nothing is sent no
         const registry = yield* Registry
         registry.setFocus(node.id)
         sending = Promise.all([
-          node.send("Accept", { value: 42 }),
-          node.send("Accept", null),
-          node.send("Ping"),
+          dispatchDecoded(node, "Accept", { value: 42 }),
+          dispatchDecoded(node, "Accept", null),
+          dispatchDecoded(node, "Ping"),
         ])
         // @ts-expect-error An action without an input takes no argument.
-        void (() => node.send("Ping", { value: 42 }))
+        void (() => dispatchDecoded(node, "Ping", { value: 42 }))
       }),
     ),
     scenarios: { default: { layer: Layer.empty } },
@@ -1091,6 +1092,7 @@ test("a declared focus failure reaches the session reporter", async () => {
   const Loading = defineCapability({
     name: "Loading",
     state: Schema.Struct({ loading: Schema.Boolean }),
+    // @ts-expect-error An untyped caller can still violate the focus error contract at runtime.
     onFocus: () => Effect.fail({ _tag: "Offline", message: "focus offline" }),
     actions: () => ({}),
   })

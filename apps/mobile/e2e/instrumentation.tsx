@@ -1,6 +1,6 @@
 import { useRuntime } from "@reflex/react/advanced"
 import { useCoreStack, useShownToken } from "@reflex/expo/internal"
-import app from "./app.ts"
+import app from "../src/app.ts"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
 import { fixtureApi, fixtureSettings, seedProducts } from "@reflex/example-inventory/fixtures.ts"
@@ -28,7 +28,7 @@ const globals = globalThis as Record<string, unknown>
 export const E2EBridge = ({
   setScenario,
 }: {
-  readonly setScenario: (scenario: string) => void
+  readonly setScenario: (scenario: (typeof testHost.scenarioNames)[number]) => void
 }) => {
   const runtime = useRuntime()
   const stack = useCoreStack()

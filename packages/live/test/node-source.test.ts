@@ -50,13 +50,17 @@ test("external router focus gates screens; old cleanup cannot clear newer focus"
     })
   const first = mount("First")
   const second = mount("Second")
-  await expect(first.send("Run")).rejects.toMatchObject({ code: ErrorCode.ActionUnavailable })
+  await expect(first.dispatchRaw("Run")).rejects.toMatchObject({
+    code: ErrorCode.ActionUnavailable,
+  })
   const blurFirst = reportFocus(runtime, first.id)
-  expect((await first.send("Run")).status).toBe("completed")
+  expect((await first.dispatchRaw("Run")).status).toBe("completed")
   const blurSecond = reportFocus(runtime, second.id)
   blurFirst()
   expect(runtime.focus).toBe(second.id)
-  await expect(first.send("Run")).rejects.toMatchObject({ code: ErrorCode.ActionUnavailable })
+  await expect(first.dispatchRaw("Run")).rejects.toMatchObject({
+    code: ErrorCode.ActionUnavailable,
+  })
   blurSecond()
   expect(runtime.focus).toBeNull()
   first.dispose()

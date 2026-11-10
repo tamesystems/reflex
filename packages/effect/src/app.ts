@@ -21,6 +21,25 @@ import { Registry } from "./capability.ts"
  */
 const VIRTUAL_CLOCK_WARNING_DELAY = "1 hour"
 
+type NodeMap = Record<string, ConsumerDefinition>
+type NodesOf<L> = L extends { readonly nodes: infer N extends NodeMap } ? N : Record<never, never>
+type ScenarioNodes<S> = {
+  [K in keyof S]: S[K] extends { readonly layer: infer L } ? NodesOf<L> : Record<never, never>
+}[keyof S]
+type Intersect<U> = (U extends unknown ? (value: U) => void : never) extends (
+  value: infer I,
+) => void
+  ? I
+  : never
+type AllScenarioNodes<S> =
+  Intersect<ScenarioNodes<S>> extends infer N extends NodeMap ? N : Record<never, never>
+
+/** Declare the definitions mounted by a service layer. Compose this at the fixture boundary. */
+export const withNodes = <R, E, In, const N extends NodeMap>(
+  layer: Layer.Layer<R, E, In>,
+  nodes: N,
+): Layer.Layer<R, E, In> & { readonly nodes: N } => Object.assign(layer, { nodes })
+
 export interface Scenario<Services> {
   readonly description?: string
   /** Everything the app needs from the outside world. */
@@ -49,26 +68,36 @@ export interface DefinedApp<
   N extends Record<string, ConsumerDefinition>,
 > extends AppHost {
   readonly nodes: N
+  readonly defaultScenario: keyof S & string
   readonly scenarioNames: ReadonlyArray<keyof S & string>
   withScenarios<const Extra extends Record<string, Scenario<Exclude<Services, Registry>>>>(
     scenarios: Extra,
     options?: { readonly defaultScenario?: keyof (S & Extra) & string },
-  ): DefinedApp<Services, Root, S & Extra, N>
+  ): DefinedApp<Services, Root, S & Extra, N & AllScenarioNodes<Extra>>
 }
 
 export const defineApp = <
   Services,
   Root,
   const S extends Record<string, Scenario<Exclude<Services, Registry>>>,
-  const N extends Record<string, ConsumerDefinition> = Record<string, ConsumerDefinition>,
+  const N extends Record<string, ConsumerDefinition> = Record<never, never>,
+  const RN extends NodeMap = Record<never, never>,
 >(
-  definition: Omit<AppDefinition<Services, Root>, "scenarios" | "defaultScenario"> & {
+  definition: Omit<AppDefinition<Services, Root>, "root" | "scenarios" | "defaultScenario"> & {
+    readonly root: Layer.Layer<Root, never, Services | Registry> & { readonly nodes?: RN }
     readonly nodes?: N
     readonly scenarios: S
     readonly defaultScenario: NoInfer<keyof S & string>
   },
-): DefinedApp<Services, Root, S, N> => ({
-  nodes: definition.nodes ?? ({} as N),
+): DefinedApp<Services, Root, S, N & RN & AllScenarioNodes<S>> => ({
+  nodes: Object.assign(
+    {},
+    definition.nodes,
+    definition.root.nodes,
+    ...Object.values(definition.scenarios).map((scenario) =>
+      "nodes" in scenario.layer ? scenario.layer.nodes : {},
+    ),
+  ) as N & RN & AllScenarioNodes<S>,
   name: definition.name,
   defaultScenario: definition.defaultScenario,
   scenarioNames: Object.keys(definition.scenarios),
@@ -85,7 +114,7 @@ export const defineApp = <
       ...definition,
       scenarios: { ...definition.scenarios, ...scenarios },
       defaultScenario: options?.defaultScenario ?? definition.defaultScenario,
-    }),
+    }) as never,
 })
 
 const startSession = async <Services, Root>(

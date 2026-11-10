@@ -4,11 +4,11 @@ import { createTestAppPool } from "@reflex/test"
 import { defineStoreApp, defineStoreNode, standardInput } from "@reflex/runtime"
 import { z } from "zod"
 import { createStore } from "zustand/vanilla"
-import app from "../examples/inventory/src/app.ts"
+import app, { screens } from "../examples/inventory/src/app.ts"
 import { InventoryList } from "../examples/inventory/src/features/inventory-list.ts"
 import { InventoryDetail } from "../examples/inventory/src/features/inventory-detail.ts"
-import { Nav } from "../examples/inventory/src/navigation.ts"
 import { QUANTITY_MAX } from "../examples/inventory/src/domain.ts"
+import { ROUTE_MAPPING } from "../packages/expo/src/route-token.ts"
 import { expoRoutes } from "../packages/expo/src/routes-effect.ts"
 
 const pool = createTestAppPool()
@@ -17,17 +17,17 @@ afterEach(pool.disposeAll)
 test("typed journey actions expose declared data and guard refusals", async () => {
   const session = await pool.open(app)
   const list = await session.focused(InventoryList, { _tag: "ready" })
-  expect(list.state.products[0]?.id).toBe("product-123")
+  expect((await list.state()).products[0]?.id).toBe("product-123")
   await list.actions.OpenProduct({ productId: "product-123" })
   const detail = await session.focused(InventoryDetail, { _tag: "editing" })
   await detail.actions.SetQuantity({ quantity: QUANTITY_MAX })
-  expect(await detail.actions.Increment()).toMatchObject({
+  expect(await detail.expectFailure.Increment()).toMatchObject({
     status: "refused",
     code: ErrorCode.ActionUnavailable,
     reason: "Quantity is already at its maximum",
   })
   await session.dispatchRaw("FailNextSave")
-  const outcome = await detail.actions.Save()
+  const outcome = await detail.expectFailure.Save()
   expect(outcome.status).toBe("domain-error")
   if (outcome.status === "domain-error") {
     const tag: "ApiError" | undefined = outcome.error.data?._tag
@@ -39,6 +39,7 @@ test("typed journey actions expose declared data and guard refusals", async () =
 test("store handles retain transformed inputs, projected state, errors and focus availability", async () => {
   const Counter = defineStoreNode({
     name: "Counter",
+    type: "screen",
     store: () => createStore(() => ({ count: 0, token: "private" })),
     project: ({ count }) => ({ count }),
     actions: (action) => ({
@@ -68,9 +69,9 @@ test("store handles retain transformed inputs, projected state, errors and focus
     { defaultScenario: "full" },
   )
   const seeded = await pool.open(extended, { scenario: "full" })
-  expect((await seeded.node(Counter)).state).toEqual({ count: 99 })
+  expect(await (await seeded.node(Counter)).state()).toEqual({ count: 99 })
   await seeded.reset("default")
-  expect((await seeded.node(Counter)).state).toEqual({ count: 0 })
+  expect(await (await seeded.node(Counter)).state()).toEqual({ count: 0 })
   const session = await host.start("default", { sessionId: "store-contract" })
   try {
     const node = Counter.resolve(session.runtime)
@@ -112,22 +113,33 @@ test("store handles retain transformed inputs, projected state, errors and focus
 })
 
 test("Expo registration derives both directions and validates renamed incoming params", () => {
-  const routes = expoRoutes(Nav, {
-    InventoryList: "/",
-    InventoryDetail: { pathname: "/inventory/[sku]", params: { productId: "sku" } },
-    Settings: "/settings",
-  })
-  expect(routes.toHref({ route: "InventoryDetail", params: { productId: "a/b" } })).toEqual({
+  const routes = expoRoutes(
+    { screens },
+    {
+      InventoryList: "/",
+      InventoryDetail: { pathname: "/inventory/[sku]", params: { productId: "sku" } },
+      Settings: "/settings",
+    },
+  )
+  expect(
+    routes[ROUTE_MAPPING].toHref({ route: "InventoryDetail", params: { productId: "a/b" } }),
+  ).toEqual({
     pathname: "/inventory/[sku]",
     params: { sku: "a/b" },
   })
-  expect(routes.fromLocation(["inventory", "[sku]"], { sku: ["a/b", "ignored"] })).toEqual({
+  expect(
+    routes[ROUTE_MAPPING].fromLocation(["inventory", "[sku]"], { sku: ["a/b", "ignored"] }),
+  ).toEqual({
     route: "InventoryDetail",
     params: { productId: "a/b" },
   })
-  expect(routes.fromLocation(["inventory", "[sku]"], {})).toBeNull()
-  expect(routes.fromLocation(["unknown"], {})).toBeNull()
-  expect(() => routes.toHref({ route: "InventoryDetail", params: { productId: 12 } })).toThrow()
+  expect(() => routes[ROUTE_MAPPING].fromLocation(["inventory", "[sku]"], {})).toThrow(
+    "invalid URL params",
+  )
+  expect(routes[ROUTE_MAPPING].fromLocation(["unknown"], {})).toBeNull()
+  expect(() =>
+    routes[ROUTE_MAPPING].toHref({ route: "InventoryDetail", params: { productId: 12 } }),
+  ).toThrow()
 })
 
 test("route binding compares encoded params after decoding an incoming transform", async () => {
@@ -140,13 +152,13 @@ test("route binding compares encoded params after decoding an incoming transform
     initial: () => 0,
     actions: () => ({}),
   })
-  const navigation = defineNavigation("numeric-routes", () => ({ Detail }))
+  const navigation = defineNavigation("numeric-routes", { Detail })
   const routes = expoRoutes(navigation, {
     Detail: { pathname: "/detail/[sku]", params: { id: "sku" } },
   })
   expect(routes.Detail.params({ sku: "42" })).toEqual({ id: 42 })
   expect(routes.Detail.encodedParams({ sku: "42" })).toEqual({ id: "42" })
-  expect(routes.fromLocation(["detail", "[sku]"], { sku: "42" })).toEqual({
+  expect(routes[ROUTE_MAPPING].fromLocation(["detail", "[sku]"], { sku: "42" })).toEqual({
     route: "Detail",
     params: { id: "42" },
   })
@@ -167,7 +179,7 @@ test("typed focused access selects the top instance when screen names repeat", a
   await session.back()
   const restored = await session.focused(InventoryDetail, { _tag: "editing" })
   expect(restored.id).toBe(lower.id)
-  expect(restored.state.quantity).toBe(5)
+  expect((await restored.state()).quantity).toBe(5)
 })
 
 test("Effect actions accept encoded inputs locally and in journeys, decoding once for handlers", async () => {
@@ -201,7 +213,7 @@ test("Effect actions accept encoded inputs locally and in journeys, decoding onc
   })
   const session = await pool.open(host)
   const node = await session.node(Parsed)
-  expect(node.state).toBe(12)
+  expect(await node.state()).toBe(12)
   expect(await node.actions.Set("13")).toEqual({ status: "completed" })
-  expect((await session.node(Parsed)).state).toBe(13)
+  expect(await (await session.node(Parsed)).state()).toBe(13)
 })

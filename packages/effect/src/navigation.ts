@@ -19,9 +19,8 @@ import * as Scope from "effect/Scope"
 import * as Semaphore from "effect/Semaphore"
 import {
   defineCapability,
-  mount,
   type Capability,
-  type LiveNode,
+  type OwnedLiveNode,
   mountWithAccess,
   Registry,
   secretFreeEncoder,
@@ -40,7 +39,7 @@ type RouteSchemas = { readonly [route: string]: WireCodec<Erased> }
 type ParamsOf<Routes extends RouteSchemas, K extends keyof Routes> = Schema.Schema.Type<Routes[K]>
 
 /** All the navigator needs of a screen, whatever its state and actions are. */
-type ScreenNode = Pick<LiveNode<unknown, never>, "id" | "dispose">
+type ScreenNode = Pick<OwnedLiveNode<unknown, never>, "id" | "dispose">
 
 type ScreenFactory<Params, R> = (params: Params) => Effect.Effect<ScreenNode, never, R>
 
@@ -191,7 +190,7 @@ const buildScreenNavigation = <const D extends ScreenDefinitions>(key: string, s
       name,
       (params: unknown) => {
         assert(screen.initial !== undefined, `Screen "${name}" must define initial(params)`)
-        return mount(screen, screen.initial(params))
+        return Effect.map(mountWithAccess(screen, screen.initial(params)), ({ node }) => node)
       },
     ]),
   ) as unknown as {
@@ -215,7 +214,7 @@ const buildScreenNavigation = <const D extends ScreenDefinitions>(key: string, s
 }
 
 /** Resolve screens after module initialization, so features may navigate through this value. */
-export const defineNavigation = <const D extends ScreenDefinitions>(
+export const defineLegacyNavigation = <const D extends ScreenDefinitions>(
   key: string,
   screens: () => D,
 ) => {
@@ -235,6 +234,89 @@ export const defineNavigation = <const D extends ScreenDefinitions>(
     ): Effect.Effect<void, NavigationRefused, NavigationService> =>
       Effect.suspend(() => get().push(route, ...args)),
     back: Effect.suspend(() => get().back),
+  }
+}
+
+/** Contract-first navigation: implementations are supplied only when composing the app. */
+export const defineContractNavigation = <
+  const Key extends string,
+  const D extends Record<
+    string,
+    {
+      readonly name: string
+      readonly state: WireCodec<Erased>
+      readonly params?: WireCodec<Erased>
+      readonly initial: (params: Erased) => Erased
+    }
+  >,
+>(
+  key: Key,
+  contracts: D,
+) => {
+  // Legacy definitions remain accepted during migration; new code passes contracts directly.
+  const definitions = () => contracts
+  type Routes = {
+    readonly [K in keyof D]: D[K] extends { readonly params: infer P extends WireCodec<Erased> }
+      ? P
+      : typeof NoParams
+  }
+  const routes = Object.fromEntries(
+    Object.entries(definitions()).map(([name, screen]) => [name, screen.params ?? NoParams]),
+  ) as Routes
+  const navigation = defineSchemaNavigation(key, routes)
+  // A literal service key is a type-level identity, as well as the runtime lookup key.
+  type Service = Navigator<Routes> & { readonly "~reflex/navigator": Key }
+  const Service = Context.Service<Service, Navigator<Routes>>(key)
+  type Args = {
+    [K in keyof Routes & string]: keyof ParamsOf<Routes, K> extends never
+      ? [route: K]
+      : string extends keyof ParamsOf<Routes, K>
+        ? [route: K] | [route: K, params: ParamsOf<Routes, K>]
+        : [route: K, params: ParamsOf<Routes, K>]
+  }[keyof Routes & string]
+  return {
+    screens: definitions(),
+    push: (...[route, params]: Args): Effect.Effect<void, NavigationRefused, Service> =>
+      Effect.flatMap(Service, (nav) =>
+        nav.push(route, params ?? ({} as ParamsOf<Routes, keyof Routes>)),
+      ),
+    back: Effect.flatMap(Service, (nav) => nav.back),
+    layer: <
+      const Screens extends {
+        readonly [K in keyof D]: Capability<
+          Schema.Schema.Type<D[K]["state"]>,
+          Erased,
+          Erased,
+          Schema.Schema.Type<Routes[K]>
+        > & { readonly initial: (params: Erased) => Erased }
+      },
+    >(options: {
+      readonly initial: {
+        readonly [K in keyof Routes]: { readonly route: K; readonly params: ParamsOf<Routes, K> }
+      }[keyof Routes]
+      readonly screens: Screens
+    }) => {
+      const screens = options.screens
+      const factories = Object.fromEntries(
+        Object.entries(screens).map(([name, screen]) => [
+          name,
+          (params: unknown) =>
+            Effect.map(mountWithAccess(screen, screen.initial(params)), ({ node }) => node),
+        ]),
+      ) as unknown as {
+        readonly [K in keyof Routes]: ScreenFactory<
+          ParamsOf<Routes, K>,
+          ScreenRequirements<Screens>
+        >
+      }
+      return Object.assign(navigation.layer({ initial: options.initial, screens: factories }), {
+        nodes: screens,
+      }) as unknown as Layer.Layer<
+        Service,
+        never,
+        Exclude<ScreenRequirements<Screens>, Service | Scope.Scope> | Registry
+      > & { readonly nodes: Screens }
+    },
   }
 }
 
@@ -538,3 +620,5 @@ class RouteStack<Routes extends RouteSchemas> implements Navigator<Routes> {
     this.options.registry.setFocus(top.screen.id)
   }
 }
+
+export const defineNavigation = defineContractNavigation

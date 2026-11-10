@@ -5,7 +5,8 @@ import {
   type NodeId,
   ProtocolError,
 } from "@reflex/protocol"
-import type { AppHost, ConsumerDefinition } from "@reflex/runtime/internal"
+import type { AppHost, ConsumerDefinition, ScenarioName } from "@reflex/runtime/internal"
+import type { StateOf } from "./journey-client.ts"
 import { createTestApp, type TestApp } from "./test-app.ts"
 
 const RUN_COUNT_DEFAULT = 25
@@ -53,7 +54,9 @@ export const inputsFor = <D extends ConsumerDefinition>(
   inputs: Object.fromEntries(
     Object.entries(inputs).map(([action, values]) => [
       action,
-      (values as readonly unknown[]).map((value) => definition.client.input(action, [value]) ?? {}),
+      (values as readonly unknown[]).map(
+        (value) => definition["~reflex"].input(action, [value]) ?? {},
+      ),
     ]),
   ),
 })
@@ -91,10 +94,38 @@ export interface ExploreResult {
  * from each action's schema. Availability comes from the app, so the walk stays
  * on reachable paths without being told what they are.
  */
-export const explore = async (
-  host: AppHost,
-  options: ExploreOptions = {},
+type HostNodes<H> = H extends { readonly nodes: infer N } ? N : Record<never, never>
+export type ExplorationInvariants<H> = {
+  readonly [K in keyof HostNodes<H>]?: (state: StateOf<HostNodes<H>[K]>) => string | undefined
+}
+export const explore = async <H extends AppHost>(
+  host: H,
+  input: Omit<ExploreOptions, "scenario"> & {
+    readonly scenario?: ScenarioName<NoInfer<H>>
+    readonly invariants?: ExplorationInvariants<NoInfer<H>>
+  } = {},
 ): Promise<ExploreResult> => {
+  const options: ExploreOptions = {
+    ...input,
+    invariant: (snapshot) => {
+      const failure = input.invariant?.(snapshot)
+      if (failure !== undefined || snapshot.node === null) {
+        return failure
+      }
+      const nodes = ("nodes" in host ? host.nodes : {}) as Record<string, ConsumerDefinition>
+      const entry = Object.entries(nodes).find(
+        ([, definition]) => definition.name === snapshot.node?.name,
+      )
+      if (entry === undefined) {
+        return undefined
+      }
+      const [key, definition] = entry
+      const check = (
+        input.invariants as Record<string, (state: unknown) => string | undefined> | undefined
+      )?.[key]
+      return check?.(definition["~reflex"].state(snapshot.node.state))
+    },
+  }
   const runCount = requireCount("runCount", options.runCount ?? RUN_COUNT_DEFAULT, RUN_COUNT_MAX)
   const stepCount = requireCount(
     "stepCount",

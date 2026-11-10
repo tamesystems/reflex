@@ -10,6 +10,7 @@
       "@reflex/rpc/connection": ["../../packages/rpc/src/server.ts"],
       "@reflex/effect": ["../../packages/effect/src/index.ts"],
       "@reflex/expo": ["../../packages/expo/src/index.ts"],
+      "@reflex/example-plain": ["../../examples/plain/src/app.ts"],
       "@reflex/example-inventory": ["../../examples/inventory/src/app.ts"],
       "@reflex/example-inventory/*": ["../../examples/inventory/src/*"],
       "effect": ["./node_modules/effect"],

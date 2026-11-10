@@ -1,5 +1,6 @@
 import {
   type AppHost,
+  type ScenarioName,
   createController,
   reportToConsole,
   type BackgroundReporter,
@@ -7,11 +8,11 @@ import {
 import { connectBridge } from "./bridge.ts"
 
 /** Serve a plain process; close waits for its owned session's disposal. */
-export const serveLive = async (
-  app: AppHost,
+export const serveLive = async <H extends AppHost>(
+  app: H,
   options: {
     readonly setting: string
-    readonly scenario?: string
+    readonly scenario?: ScenarioName<NoInfer<H>>
     readonly onBackgroundError?: BackgroundReporter
   },
 ): Promise<{ close(): Promise<void> }> => {

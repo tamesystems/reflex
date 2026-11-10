@@ -31,24 +31,27 @@ export interface StoreApp<
 
 /** Own fresh stores, typed scenario overrides, focus and disposal on every start/reset. */
 export const defineStoreApp = <
-  const N extends Record<string, MountableNode>,
-  const S extends Record<string, StoreScenario<N>> = { default: Record<string, never> },
+  const N extends Record<string, MountableNode> = Record<never, never>,
+  const RN extends Record<string, MountableNode> = Record<never, never>,
+  const S extends Record<string, StoreScenario<N & RN>> = { default: Record<string, never> },
 >(definition: {
   readonly name: string
-  readonly nodes: N
+  readonly nodes?: N
+  /** Definitions mounted by route components, included in the application contract. */
+  readonly routes?: RN
   readonly scenarios?: S
   readonly defaultScenario?: NoInfer<keyof S & string>
-}): StoreApp<N, S> => {
-  const defaults: Record<string, StoreScenario<N>> = { default: {} }
+}): StoreApp<N & RN, S> => {
+  const defaults: Record<string, StoreScenario<N & RN>> = { default: {} }
   const scenarios = definition.scenarios ?? (defaults as S)
   const names = Object.keys(scenarios) as (keyof S & string)[]
   const defaultScenario = definition.defaultScenario ?? names[0]
   if (defaultScenario === undefined) {
     throw new Error("A store app needs at least one scenario")
   }
-  const host: StoreApp<N, S> = {
+  const host: StoreApp<N & RN, S> = {
     name: definition.name,
-    nodes: definition.nodes,
+    nodes: { ...definition.nodes, ...definition.routes } as N & RN,
     defaultScenario,
     scenarioNames: names,
     scenarios: Object.entries(scenarios).map(([name, scenario]) => ({
@@ -63,7 +66,7 @@ export const defineStoreApp = <
         defaultScenario: options?.defaultScenario ?? defaultScenario,
       }),
     async start(name, { sessionId, onBackgroundError }) {
-      const scenario: StoreScenario<N> | undefined = Object.hasOwn(scenarios, name)
+      const scenario: StoreScenario<N & RN> | undefined = Object.hasOwn(scenarios, name)
         ? scenarios[name]
         : undefined
       if (scenario === undefined) {
@@ -80,10 +83,10 @@ export const defineStoreApp = <
         }
       }
       try {
-        for (const [key, definition] of Object.entries(host.nodes)) {
-          const node = definition.mount(runtime, scenario.stores?.[key]?.())
+        for (const [key, nodeDefinition] of Object.entries(definition.nodes ?? {})) {
+          const node = nodeDefinition.mount(runtime, scenario.stores?.[key]?.())
           nodes.push(node)
-          if (definition.type === "screen" && runtime.focus === null) {
+          if (nodeDefinition.type === "screen" && runtime.focus === null) {
             runtime.setFocus(node.id)
           }
         }

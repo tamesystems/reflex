@@ -9,6 +9,7 @@ its public contract and session lifetime. See [plain](../examples/plain/src/app.
 ```ts
 const Counter = defineStoreNode({
   name: "Counter",
+  type: "screen",
   store: createCounterStore,
   project: ({ count }) => ({ count }),
   actions: (action) => ({
@@ -21,6 +22,7 @@ const Counter = defineStoreNode({
 const app = defineStoreApp({ name: "counter", nodes: { Counter } })
 ```
 
+Store nodes default to `service`; opt into `type: "screen"` for focus gating.
 `defineStoreNode` retains the concrete store, projected state and action map. Handlers
 receive decoded inputs; consumers supply the validator's input type. This applies to both
 Standard Schema and Effect codecs: a NumberFromString input accepts a string at the
@@ -38,11 +40,10 @@ for custom ownership beyond these factories. For a process, use
 ## Render typed nodes
 
 ```tsx
-const node = useNode(Counter)
-const state = useNodeState(node)
-const add = useAction(node, "Add")
-return <button disabled={!add.available} onClick={() => add.run({ by: 1 })}>
-  {state?.count}
+const view = useNode(Counter, { focus: true })
+if (view.status === "pending") return <p>Loading…</p>
+return <button disabled={!view.actions.Add.available} onClick={() => view.actions.Add.run({ by: 1 })}>
+  {view.state.count}
 </button>
 ```
 
@@ -51,8 +52,8 @@ never inspects JSON to find its own state. `useAction` returns `run`, `available
 `pending` and `outcome`. Its guard comes from the same definition the runtime enforces.
 `node.actions.Add({ by: 1 })` works outside React too. Outcomes distinguish `completed`,
 `cancelled`, `refused`, `domain-error` and `defect`. Refusals include a code and reason.
-The secondary `send(node, action, input)` preserves correlated arguments and returns the
-same outcome union; await it or explicitly discard its Promise.
+Unexpected local failures report through the runtime even if a UI ignores the promise.
+Secondary dispatch is available only through the advanced integration tier.
 
 `useSession()` exposes `scenario` and `reset`. Pass the app value as `useSession(app)`
 to check scenario names in resets; provider scenario props are checked against their host too. Raw registry access is an explicit escape
@@ -70,35 +71,41 @@ continues until cancelled or disposed. Ambient service/fixture nodes need no foc
 For React Router 8.5.1, mount a definition after commit and retain its history entry:
 
 ```tsx
-const node = useRouteNode(Detail, { lifetime: "history-entry" })
-useRouteFocus(node)
+const view = useScreen(Detail)
+if (view.status === "pending") return <p>Loading…</p>
 ```
 
-Both hooks come from `@reflex/react-router`. The library keys ownership by `location.key`
-and disposes retained entries at session end. Retained route elements can supply
-`entryKey` to `useRouteNode`, and the same key as `useRouteFocus`'s second argument.
+`useScreen` comes from `@reflex/react-router`. It keys ownership by `location.key`,
+reports match focus, and retains at most 64 entries. A new push frees unreachable forward
+entries; an evicted entry mounts afresh on return. No app cache or entry key is needed.
+Register the route definitions with `defineStoreApp({ name, routes: { Detail } })`.
 Do not mount during render. This adapter follows existing routes; it does not navigate
 headlessly. Core-owned React Router projection remains deferred (ADR 0018).
 
 ## Effect screens and Expo
 
-A capability owns `state`, `params`, `initial(params)`, actions and `onFocus`.
-`defineNavigation("app/Navigation", () => ({ List, Detail, Settings }))` derives route schemas and
-mounting from those definitions. Its layer needs only the initial destination.
+Establish state, params and initial state with `defineScreen` in a module with no handler
+imports. Build `defineNavigation("app/Navigation", { List: ListScreen, Detail: DetailScreen })`
+from these contracts. Attach handlers with `.implement`, then pass their definitions to
+`Nav.layer({ screens: { List, Detail }, initial })` at app composition.
 `Nav.push("Settings")` is an Effect ready to return from a handler; required params remain
 required. Navigation failures must be declared with `error: NavigationRefused`.
 
 Use `action.when("editing").reduce({ input, reducer })` for synchronous state updates.
 The guard narrows both availability and the reducer. Async guarded handlers receive a
-narrowed `get`; `update` still sees the full union and must recheck before committing.
+narrowed `get` and `update`; writes recheck the tag at commit. Use `state.when(tag)`
+when asynchronous work changes phase.
 A stale narrowed read interrupts rather than inventing a state that no longer exists.
 
 ```ts
-const routes = expoRoutes(Nav, {
-  List: "/",
-  Detail: { pathname: "/inventory/[id]", params: { productId: "id" } },
-  Settings: "/settings",
-})
+const routes = expoRoutes(
+  { screens },
+  {
+    List: "/",
+    Detail: { pathname: "/inventory/[id]", params: { productId: "id" } },
+    Settings: "/settings",
+  },
+)
 ```
 
 Import `expoRoutes` and `useScreen` from `@reflex/expo/effect`. The mapping derives both
@@ -121,10 +128,13 @@ const detail = await session.focused(Detail, { _tag: "editing" })
 await detail.actions.SetQuantity({ quantity: 12 })
 ```
 
-Register the app's definitions through `nodes` (`nodes: Nav.screens` for navigation).
+Navigation and scenario layers provide membership. Declare fixture nodes on scenario
+layers with `withNodes`; use explicit `nodes` for a custom non-navigation root.
 Scenario literals and node membership flow into the test client. `focused` validates a
-typed partial state match; its returned state is a captured wire snapshot, narrowed by
-`_tag`. Call it again for a later snapshot. `createJourneyClient(transport)` provides the
+typed partial state match. `await detail.state()` reads live state and rechecks the
+previously-proved tag. Actions fail the test on failure or refusal; use
+`detail.expectFailure.Save()` for expected failures and `detail.allowCancellation.SaveAndClose()`
+for navigation cancellation. Array matches can use `includes({ id, quantity })`. `createJourneyClient(transport)` provides the
 same API for a live RPC/CLI target; `JourneyClientFor<typeof app>` derives a reusable story's
 contract. `inputsFor(Definition, { Action: [input] })` supplies typed exploration inputs
 keyed by node and action. `node(Definition)` also binds ambient fixture/service nodes. `inspectRaw`, `dispatchRaw` and `client.request` are explicit protocol escape
@@ -133,7 +143,7 @@ hatches, including deliberately invalid-input tests and cancellation/virtual-tim
 ## Development bridges
 
 Expo uses `developmentBridge()` from `@reflex/expo/dev`; Vite uses
-`await developmentBridge()` from `@reflex/live/vite`. Pass the result as the provider's
+`developmentBridge()` from `@reflex/live/vite`. Pass the result as the provider's
 `bridge`. Read `EXPO_PUBLIC_REFLEX_BRIDGE` or `VITE_REFLEX_BRIDGE` only in those development
 modules. Production builds exclude the dialler and token; the browser journeys check it.
 CLI, MCP, access policies, revisions, waits and wire validation are unchanged.
@@ -142,7 +152,7 @@ CLI, MCP, access policies, revisions, waits and wire validation are unchanged.
 
 Store projection deliberately selects safe public fields. It is copied, frozen and
 bounded JSON, and unchanged projections produce no revision. There is no automatic secret
-scanning on the store path. Include state controlling availability in the projection.
+scanning on the store path. Availability can depend on private fields; its subscription updates independently.
 An invalid external write cannot be rolled back: Reflex reports it, retains the previous
 snapshot and fails operations finishing while publication is invalid. Validate store
 writes when atomicity matters.

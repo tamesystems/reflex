@@ -25,7 +25,7 @@ import { onRouterAction } from "./router-actions.ts"
 
 /** Expo route parameter carrying the core entry identity. */
 export { NODE_PARAM } from "./route-token.ts"
-import { NODE_PARAM } from "./route-token.ts"
+import { NODE_PARAM, ROUTE_MAPPING } from "./route-token.ts"
 
 export interface RouterHref {
   readonly pathname: string
@@ -34,7 +34,6 @@ export interface RouterHref {
 
 export type RouteParams = Record<string, string | ReadonlyArray<string> | undefined>
 
-export { useSession } from "@reflex/react"
 /** The core's route stack, as React state. */
 export const useCoreStack = (): ReadonlyArray<StackEntry> => {
   const session = useSession()
@@ -141,9 +140,11 @@ const locationAt = (
 export const RouterProjection = ({
   routes,
 }: {
-  readonly routes: { readonly toHref: ToHref; readonly fromLocation: FromLocation }
+  readonly routes: {
+    readonly [ROUTE_MAPPING]: { readonly toHref: ToHref; readonly fromLocation: FromLocation }
+  }
 }) => {
-  const { toHref, fromLocation } = routes
+  const { toHref, fromLocation } = routes[ROUTE_MAPPING]
 
   const session = useSession()
   const stack = useCoreStack()
