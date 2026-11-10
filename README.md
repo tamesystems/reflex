@@ -4,7 +4,9 @@ Reflex is an application control protocol that makes behavior inspectable and ex
 with or without a UI. An app exposes a graph of stateful nodes; a client (the `reflex`
 CLI, a test, or a coding agent over MCP) reads their state, discovers their typed
 actions, runs them, and watches what changes. The same commands work against the app running headless or live
-through a bridge.
+through a bridge. The inventory example proves the same behavior journey with fixtures
+headless and a real local HTTP API plus device storage in the Expo app; see
+[real services setup](apps/mobile/README.md).
 
 It is inspired by Shopify's Reflex, as described in
 [their engineering post](https://shopify.engineering/reflex). This is an independent

@@ -54,6 +54,20 @@ $ bun run reflex --target device ls
 Metro inlines the variable when it bundles, so restart Metro after changing it. The token
 persists in `.reflex/device.token`, so the setting stays valid across bridge restarts.
 
+**Real inventory services.** Run `bun examples/inventory/server.ts` in another terminal
+(default http://127.0.0.1:8791), then set EXPO_PUBLIC_INVENTORY_API to that URL before
+starting Expo. This development setting adds and selects `live-services`; absent it,
+fixtures remain the default. For Android emulators use http://10.0.2.2:8791 and start the
+API with INVENTORY_HOST=0.0.0.0. Metro must restart after variable changes. The API prints
+its bound URL; INVENTORY_PORT=0 chooses a port safely. On PowerShell set the variables
+with `$env:NAME = 'value'`. See [mobile setup](../apps/mobile/README.md).
+
+`reflex --target device reset` retains the scenario and re-reads server inventory and
+AsyncStorage settings. It never seeds or clears them. POST /reset on the API explicitly
+reseeds inventory; POST /fail-next-save makes one valid save return JSON 503. The server
+is unauthenticated, in-memory local development tooling. Headless scenarios still use
+fixtures and reject unexpected network requests.
+
 **An agent over MCP.** `bun run reflex mcp` serves the commands as MCP tools on stdio.
 See [packages/cli/README.md](../packages/cli/README.md#mcp).
 
@@ -66,6 +80,7 @@ See [packages/cli/README.md](../packages/cli/README.md#mcp).
 | `bun run --cwd apps/mobile e2e`                   | Exports the web app and runs `e2e/journey.ts` in headless Chrome                                                                                                                                    |
 | `bun run --cwd apps/mobile e2e:plain`             | Isolated plain Zustand/Zod Expo screen driven by CLI/MCP, Metro module graph proves no Effect; runs on Linux and Windows                                                                            |
 | `bun run --cwd apps/mobile e2e:live`              | Runs the app under Metro with a bridge and drives it with CLI and MCP calls, comparing each answer with a headless session's; checks production exports hold no bridge or token. Runs in Windows CI |
+| `bun run --cwd apps/mobile e2e:services`          | Shared headless/live behavior definition against HTTP and AsyncStorage on Chrome; server and settings survive reset/reload; runs on Ubuntu and Windows                                              |
 | `HERMES=… bun run --cwd apps/mobile hermes-smoke` | Runs a journey from a Metro bundle on a Hermes VM                                                                                                                                                   |
 | `bun run bench`                                   | Wire and encoding costs                                                                                                                                                                             |
 

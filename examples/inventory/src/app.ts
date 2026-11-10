@@ -6,7 +6,7 @@ import { Settings, initialState as settingsState } from "./features/settings.ts"
 import { fixtureApi, fixtureSettings, seedProducts } from "./fixtures.ts"
 import { Nav } from "./navigation.ts"
 
-const root = Nav.layer({
+export const root = Nav.layer({
   initial: { route: "InventoryList", params: {} },
   screens: {
     InventoryList: () => mount(InventoryList, listState),

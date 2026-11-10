@@ -67,7 +67,8 @@ and handle. Popping an entry ends its scope, which cancels its work.
 ## Sessions and their history
 
 **Session.** One running instance of the app, from a start to its end. A **reset** ends it
-and starts a new one, on the same or another scenario. Nothing carries over.
+and starts a new one, on the same or another scenario. Node state does not carry over. App-owned external service data may persist; the
+inventory live scenario re-reads its API and device storage.
 
 **Revision.** A count of changes in a session. Each node's snapshot carries the revision at
 which it last changed, so `expectedRevision` on a dispatch refuses to act on a node that has

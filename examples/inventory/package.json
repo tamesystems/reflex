@@ -10,11 +10,11 @@
   },
   "dependencies": {
     "@reflex/effect": "workspace:*",
-    "effect": "4.1.2"
+    "effect": "4.1.2",
+    "@reflex/protocol": "workspace:*"
   },
   "devDependencies": {
     "@reflex/cli": "workspace:*",
-    "@reflex/test": "workspace:*",
-    "@reflex/protocol": "workspace:*"
+    "@reflex/test": "workspace:*"
   }
 }

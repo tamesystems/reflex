@@ -1,4 +1,4 @@
-import app from "@reflex/example-inventory"
+import app from "../src/app.ts"
 import { type BridgeConnector, ReflexProvider } from "@reflex/react"
 import { RouterProjection } from "@reflex/expo"
 import { Stack } from "expo-router"

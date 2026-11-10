@@ -11,10 +11,12 @@
     "e2e": "bun e2e/run.ts",
     "hermes-smoke": "bun hermes-smoke/run.ts",
     "e2e:live": "bun e2e/live-run.ts",
-    "e2e:plain": "bun e2e/plain-run.ts"
+    "e2e:plain": "bun e2e/plain-run.ts",
+    "e2e:services": "bun e2e/services-run.ts"
   },
   "dependencies": {
     "@expo/metro-runtime": "~58.0.17",
+    "@react-native-async-storage/async-storage": "2.2.0",
     "effect": "4.1.2",
     "expo": "~58.0.0",
     "expo-constants": "~58.0.15",

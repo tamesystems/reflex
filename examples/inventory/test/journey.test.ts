@@ -306,3 +306,16 @@ test("a route without params refuses junk from a deep link", async () => {
   await session.do("Navigate", { route: "Settings", params: {} })
   await session.precondition("Settings")
 })
+
+test("the shared real-services behavior journey passes with guarded headless fixtures", async () => {
+  const { servicesJourney } = await import("../journeys/services.ts")
+  const session = await pool.open(app)
+  await servicesJourney({
+    do: (action, input) => session.do(action, input as import("@reflex/protocol").Json),
+    precondition: (screen, match) =>
+      session.precondition(screen, match as import("@reflex/protocol").Json),
+    failNextSave: async () => {
+      await session.do("FailNextSave")
+    },
+  })
+})

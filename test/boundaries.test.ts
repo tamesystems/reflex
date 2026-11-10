@@ -102,7 +102,10 @@ test("Expo owns only router integration", () => {
 })
 
 test("application core never imports a UI or device API", () => {
-  const found = violations("examples/inventory/src", (s) => isEffect(s) || s === "@reflex/effect")
+  const found = violations(
+    "examples/inventory/src",
+    (s) => isEffect(s) || s === "@reflex/effect" || s === "@reflex/protocol",
+  )
   expect(found).toEqual([])
 })
 
@@ -166,6 +169,27 @@ test("generic React entry bundles for the browser without Expo, Effect or the br
           )
           builder.onLoad({ filter: /[\\/]live[\\/]src[\\/]bridge\.ts$/ }, () => {
             throw new Error("Generic React entry pulled in the live bridge")
+          })
+        },
+      },
+    ],
+  })
+  expect(build.success).toBe(true)
+})
+
+test("headless inventory host excludes real HTTP and device storage implementations", async () => {
+  const build = await Bun.build({
+    entrypoints: [join(root, "examples/inventory/src/app.ts")],
+    target: "bun",
+    plugins: [
+      {
+        name: "fixture-service-boundary",
+        setup(builder) {
+          builder.onLoad({ filter: /(?:http-api|settings-store)\.ts$/ }, () => {
+            throw new Error("Headless inventory imported real services")
+          })
+          builder.onResolve({ filter: /^@react-native-async-storage\// }, () => {
+            throw new Error("Headless inventory imported device storage")
           })
         },
       },

@@ -98,13 +98,15 @@ packages/
               router-specific hooks and Effect route convenience entry.
               See packages/expo/README.md.
 examples/
-  inventory/  A three-screen app core with fixture scenarios. Imports only Effect and
-              @reflex/effect: no React, no Expo.
+  inventory/  A three-screen app core with fixture scenarios and an optional HTTP service
+              implementation. Imports Effect, @reflex/effect and protocol limits; no UI
+              or device APIs. server.ts is the separate local Bun JSON API.
   plain/      Real Zustand/Zod app core, no Effect; rendered by apps/mobile/plain.
   live-counter/ Plain process serving a service node through @reflex/live; no UI framework.
 apps/
   web/        Vite/React Router existing-route fixture; own install, live CLI/MCP journey.
-  mobile/     The same inventory core rendered by Expo Router. Own install. e2e/ holds
+  mobile/     The same inventory core rendered by Expo Router; src/app.ts optionally
+              composes HTTP and app-only AsyncStorage layers (ADR 0019). Own install. e2e/ holds
               the browser journeys (including the isolated plain Expo entry), hermes-smoke/ runs a journey on a Hermes VM.
 test/         Cross-package suites: conformance (Effect, Zustand, XState, Effect/Zustand live),
               xstate-counter.ts (test-only NodeAdapter), xstate.test.ts (actor semantics),
@@ -284,7 +286,9 @@ new session. Live starts use the runtime's default start budget (30 s), not
 
 ## 5. State and storage
 
-There is no database. A session's state is its nodes' state, in memory, for as long as
+The runtime has no database. App services may persist independently of sessions
+(the inventory live scenario uses a local API and AsyncStorage; ADR 0019). A session's
+state is its nodes' state, in memory, for as long as
 the session lives. On disk, per `REFLEX_DIR` (default `./.reflex`, which must be private to
 its owner):
 
@@ -360,7 +364,7 @@ What must stay true when you change things. Most have a test; the test names say
   focus: it refuses new actions, but work already running carries on. Existing routers
   report focus with useNodeFocus and must dispose their own popped nodes; store work
   cancels cooperatively through AbortSignal.
-- **Nothing survives a reset.** Handles, operations and waits belong to one session.
+- **Session resources do not survive a reset.** Handles, operations and waits belong to one session.
   Pending waits reject with `SessionClosed`; a cursor from another session always gets
   `resync.required`.
 - **A peer that missed events is told so.** An event that cannot be delivered or retained
@@ -379,24 +383,27 @@ What must stay true when you change things. Most have a test; the test names say
 
 ## 8. Decisions
 
-| ADR                                                                 | Decision                                                         |
-| ------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| [0001](decisions/0001-hand-written-json-rpc.md)                     | The wire is hand-written JSON-RPC over NDJSON                    |
-| [0002](decisions/0002-the-runtime-is-effect-free.md)                | The runtime is free of Effect; Effect is one way to build nodes  |
-| [0003](decisions/0003-the-core-owns-navigation.md)                  | The core owns navigation; the router is a projection             |
-| [0004](decisions/0004-plain-state-with-listeners.md)                | Node state is a plain value with listeners                       |
-| [0005](decisions/0005-expo-router-private-actions.md)               | Read Expo Router's private action event, pinned                  |
-| [0006](decisions/0006-everything-is-bounded.md)                     | Everything a peer can reach is bounded, in one file              |
-| [0007](decisions/0007-socket-permissions-are-the-authentication.md) | Socket permissions are the authentication                        |
-| [0008](decisions/0008-the-device-dials-out.md)                      | The device dials out to a bridge                                 |
-| [0009](decisions/0009-mcp-reuses-the-cli.md)                        | MCP tools reuse the CLI's commands                               |
-| [0010](decisions/0010-operations-and-interruption.md)               | Operations are accepted, then finish; back acts as return        |
-| [0011](decisions/0011-secrets-fail-closed.md)                       | Secrets are removed before encoding, failing closed              |
-| [0012](decisions/0012-windows-sessions-use-authenticated-pipes.md)  | Windows sessions use authenticated, encrypted pipes              |
-| [0013](decisions/0013-access-policies.md)                           | Access policies: observe, an action allowlist, or control        |
-| [0014](decisions/0014-keep-the-hand-written-wire.md)                | Keep the hand-written wire rather than adopt Effect RPC          |
-| [0015](decisions/0015-xstate-fits-the-node-adapter.md)              | XState fits NodeAdapter with explicit event-completion semantics |
-| [0016](decisions/0016-adoption-without-effect.md)                   | Existing stores, public projections and generic Expo bindings    |
+| ADR                                                                  | Decision                                                         |
+| -------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| [0001](decisions/0001-hand-written-json-rpc.md)                      | The wire is hand-written JSON-RPC over NDJSON                    |
+| [0002](decisions/0002-the-runtime-is-effect-free.md)                 | The runtime is free of Effect; Effect is one way to build nodes  |
+| [0003](decisions/0003-the-core-owns-navigation.md)                   | The core owns navigation; the router is a projection             |
+| [0004](decisions/0004-plain-state-with-listeners.md)                 | Node state is a plain value with listeners                       |
+| [0005](decisions/0005-expo-router-private-actions.md)                | Read Expo Router's private action event, pinned                  |
+| [0006](decisions/0006-everything-is-bounded.md)                      | Everything a peer can reach is bounded, in one file              |
+| [0007](decisions/0007-socket-permissions-are-the-authentication.md)  | Socket permissions are the authentication                        |
+| [0008](decisions/0008-the-device-dials-out.md)                       | The device dials out to a bridge                                 |
+| [0009](decisions/0009-mcp-reuses-the-cli.md)                         | MCP tools reuse the CLI's commands                               |
+| [0010](decisions/0010-operations-and-interruption.md)                | Operations are accepted, then finish; back acts as return        |
+| [0011](decisions/0011-secrets-fail-closed.md)                        | Secrets are removed before encoding, failing closed              |
+| [0012](decisions/0012-windows-sessions-use-authenticated-pipes.md)   | Windows sessions use authenticated, encrypted pipes              |
+| [0013](decisions/0013-access-policies.md)                            | Access policies: observe, an action allowlist, or control        |
+| [0014](decisions/0014-keep-the-hand-written-wire.md)                 | Keep the hand-written wire rather than adopt Effect RPC          |
+| [0015](decisions/0015-xstate-fits-the-node-adapter.md)               | XState fits NodeAdapter with explicit event-completion semantics |
+| [0016](decisions/0016-adoption-without-effect.md)                    | Existing stores, public projections and generic Expo bindings    |
+| [0017](decisions/0017-framework-free-live-and-react-bindings.md)     | Framework-free live serving and generic React bindings           |
+| [0018](decisions/0018-router-neutral-projection-and-react-router.md) | Router-neutral projection and existing React Router apps         |
+| [0019](decisions/0019-real-services-in-the-expo-app.md)              | Real HTTP and device storage composed only in the app            |
 
 ## 9. Influences
 

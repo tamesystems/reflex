@@ -16,17 +16,7 @@ has never launched (see [development.md](development.md#what-the-tests-prove)).
 Android emulator in CI, including a back gesture and the live bridge, plus a run on a
 physical phone.
 
-## 2. Real services in the Expo app
-
-**Why.** The architecture's promise is the same logic against real services in the app and
-fixtures headless. Every run so far has used fixtures on both sides.
-
-**Now.** `apps/mobile` runs only the fixture scenarios from `examples/inventory`.
-
-**Done when.** The example app has a live scenario backed by a real (local) API and device
-storage, while the headless sessions keep using fixtures, and a journey passes against both.
-
-## 3. MCP extras
+## 2. MCP extras
 
 **Why.** Agents with a fixed set of frequent actions may work better with a tool per action,
 and running a whole journey from an agent saves many calls.
@@ -38,7 +28,7 @@ files.
 **Done when.** The MCP server can optionally generate a tool per action, with its input
 schema, and can run a named journey and report its result.
 
-## 4. Core-owned React Router data-mode projection
+## 3. Core-owned React Router data-mode projection
 
 **Why.** Existing-route focus binding does not provide headless/live navigation equivalence.
 A second core-owned router adapter would share the tested @reflex/navigation rules.

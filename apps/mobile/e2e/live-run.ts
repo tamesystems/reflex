@@ -16,8 +16,11 @@ const DIALLER_MARKER = "The Reflex bridge refused this app"
 
 const BUILD_TIMEOUT_MS = 240_000
 const JOURNEY_TIMEOUT_MS = 270_000
+const API_START_TIMEOUT_MS = 10_000
+const API_READINESS_CHARACTERS_MAX = 4096
 const CLI = resolve(import.meta.dirname, "../../../packages/cli/src/cli.ts")
 
+const realServices = process.env.REFLEX_REAL_SERVICES === "1"
 const plain = process.env.REFLEX_PLAIN === "1"
 const appDirectory = resolve(import.meta.dirname, plain ? "../plain" : "..")
 
@@ -108,6 +111,70 @@ const check = (ok: boolean, label: string): boolean => {
 }
 
 const run = async (): Promise<number> => {
+  // Port zero is bound by the API process itself, avoiding a probe/rebind race.
+  const api = realServices
+    ? Bun.spawn(
+        [process.execPath, resolve(import.meta.dirname, "../../../examples/inventory/server.ts")],
+        {
+          env: { ...process.env, INVENTORY_PORT: "0" },
+          stdout: "pipe",
+          stderr: "inherit",
+        },
+      )
+    : undefined
+  try {
+    if (api) {
+      process.env.EXPO_PUBLIC_INVENTORY_API = await apiUrl(api.stdout)
+    }
+    return await runWithBridge()
+  } finally {
+    if (api) {
+      api.kill()
+      await api.exited
+    }
+  }
+}
+
+/** Read one bounded readiness line, even if the pipe splits it across chunks. */
+const apiUrl = async (stdout: ReadableStream<Uint8Array>): Promise<string> => {
+  const reader = stdout.getReader()
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const deadline = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(new Error("Inventory API did not start")), API_START_TIMEOUT_MS)
+  })
+  try {
+    const read = async () => {
+      let line = ""
+      const decoder = new TextDecoder()
+      while (!line.includes("\n")) {
+        const { done, value } = await reader.read()
+        if (done) {
+          throw new Error("Inventory API exited before readiness")
+        }
+        line += decoder.decode(value, { stream: true })
+        if (line.length > API_READINESS_CHARACTERS_MAX) {
+          throw new Error("Inventory API readiness line too large")
+        }
+      }
+      const parsed: unknown = JSON.parse(line.split("\n")[0] ?? "")
+      if (
+        !parsed ||
+        typeof parsed !== "object" ||
+        !("url" in parsed) ||
+        typeof parsed.url !== "string"
+      ) {
+        throw new Error("Invalid inventory API readiness line")
+      }
+      return parsed.url
+    }
+    return await Promise.race([read(), deadline])
+  } finally {
+    clearTimeout(timer)
+    reader.releaseLock()
+  }
+}
+
+const runWithBridge = async (): Promise<number> => {
   const started = reflex("--target", "device", "start", "--port", String(freePort()))
   if (started.status !== 0) {
     console.error(started.stderr)
@@ -154,18 +221,24 @@ const run = async (): Promise<number> => {
     const metroPort = freePort()
     const metro = await startMetro(metroPort, appSetting)
     try {
-      const journey = Bun.spawn(["node", join(import.meta.dirname, "live-journey.ts")], {
-        env: {
-          ...process.env,
-          PORT: String(metroPort),
-          REFLEX_DIR: reflexDirectory,
-          REFLEX_CLI: CLI,
-          BUN: process.execPath,
+      const journey = Bun.spawn(
+        [
+          "node",
+          join(import.meta.dirname, realServices ? "services-journey.ts" : "live-journey.ts"),
+        ],
+        {
+          env: {
+            ...process.env,
+            PORT: String(metroPort),
+            REFLEX_DIR: reflexDirectory,
+            REFLEX_CLI: CLI,
+            BUN: process.execPath,
+          },
+          stdout: "inherit",
+          stderr: "inherit",
+          timeout: JOURNEY_TIMEOUT_MS,
         },
-        stdout: "inherit",
-        stderr: "inherit",
-        timeout: JOURNEY_TIMEOUT_MS,
-      })
+      )
       const exitCode = await journey.exited
       return journey.signalCode === null ? exitCode : 1
     } finally {
