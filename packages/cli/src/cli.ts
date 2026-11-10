@@ -24,7 +24,7 @@ import { connectToSession, type ServeOptions, serve, start, stop } from "./sessi
 
 const BRIDGE_PORT_DEFAULT_TEXT = "8790"
 
-const USAGE = `reflex: inspect and drive an application, headless or live on a device
+const USAGE = `reflex: inspect and drive an application, headless or live through a bridge
 
 Usage: reflex [--target headless|device] [--access <access>] <command>
 

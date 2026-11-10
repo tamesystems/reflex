@@ -1,0 +1,17 @@
+{
+  "name": "@reflex/live",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./session": "./src/session.ts"
+  },
+  "dependencies": {
+    "@reflex/protocol": "workspace:*",
+    "@reflex/runtime": "workspace:*",
+    "@reflex/rpc": "workspace:*"
+  },
+  "peerDependencies": {}
+}

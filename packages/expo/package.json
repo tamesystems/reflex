@@ -7,14 +7,14 @@
   "exports": {
     ".": "./src/react.tsx",
     "./projection": "./src/projection.ts",
-    "./bridge": "./src/bridge.ts",
     "./effect": "./src/effect.tsx"
   },
   "dependencies": {
     "@reflex/effect": "workspace:*",
     "@reflex/protocol": "workspace:*",
     "@reflex/runtime": "workspace:*",
-    "@reflex/rpc": "workspace:*"
+    "@reflex/live": "workspace:*",
+    "@reflex/react": "workspace:*"
   },
   "peerDependencies": {
     "expo-router": "58.0.30",

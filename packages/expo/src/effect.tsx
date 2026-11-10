@@ -6,3 +6,5 @@ export const useRouteNode = <S, A extends ActionsOf<S>, R>(
   params?: Record<string, unknown>,
 ): LiveNode<S, A> | null =>
   useGenericRouteNode((runtime, id) => liveNodeOf(runtime, id, capability), params)
+
+export { send, useNodeState } from "@reflex/react"

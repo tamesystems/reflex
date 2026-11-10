@@ -154,7 +154,7 @@ before connecting. Add a process test in `cli.test.ts` and an MCP test in `mcp.t
 1. Add its params and result to `Methods` in `packages/protocol/src/contracts.ts`, and
    parsers for both in `parsers.ts`.
 2. Handle it in **both** controllers: `SessionController` (`runtime/src/controller.ts`)
-   and `LiveController` (`expo/src/live-controller.ts`). The bridge forwards it unchanged.
+   and `LiveController` (`live/src/live-controller.ts`). The bridge forwards it unchanged.
 3. If it can take long, give it a reply budget in `replyTimeoutMs` (`rpc/src/client.ts`).
 4. Classify it in `packages/protocol/src/access.ts`, as observing or controlling, or
    restricted peers will be refused it.
@@ -237,3 +237,15 @@ can stall Windows pipe progress while waiting for the rejection.
   encode and check.
 - **`Struct({})` is not an empty object**: its JSON Schema allows any non-null value. Omit
   `input` for an action that takes none, and use `NoParams` for a route with none.
+
+### Framework-free live consumer
+
+`examples/live-counter/src/serve.ts` runs with `REFLEX_BRIDGE` set to the bridge's printed
+appSetting. It uses only `@reflex/runtime` and `@reflex/live`, a service node with no focus,
+and the process's global WebSocket (Bun, or Node 22+ with TypeScript execution support).
+`test/framework-free.test.ts` starts the daemon and app as separate processes and drives
+inspect (`tree` and `ls --schema`), dispatch, wait and reset through real CLI invocations.
+It runs as part of `bun run check`, hence on both Ubuntu and Windows CI.
+The generic React entry also has a browser bundle test refusing Expo, React Native,
+Effect and the bridge. Run the mobile `e2e`, `e2e:plain`, and `e2e:live` after changing
+these bindings; the latter checks production bridge/token exclusion.

@@ -90,7 +90,7 @@ Disposal prevents further Reflex publication; it does not destroy your store.
 
 ## 3. Render selected screens using the generic bindings
 
-Import from `@reflex/expo` for the Effect-free entry. `ReflexProvider` accepts any `AppHost`,
+Import from `@reflex/react` for the Effect-free entry. `ReflexProvider` accepts any `AppHost`,
 serves the session via the existing live controller and remounts its subtree on reset.
 `useNode(id)` binds any adapter's public JSON and protocol dispatch, even if it has no
 `live` object. `useNodeState(source)` accepts any structural snapshot/subscription source.
@@ -117,14 +117,15 @@ fixtures must explicitly model focus changes if their tests need them. The plain
 switches between an exposed counter and an unexposed screen using application-owned
 React state. Leaving the counter clears focus; returning restores it. It uses no projection.
 
-For Effect capabilities, import `useRouteNode` from `@reflex/expo/effect`. The generic
-`useRouteNode` instead takes `(runtime, nodeId) => node | undefined`, for apps that already
-use the core stack and want custom adapter lookup. It retains the bound node during exit
+For Expo Router capabilities, import `useRouteNode` from `@reflex/expo/effect`.
+Without Expo Router, `@reflex/react` has a generic `useRouteNode(resolve, binding)`;
+`binding` supplies `{ stack, token, params? }`, where entries have `{ nodeId, params }`.
+`@reflex/react/effect` accepts a capability and the same explicit binding. It retains the bound node during exit
 animations. Neither route lookup nor projection is needed for an existing router.
 
 ## 4. Connect the same CLI and MCP
 
-Pass `connectBridge(setting)` as the provider's `bridge`, loading `@reflex/expo/bridge`
+Pass `connectBridge(setting)` as the provider's `bridge`, loading `@reflex/live`
 only inside `__DEV__` and reading `EXPO_PUBLIC_REFLEX_BRIDGE` there. See the plain entry.
 Start the device bridge and give the app its printed setting:
 
@@ -157,3 +158,5 @@ with `bun run reflex start examples/plain/src/app.ts` to exercise the same behav
 | Automatic navigation and pop lifetime             | No; existing router/application owns these                                   | defineNavigation + RouterProjection                   |
 | CLI, MCP, bridge, policies, events, waits         | Same controllers and protocol                                                | Same controllers and protocol                         |
 | Effect in a generic Expo bundle                   | None; checked from Metro's module graph in CI                                | Explicit capability entry includes Effect             |
+
+For a live app without React, see [live-counter](../examples/live-counter/README.md).

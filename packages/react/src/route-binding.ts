@@ -1,9 +1,14 @@
 import type { NodeId } from "@reflex/protocol"
 import { matches } from "@reflex/runtime"
-import type { StackEntry } from "./projection.ts"
+import type { Json } from "@reflex/protocol"
+
+export interface RouteEntry {
+  readonly nodeId: NodeId
+  readonly params: Json
+}
 
 export interface RouteQuery<N> {
-  readonly stack: ReadonlyArray<StackEntry>
+  readonly stack: ReadonlyArray<RouteEntry>
   /** The token on the router entry, which names its node exactly if it is current. */
   readonly token: string | null
   readonly params: Readonly<Record<string, unknown>> | undefined

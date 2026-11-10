@@ -1,63 +1,46 @@
 # @reflex/expo
 
-Lets one app core serve both its React Native UI and the protocol: React bindings, Expo
-Router as a projection of the core's navigation, and the app's side of the device bridge.
+Expo Router projection for Reflex, the first platform binding of the application control
+protocol. Generic React bindings live in `@reflex/react`; live serving in `@reflex/live`.
 
 ## Responsibilities
 
-- Own the provider's sessions (`LiveSessions`): start, replace on a scenario change or a
-  bridge reset, and end them, whatever order their starts finish in.
-- Bind screens to live nodes (`useRouteNode`, `useNodeState`, `send`).
-- Keep Expo Router showing the core's stack, and feed what the router does by itself back
-  to the core (`RouterProjection`).
-- In development builds, serve the protocol to a bridge (`@reflex/expo/bridge`).
+- `RouterProjection` keeps Expo Router showing the core Navigation stack and feeds accepted
+  gestures, links and router actions back to the core.
+- `useCoreStack`, `useShownToken`, `routeParam` and `useRouteNode(resolve, params?)` adapt
+  router state and route params to node binding.
+- `@reflex/expo/effect` offers `useRouteNode(capability, params?)` with Expo route inputs.
+- Pure projection functions/controller remain available from the root and `/projection`.
 
 ## Does not own
 
-- Navigation decisions: the core's `Navigation` node owns the stack
-  ([ADR 0003](../../docs/decisions/0003-the-core-owns-navigation.md)).
-- What the router does with a gesture: Expo Router decides; this follows.
+Generic providers/hooks, session lifetime, bridge connections, rendering, application state,
+or navigation decisions. The core owns its stack when RouterProjection is adopted; Expo
+Router decides gesture behavior. Existing routers can use `@reflex/react` independently.
 
 ## Start reading
 
-1. `react.tsx`: `ReflexProvider`, the hooks, `RouterProjection`.
-2. `projection.ts`: every synchronization decision, as pure functions.
-3. `projection-controller.ts`: the one place navigation state is owned, behind ports.
-4. `bridge.ts`, `live-sessions.ts`, `live-controller.ts`: the device bridge, app side.
+1. `src/react.tsx`: RouterProjection and Expo route hooks.
+2. `src/projection.ts`: pure synchronization rules.
+3. `src/projection-controller.ts`: state and timing behind ports.
+4. `src/router-actions.ts`: the only Expo Router private-module imports.
 
 ## Using it
 
 ```tsx
-;<ReflexProvider host={app} scenario={scenario} bridge={bridge} fallback={<Loading />}>
+import { ReflexProvider } from "@reflex/react"
+import { RouterProjection } from "@reflex/expo"
+
+;<ReflexProvider host={app} bridge={bridge}>
   <RouterProjection toHref={toHref} fromLocation={fromLocation} />
   <Stack />
 </ReflexProvider>
 ```
 
-- `toHref` and `fromLocation` (see `apps/mobile/src/routes.ts`) map core routes to route
-  files and back. They work on route files and decoded params; paths are never parsed.
-- An Effect screen imports from `@reflex/expo/effect` and calls `useRouteNode(Capability, params)` for its node, `useNodeState(node)` for
-  its state, and `send(node, "Action", input)` from UI events. `send` ignores expected
-  refusals (a tap on a closing screen, an action just made unavailable) and reports
-  defects and `ResourceExhausted`; declared business failures are the app's to show in state.
-- `bridge` comes from `connectBridge(setting)` in `@reflex/expo/bridge`. Load that module
-  only behind `__DEV__`, reading the setting inside the same branch, as
-  `apps/mobile/app/_layout.tsx` does, so production bundles hold neither.
-
-## Existing stores and routers
-
-The default `@reflex/expo` entry imports no Effect. `useNode(id)` works with any adapter,
-including one without a live object; `useNodeState` takes a structural snapshot/subscription
-source and `send` takes its send method. Generic `useRouteNode` takes a resolver
-`(runtime, nodeId) => node | undefined` for the core stack. Only `@reflex/expo/effect`
-loads capability bindings and Effect.
-
-Keep an existing router and call `useNodeFocus(id, isFocused)` from selected screens;
-service nodes need no focus. Dispose popped screen nodes yourself. RouterProjection
-requires the core Navigation stack (defineNavigation), so omit it in this mode. See
-[the adoption guide](../../docs/adopting.md) and the isolated Expo screen in
-[apps/mobile/plain](../../apps/mobile/plain/index.tsx). `e2e:plain` tests its CLI/MCP bridge
-and checks Metro source maps contain no Effect modules in Linux and Windows CI.
+`toHref` and `fromLocation` map route files and decoded params (see apps/mobile/src/routes.ts).
+Load `connectBridge` from `@reflex/live` and read EXPO_PUBLIC_REFLEX_BRIDGE only behind
+`__DEV__`, as apps/mobile/app/_layout.tsx does. Screens import `send`/`useNodeState` from
+`@reflex/react`; the Expo Effect convenience entry re-exports these two helpers.
 
 ## How the router is followed
 
@@ -75,27 +58,11 @@ and checks Metro source maps contain no Effect modules in Linux and Windows CI.
   at the root), and the push still lands. The core follows, so the pushed screen is
   recreated there.
 
-## The bridge, app side
-
-- `connectBridge` dials, says hello, and serves `createConnection` over the socket. It
-  redials with backoff (0.5 s to 5 s), and stops for good on a wrong token, a protocol
-  mismatch, or being replaced by another app; `onStatus` reports each.
-- `LiveController` serves the session on screen, with the headless controller's limits,
-  reset ordering, and deadlines for `sample` and `advanceTime`. Session starts use the
-  runtime's default budget (30 s); `REFLEX_START_TIMEOUT_MS` does not reach the app. A bridge reset replaces what the screen shows, until the
-  provider's own `scenario` or `host` next changes.
-- Each run of the app has its own session-id prefix, so a cursor from before a reload never
-  resumes against the new session.
-
 ## Important invariants
 
-- With core-owned navigation, components never call `router.push` or `router.replace`; they send actions.
-- A session's subtree is keyed by its id, so nothing outlives the session holding a
-  disposed node.
-- Only `router-actions.ts` imports Expo Router's private modules.
-- Nothing here imports `@reflex/rpc` except `@reflex/rpc/connection`, which has no Node APIs.
+- Components using core-owned navigation send actions rather than router.push/replace.
+- Only router-actions.ts imports Expo Router private modules; its exact version is pinned.
+- Default imports contain no Effect. Production UI bundles contain no bridge or token.
+- `e2e:plain` proves the generic store screen's Metro graph has no Effect modules.
 
-## Platform notes
-
-See [development.md](../../docs/development.md#platform-notes): Metro import paths, bundle
-size, and `TextDecoder` on Hermes.
+See [development.md](../../docs/development.md) for browser, live and Hermes checks.

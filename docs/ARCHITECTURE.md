@@ -49,9 +49,9 @@ Reflex does not own:
                                                      │ WebSocket, token hello
                                                      ▼ (device target)
  ┌────────────────────────────────────────────────┐
- │ App on a device, simulator or browser (Expo)   │
+ │ App process (any framework, or no UI)   │
  │   connectBridge ─► LiveController ─► session ──┼─► the same app core
- │   ReflexProvider renders that same session     │
+ │   React may render that same session     │
  └────────────────────────────────────────────────┘
 ```
 
@@ -85,14 +85,19 @@ packages/
   cli/        The reflex command. cli.ts parses; commands.ts does; session.ts runs and
               finds daemons; bridge-server.ts accepts apps; mcp.ts serves MCP tools.
               See packages/cli/README.md.
-  expo/       Generic React bindings (react.tsx, node-source.ts), explicit Effect capability
-              bindings (effect.tsx), the Expo Router projection (projection.ts,
-              projection-controller.ts), the app's side of the bridge (bridge.ts,
-              live-sessions.ts, live-controller.ts). See packages/expo/README.md.
+  live/       Framework-free bridge.ts, live-sessions.ts, live-controller.ts,
+              session-owner.ts, node-source.ts and ui-actions.ts. session.ts excludes
+              the bridge for UI bundles. See packages/live/README.md.
+  react/      React-only provider and hooks (react.tsx), generic route binding,
+              optional Effect capability lookup (effect.tsx). See packages/react/README.md.
+  expo/       Expo Router projection, controller, core-port.ts, router-actions.ts,
+              router-specific hooks and Effect route convenience entry.
+              See packages/expo/README.md.
 examples/
   inventory/  A three-screen app core with fixture scenarios. Imports only Effect and
               @reflex/effect: no React, no Expo.
   plain/      Real Zustand/Zod app core, no Effect; rendered by apps/mobile/plain.
+  live-counter/ Plain process serving a service node through @reflex/live; no UI framework.
 apps/
   mobile/     The same inventory core rendered by Expo Router. Own install. e2e/ holds
               the browser journeys (including the isolated plain Expo entry), hermes-smoke/ runs a journey on a Hermes VM.
@@ -107,22 +112,27 @@ experiments/  Prototypes kept as evidence for a decision: effect-rpc/ serves the
 ### Dependency rules
 
 ```text
-protocol ◄── runtime ◄── rpc ◄── test
-    ▲           ▲         ▲  ◄── cli
-    │           │         │
-    └──── effect ◄────── expo/effect ──► expo
-             ▲                           ▲
-    examples/inventory              apps/mobile
+protocol ◄── runtime ◄── rpc ◄── test / cli
+                ▲         ▲
+                ├── live ─┘ (rpc/connection only)
+                │    ▲
+                │  react ◄── expo ◄── apps/mobile
+                │    ▲
+                └── effect ◄── react/effect, expo/effect
 
-runtime ◄── expo ──► rpc/connection
-runtime ◄── examples/plain (Zustand/Zod are example dev dependencies only)
+runtime + live ◄── examples/live-counter
 ```
 
 - `protocol` depends on nothing. `runtime` depends only on `protocol`.
-- Nothing below `effect` imports Effect; `test` and `cli` need no Effect and no app.
-- The generic `expo` entry imports no Effect. Only `expo/effect` does capability lookup.
-- `expo` reaches `rpc` only through `@reflex/rpc/connection`, which has no Node APIs.
-- An app core (`examples/inventory`) never imports React, Expo or a device API.
+- Core packages (`protocol`, `runtime`, `rpc`, `cli`, `test`, `effect`) import no UI framework.
+- `live` imports no React, React Native, Expo, Effect or Node APIs; it needs a global WebSocket.
+- `live` reaches RPC only through the platform-free `@reflex/rpc/connection` entry.
+- `react` depends on React, with no React Native or Expo imports. Only `react/effect`
+  imports Effect capability lookup; the default entry remains Effect-free.
+- UI bindings import `@reflex/live/session`, whose exports exclude the bridge. Apps load
+  `@reflex/live` and read the bridge setting only behind `__DEV__` in production UI builds.
+- `expo` owns router projection and route-param integration; its default entry has no Effect.
+- An app core never imports React, Expo or a device API.
 - Only `packages/expo/src/router-actions.ts` imports Expo Router's private modules.
 
 `test/boundaries.test.ts` enforces each package's allowed imports; change it in the same
@@ -201,16 +211,16 @@ the router pops the screen beneath and the push still lands; the core follows bo
 ### 4.4 A command against the app on a device
 
 `reflex --target device do Increment`, with `reflex --target device start` running and
-the app started with `EXPO_PUBLIC_REFLEX_BRIDGE` set.
+the app connecting with the printed appSetting (`EXPO_PUBLIC_REFLEX_BRIDGE` in Expo).
 
 ```text
 cli.ts ─► commands.ts ─► device transport ─► server.ts   (as in 4.1)
 bridge-controller.ts   forward to the connected app's client; if none is
                        connected, wait up to REFLEX_APP_WAIT_MS for one
 bridge-server.ts       one WebSocket per app, admitted by a token hello
-expo/bridge.ts         the app's side: createConnection over that socket
-live-controller.ts     a Controller over the session ReflexProvider shows
-runtime.ts             as in 4.1; React re-renders through useSyncExternalStore
+live/bridge.ts         the app's side: createConnection over that socket
+live-controller.ts     a Controller over the app's current live session
+runtime.ts             as in 4.1; an optional React UI subscribes through useSyncExternalStore
 ```
 
 ### 4.5 The app reloads, or loses its connection

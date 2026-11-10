@@ -1,13 +1,13 @@
 /**
- * A device, as far as the bridge can tell: an app's live sessions behind `@reflex/expo`'s
+ * A device, as far as the bridge can tell: an app's live sessions behind `@reflex/live`'s
  * controller, dialling out over a WebSocket. It runs in a worker, with an event loop of
  * its own, as an app on a phone has. Only React and the screen are missing.
  */
 import type { AppHost, Controller } from "@reflex/runtime"
 import { systemTimers } from "@reflex/runtime"
-import { type Bridge, type BridgeStatus, connectBridge } from "../packages/expo/src/bridge.ts"
-import { createLiveController } from "../packages/expo/src/live-controller.ts"
-import { LiveSessions } from "../packages/expo/src/live-sessions.ts"
+import { type Bridge, type BridgeStatus, connectBridge } from "../packages/live/src/bridge.ts"
+import { createLiveController } from "../packages/live/src/live-controller.ts"
+import { LiveSessions } from "../packages/live/src/live-sessions.ts"
 
 declare const self: Worker
 

@@ -1,0 +1,10 @@
+{
+  "name": "@reflex/example-live-counter",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@reflex/live": "workspace:*",
+    "@reflex/runtime": "workspace:*"
+  }
+}

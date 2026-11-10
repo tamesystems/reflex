@@ -1,10 +1,9 @@
 import { expect, test } from "bun:test"
 import { toNodeId } from "@reflex/protocol"
-import type { StackEntry } from "../src/projection.ts"
+import type { RouteEntry } from "../src/route-binding.ts"
 import { findRouteNode } from "../src/route-binding.ts"
 
-const entry = (id: string, productId: string): StackEntry => ({
-  route: "Detail",
+const entry = (id: string, productId: string): RouteEntry => ({
   params: { productId },
   nodeId: toNodeId(id),
 })

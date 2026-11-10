@@ -1,0 +1,20 @@
+{
+  "name": "@reflex/react",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/react.tsx",
+    "./effect": "./src/effect.tsx"
+  },
+  "dependencies": {
+    "@reflex/protocol": "workspace:*",
+    "@reflex/runtime": "workspace:*",
+    "@reflex/live": "workspace:*",
+    "@reflex/effect": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": "19.3.0"
+  }
+}

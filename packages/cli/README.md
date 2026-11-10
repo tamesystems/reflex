@@ -102,7 +102,11 @@ JSON-RPC line or `null` for an ack. On a non-null result, write `encode(null)` p
 to acknowledge it before dispatching the line. Never forward ack frames to JSON-RPC. This helper also supports
 raw peers that build their own JSON-RPC envelopes. Never send the secret on the wire.
 
-## The device bridge
+## The live bridge (`device` target)
+
+Any app can connect with `connectBridge(appSetting)` from `@reflex/live`, including a
+plain Bun or Node process. `device` is the existing target name, independent of framework.
+Expo apps read EXPO_PUBLIC_REFLEX_BRIDGE and load the connector only behind `__DEV__`.
 
 `reflex --target device start` prints the setting an app needs:
 

@@ -7,6 +7,7 @@
       "devDependencies": {
         "@biomejs/biome": "2.6.6",
         "@reflex/effect": "workspace:*",
+        "@reflex/live": "workspace:*",
         "@reflex/protocol": "workspace:*",
         "@reflex/rpc": "workspace:*",
         "@reflex/runtime": "workspace:*",
@@ -31,6 +32,14 @@
         "@reflex/cli": "workspace:*",
         "@reflex/protocol": "workspace:*",
         "@reflex/test": "workspace:*",
+      },
+    },
+    "examples/live-counter": {
+      "name": "@reflex/example-live-counter",
+      "version": "0.0.0",
+      "dependencies": {
+        "@reflex/live": "workspace:*",
+        "@reflex/runtime": "workspace:*",
       },
     },
     "examples/plain": {
@@ -75,8 +84,9 @@
       "version": "0.0.0",
       "dependencies": {
         "@reflex/effect": "workspace:*",
+        "@reflex/live": "workspace:*",
         "@reflex/protocol": "workspace:*",
-        "@reflex/rpc": "workspace:*",
+        "@reflex/react": "workspace:*",
         "@reflex/runtime": "workspace:*",
       },
       "devDependencies": {
@@ -87,9 +97,31 @@
         "react": "19.3.0",
       },
     },
+    "packages/live": {
+      "name": "@reflex/live",
+      "version": "0.0.0",
+      "dependencies": {
+        "@reflex/protocol": "workspace:*",
+        "@reflex/rpc": "workspace:*",
+        "@reflex/runtime": "workspace:*",
+      },
+    },
     "packages/protocol": {
       "name": "@reflex/protocol",
       "version": "0.0.0",
+    },
+    "packages/react": {
+      "name": "@reflex/react",
+      "version": "0.0.0",
+      "dependencies": {
+        "@reflex/effect": "workspace:*",
+        "@reflex/live": "workspace:*",
+        "@reflex/protocol": "workspace:*",
+        "@reflex/runtime": "workspace:*",
+      },
+      "peerDependencies": {
+        "react": "19.3.0",
+      },
     },
     "packages/rpc": {
       "name": "@reflex/rpc",
@@ -464,11 +496,17 @@
 
     "@reflex/example-inventory": ["@reflex/example-inventory@workspace:examples/inventory"],
 
+    "@reflex/example-live-counter": ["@reflex/example-live-counter@workspace:examples/live-counter"],
+
     "@reflex/example-plain": ["@reflex/example-plain@workspace:examples/plain"],
 
     "@reflex/expo": ["@reflex/expo@workspace:packages/expo"],
 
+    "@reflex/live": ["@reflex/live@workspace:packages/live"],
+
     "@reflex/protocol": ["@reflex/protocol@workspace:packages/protocol"],
+
+    "@reflex/react": ["@reflex/react@workspace:packages/react"],
 
     "@reflex/rpc": ["@reflex/rpc@workspace:packages/rpc"],
 

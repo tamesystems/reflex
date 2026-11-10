@@ -1,5 +1,5 @@
 /**
- * The live bridge: an app on a device dials out to the developer's machine, says who it
+ * The live bridge: a running app dials out to the developer's machine, says who it
  * is, and from then on answers JSON-RPC over that connection, one message per frame. The
  * app is the server and the bridge is its client, so the app needs no listening socket.
  */

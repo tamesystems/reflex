@@ -1,11 +1,5 @@
-import { assertNever, isRecord, type NodeId } from "@reflex/protocol"
-import {
-  type AppHost,
-  type AppSession,
-  type Controller,
-  type Runtime,
-  systemTimers,
-} from "@reflex/runtime"
+import { isRecord, type NodeId } from "@reflex/protocol"
+import type { AppSession, Runtime } from "@reflex/runtime"
 import {
   router,
   useGlobalSearchParams,
@@ -14,23 +8,15 @@ import {
   useSegments,
 } from "expo-router"
 import * as React from "react"
-import { nodeSource, reportFocus } from "./node-source.ts"
+import { useSession, useRouteNode as useBoundRouteNode } from "@reflex/react"
+import { reportFailure } from "@reflex/live/session"
 import { corePortOf, stackReader } from "./core-port.ts"
 import { type Destination, NODE_PARAM, type RouterLocation, type StackEntry } from "./projection.ts"
 import { ProjectionController } from "./projection-controller.ts"
-import { findRouteNode } from "./route-binding.ts"
 import { onRouterAction } from "./router-actions.ts"
-import { createLiveController } from "./live-controller.ts"
-import { LiveSessions } from "./live-sessions.ts"
-import { reportFailure } from "./ui-actions.ts"
-export { send } from "./ui-actions.ts"
 
 export * from "./projection.ts"
 export * from "./projection-controller.ts"
-export * from "./route-binding.ts"
-export * from "./live-controller.ts"
-export * from "./live-sessions.ts"
-export * from "./session-owner.ts"
 
 export interface RouterHref {
   readonly pathname: string
@@ -39,79 +25,7 @@ export interface RouterHref {
 
 export type RouteParams = Record<string, string | ReadonlyArray<string> | undefined>
 
-const SessionContext = React.createContext<AppSession | null>(null)
-
-export const useSession = (): AppSession => {
-  const session = React.useContext(SessionContext)
-  if (session === null) {
-    throw new Error("useSession must be used inside <ReflexProvider>")
-  }
-  return session
-}
-
-/** Serves the live app to a bridge, as `connectBridge` from `@reflex/expo/bridge` does. */
-export type BridgeConnector = (controller: Controller) => () => void
-
-/**
- * Owns one session. Replacing it unmounts everything beneath, so that nothing
- * can outlive it holding a disposed node. A session that cannot start is thrown
- * during render, for the nearest error boundary.
- *
- * With `bridge`, the protocol is served to it for as long as this is mounted, against
- * the session on screen. A bridge's reset replaces that session, until `scenario` or
- * `host` next changes.
- */
-export const ReflexProvider = ({
-  host,
-  scenario,
-  bridge,
-  fallback = null,
-  children,
-}: {
-  readonly host: AppHost
-  readonly scenario?: string
-  readonly bridge?: BridgeConnector | undefined
-  readonly fallback?: React.ReactNode
-  readonly children: React.ReactNode
-}) => {
-  const [sessions] = React.useState(
-    () => new LiveSessions({ timers: systemTimers, onBackgroundError: reportFailure }),
-  )
-  const lifecycle = React.useSyncExternalStore(sessions.subscribe, sessions.getSnapshot)
-  React.useEffect(() => sessions.open(host, scenario), [sessions, host, scenario])
-  React.useEffect(() => {
-    if (bridge === undefined) {
-      return undefined
-    }
-    const controller = createLiveController(sessions, reportFailure)
-    const stop = bridge(controller)
-    return () => {
-      stop()
-      controller.close().catch(reportFailure)
-    }
-  }, [sessions, bridge])
-
-  switch (lifecycle.kind) {
-    case "starting":
-      return <>{fallback}</>
-    case "failed":
-      throw lifecycle.cause
-    case "live":
-      // Keyed, because a replacement can arrive in the same commit as the old session
-      // ending, and screens must not keep nodes bound to a session that has gone.
-      return (
-        <SessionContext.Provider
-          key={lifecycle.session.runtime.sessionId}
-          value={lifecycle.session}
-        >
-          {children}
-        </SessionContext.Provider>
-      )
-    default:
-      return assertNever(lifecycle)
-  }
-}
-
+export { useSession } from "@reflex/react"
 /** The core's route stack, as React state. */
 export const useCoreStack = (): ReadonlyArray<StackEntry> => {
   const session = useSession()
@@ -136,51 +50,15 @@ export const routeParam = (value: string | ReadonlyArray<string> | undefined): s
   return value?.[0] ?? null
 }
 
-/**
- * The live node behind this router entry. A core push names its node exactly;
- * an entry from a deep link is found by `params`, once the core has adopted it.
- * It keeps its last state after the core pops it, so a screen can animate out.
- */
 export const useRouteNode = <N,>(
   resolve: (runtime: Runtime, nodeId: NodeId) => N | undefined,
   params?: Record<string, unknown>,
-): N | null => {
-  const { runtime } = useSession()
-  const stack = useCoreStack()
-  const token = routeParam(useLocalSearchParams()[NODE_PARAM])
-  const key = JSON.stringify([token, params])
-  const bound = React.useRef<{ key: string; node: N } | null>(null)
-  const node =
-    bound.current?.key === key
-      ? bound.current.node
-      : findRouteNode({
-          stack,
-          token,
-          params,
-          resolve: (nodeId) => resolve(runtime, nodeId),
-        })
-
-  // Kept across renders, so that a screen stays on its node after the core pops it.
-  React.useEffect(() => {
-    if (node !== null) {
-      bound.current = { key, node }
-    }
-  }, [key, node])
-
-  return node
-}
-
-const noSubscription = () => () => undefined
-
-/** The part of a node a subscriber needs. */
-export interface StateSource<S> {
-  getSnapshot(): S
-  subscribe(listener: () => void): () => void
-}
-
-/** Subscribe to a node the way any external store is subscribed to. */
-export const useNodeState = <S,>(node: StateSource<S> | null): S | null =>
-  React.useSyncExternalStore(node?.subscribe ?? noSubscription, () => node?.getSnapshot() ?? null)
+): N | null =>
+  useBoundRouteNode(resolve, {
+    stack: useCoreStack(),
+    token: routeParam(useLocalSearchParams()[NODE_PARAM]),
+    ...(params === undefined ? {} : { params }),
+  })
 
 type ToHref = (destination: Destination) => RouterHref
 
@@ -296,21 +174,4 @@ export const RouterProjection = ({
   React.useEffect(() => controller.onLocation(location), [controller, location])
 
   return null
-}
-
-/** Report focus from an existing router; cleanup never clears a newer screen's focus. */
-export const useNodeFocus = (nodeId: NodeId | null, focused: boolean): void => {
-  const { runtime } = useSession()
-  React.useEffect(() => {
-    if (!focused || nodeId === null) {
-      return undefined
-    }
-    return reportFocus(runtime, nodeId)
-  }, [runtime, nodeId, focused])
-}
-
-/** Bind a public node handle without assumptions about the adapter's live object. */
-export const useNode = (id: NodeId | null) => {
-  const { runtime } = useSession()
-  return React.useMemo(() => (id === null ? null : nodeSource(runtime, id)), [runtime, id])
 }

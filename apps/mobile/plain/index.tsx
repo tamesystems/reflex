@@ -7,7 +7,7 @@ import {
   useNodeFocus,
   useNodeState,
   useSession,
-} from "@reflex/expo"
+} from "@reflex/react"
 import { isRecord } from "@reflex/protocol"
 import { registerRootComponent } from "expo"
 import { useState } from "react"
@@ -38,7 +38,7 @@ const CounterScreen = ({ leave }: { readonly leave: () => void }) => {
 }
 const bridge: BridgeConnector | undefined =
   __DEV__ && process.env.EXPO_PUBLIC_REFLEX_BRIDGE
-    ? (require("@reflex/expo/bridge") as typeof import("@reflex/expo/bridge")).connectBridge(
+    ? (require("@reflex/live") as typeof import("@reflex/live")).connectBridge(
         process.env.EXPO_PUBLIC_REFLEX_BRIDGE,
       )
     : undefined

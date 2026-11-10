@@ -40,8 +40,7 @@ const INSTRUCTIONS = `Inspect and drive the app through its Reflex session: the 
 the reflex CLI uses. Start with reflex_inspect to see the focused screen, its state and \
 the actions available, with their input schemas; reflex_dispatch runs one and shows \
 where the app is afterwards. Every tool takes target "headless" (the app running with no \
-UI, started with \`reflex start <app-module>\`) or "device" (the app live on a device or \
-simulator, through \`reflex --target device start\`).`
+UI, started with \`reflex start <app-module>\`) or "device" (the app live through a bridge, using \`reflex --target device start\`).`
 
 type JsonSchema = { readonly [key: string]: Json }
 
@@ -136,7 +135,7 @@ const TARGET_PROPERTY: JsonSchema = {
   type: "string",
   enum: ["headless", "device"],
   description:
-    "Which session: the headless app, or the app live on a device. Defaults to the server's.",
+    "Which session: the headless app, or the app live through a bridge. Defaults to the server's.",
 }
 const NODE_ID_PROPERTY: JsonSchema = {
   type: "string",
@@ -269,7 +268,7 @@ export const TOOLS: ReadonlyArray<Tool> = [
     title: "Reset to a scenario",
     description:
       "Rebuild the app from a fixture scenario, the current one by default. Everything the " +
-      "session held is discarded. On a device, the screen shows the new session.",
+      "session held is discarded. In a live app, reset replaces the running session.",
     properties: { scenario: { type: "string", description: "As reflex_status lists them" } },
     readOnly: false,
     destructive: true,

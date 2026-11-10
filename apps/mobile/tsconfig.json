@@ -10,7 +10,6 @@
       "@reflex/rpc/connection": ["../../packages/rpc/src/server.ts"],
       "@reflex/effect": ["../../packages/effect/src/index.ts"],
       "@reflex/expo": ["../../packages/expo/src/react.tsx"],
-      "@reflex/expo/bridge": ["../../packages/expo/src/bridge.ts"],
       "@reflex/example-inventory": ["../../examples/inventory/src/app.ts"],
       "@reflex/example-inventory/*": ["../../examples/inventory/src/*"],
       "effect": ["./node_modules/effect"],
@@ -18,7 +17,11 @@
       "react": ["./node_modules/@types/react/index.d.ts"],
       "expo-router": ["./node_modules/expo-router"],
       "react/jsx-runtime": ["./node_modules/@types/react/jsx-runtime.d.ts"],
-      "@reflex/expo/effect": ["../../packages/expo/src/effect.tsx"]
+      "@reflex/expo/effect": ["../../packages/expo/src/effect.tsx"],
+      "@reflex/live": ["../../packages/live/src/index.ts"],
+      "@reflex/react": ["../../packages/react/src/react.tsx"],
+      "@reflex/react/effect": ["../../packages/react/src/effect.tsx"],
+      "@reflex/live/session": ["../../packages/live/src/session.ts"]
     },
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
@@ -28,5 +31,5 @@
     "useUnknownInCatchVariables": true,
     "verbatimModuleSyntax": true
   },
-  "include": ["app", "src", "e2e/*.ts", "hermes-smoke/*.ts", "plain"]
+  "include": ["app", "src", "e2e/*.ts", "hermes-smoke/*.ts", "plain", "../../packages/react/src"]
 }

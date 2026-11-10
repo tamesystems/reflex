@@ -61,15 +61,38 @@ test("the CLI needs no Effect and no app", () => {
   expect(violations("packages/cli/src", (s) => permit(s) || isNodeBuiltin(s))).toEqual([])
 })
 
-test("Expo uses generic runtime bindings and an explicit Effect entry", () => {
+test("live has no framework or platform dependency", () => {
+  expect(
+    violations(
+      "packages/live/src",
+      allowing("@reflex/protocol", "@reflex/runtime", "@reflex/rpc/connection"),
+    ),
+  ).toEqual([])
+})
+
+test("React bindings have no native or Expo dependency", () => {
+  expect(
+    violations(
+      "packages/react/src",
+      allowing(
+        "@reflex/protocol",
+        "@reflex/runtime",
+        "@reflex/live/session",
+        "@reflex/effect",
+        "react",
+      ),
+    ),
+  ).toEqual([])
+})
+
+test("Expo owns only router integration", () => {
   const permit = allowing(
     "@reflex/effect",
     "@reflex/protocol",
-    // The connection alone: the rest of rpc speaks Unix sockets, which a phone has not.
-    "@reflex/rpc/connection",
     "@reflex/runtime",
+    "@reflex/live/session",
+    "@reflex/react",
     "expo-router",
-    // Private, so named one by one; `src/router-actions.ts` is the only user.
     "expo-router/build/global-state/getRouteInfoFromState",
     "expo-router/build/global-state/internalNavigationEvents",
     "react",
@@ -83,12 +106,7 @@ test("application core never imports a UI or device API", () => {
 })
 
 test("router projection rules need no renderer", () => {
-  const files = [
-    "projection.ts",
-    "projection-controller.ts",
-    "route-binding.ts",
-    "session-owner.ts",
-  ]
+  const files = ["projection.ts", "projection-controller.ts"]
   const permit = allowing("@reflex/protocol", "@reflex/runtime")
   for (const file of files) {
     const imports = importsOf(join(root, "packages/expo/src", file))
@@ -101,11 +119,45 @@ test("plain example has no Effect or UI dependency", () => {
     violations("examples/plain/src", allowing("@reflex/runtime", "zustand/vanilla", "zod")),
   ).toEqual([])
 })
-test("only Expo's capability entry imports Effect at runtime", () => {
-  for (const file of sources("packages/expo/src")) {
+test("only explicit capability entries imports Effect at runtime", () => {
+  for (const file of [...sources("packages/expo/src"), ...sources("packages/react/src")]) {
     if (file.endsWith("effect.tsx")) {
       continue
     }
     expect(importsOf(file).filter((s) => s === "@reflex/effect" || isEffect(s))).toEqual([])
   }
+})
+
+test("framework-free consumer depends only on the runtime and live serving", () => {
+  expect(
+    violations(
+      "examples/live-counter/src",
+      (s) => allowing("@reflex/live", "@reflex/runtime")(s) || isNodeBuiltin(s),
+    ),
+  ).toEqual([])
+})
+
+test("generic React entry bundles for the browser without Expo, Effect or the bridge", async () => {
+  const build = await Bun.build({
+    entrypoints: [join(root, "packages/react/src/react.tsx")],
+    target: "browser",
+    external: ["react", "react/jsx-runtime"],
+    plugins: [
+      {
+        name: "framework-boundary",
+        setup(builder) {
+          builder.onResolve(
+            { filter: /^(expo|react-native|effect|@reflex\/effect)/ },
+            ({ path }) => {
+              throw new Error(`Generic React entry pulled in ${path}`)
+            },
+          )
+          builder.onLoad({ filter: /[\\/]live[\\/]src[\\/]bridge\.ts$/ }, () => {
+            throw new Error("Generic React entry pulled in the live bridge")
+          })
+        },
+      },
+    ],
+  })
+  expect(build.success).toBe(true)
 })

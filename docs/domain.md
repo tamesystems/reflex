@@ -16,7 +16,7 @@ host (an app definition)
 
 client ── connects to → controller ── serves → the current session
                          ├─ SessionController (the app runs here: headless)
-                         ├─ LiveController    (the app on screen: inside the app)
+                         ├─ LiveController    (the running app: inside the app)
                          └─ BridgeController  (forwards to a live app: device target)
 ```
 
@@ -94,7 +94,7 @@ three kinds above all speak the same protocol, so a client cannot tell them apar
 subscribe), or an allowlist of actions it may also run. Refusals are `NotPermitted`.
 
 **Target.** Which session a CLI command reaches: **headless** (the app running in a daemon
-on this machine, with no UI) or **device** (the app running somewhere else, through a
+on this machine, with no UI) or **device** (any live app, including a plain server process, through a
 bridge). Each target has its own socket, so both can run at once.
 
 **Daemon.** A background session process, started by `reflex start`, that serves its
@@ -111,3 +111,6 @@ matched to core entries by identity, never by URL.
 
 **Journey.** A behavior test written as a user's path through the app, using
 `@reflex/test`. **Exploration** is a random walk through whatever is available.
+
+Navigation and focus are optional. A service-only app needs neither; `screen` remains
+the protocol name for a focus-gated node. Expo Router projection is one optional binding.

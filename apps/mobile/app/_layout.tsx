@@ -1,5 +1,6 @@
 import app from "@reflex/example-inventory"
-import { type BridgeConnector, ReflexProvider, RouterProjection } from "@reflex/expo"
+import { type BridgeConnector, ReflexProvider } from "@reflex/react"
+import { RouterProjection } from "@reflex/expo"
 import { Stack } from "expo-router"
 import { useState } from "react"
 import { Text } from "react-native"
@@ -16,7 +17,7 @@ const host = isE2E ? withLateFailure(app) : app
  */
 const bridge: BridgeConnector | undefined =
   __DEV__ && process.env.EXPO_PUBLIC_REFLEX_BRIDGE
-    ? (require("@reflex/expo/bridge") as typeof import("@reflex/expo/bridge")).connectBridge(
+    ? (require("@reflex/live") as typeof import("@reflex/live")).connectBridge(
         process.env.EXPO_PUBLIC_REFLEX_BRIDGE,
       )
     : undefined

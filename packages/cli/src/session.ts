@@ -290,8 +290,8 @@ const startBridge = (
   let server: BridgeServer | null = null
   const controller = createBridgeController({
     disconnectedMessage:
-      `No app is connected to the bridge on port ${port}. Run the app in development with ` +
-      "EXPO_PUBLIC_REFLEX_BRIDGE set to the appSetting that `reflex --target device start` printed.",
+      `No app is connected to the bridge on port ${port}. Connect the app using @reflex/live connectBridge(appSetting), with ` +
+      "the appSetting that `reflex --target device start` printed (Expo: EXPO_PUBLIC_REFLEX_BRIDGE).",
     onClose: () => server?.stop(),
     appWaitMs: config.appWaitMs,
   })
