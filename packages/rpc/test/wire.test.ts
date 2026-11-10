@@ -5,7 +5,8 @@ import { mkdtempSync, rmSync, statSync } from "node:fs"
 import { connect } from "node:net"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { defineApp, defineCapability, mount } from "@reflex/effect"
+import { defineApp, defineCapability } from "@reflex/effect"
+import { mount } from "@reflex/effect/advanced"
 import { Registry } from "@reflex/effect/internal"
 import {
   BATCH_REQUESTS_MAX,

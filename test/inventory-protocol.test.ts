@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from "bun:test"
 import { ErrorCode, toNodeId } from "@reflex/protocol"
-import { createTestAppPool, type StateOf } from "@reflex/test"
+import { createTestAppPool, type InferState } from "@reflex/test"
 import app from "../examples/inventory/src/app.ts"
 import { QUANTITY_MAX } from "../examples/inventory/src/domain.ts"
 
@@ -16,7 +16,7 @@ afterEach(pool.disposeAll)
 const lowStockIds = ({
   products,
   lowStockThreshold,
-}: Extract<StateOf<typeof InventoryList>, { readonly _tag: "ready" }>): ReadonlyArray<string> =>
+}: Extract<InferState<typeof InventoryList>, { readonly _tag: "ready" }>): ReadonlyArray<string> =>
   products.filter((product) => product.quantity < lowStockThreshold).map((product) => product.id)
 
 test("user updates inventory quantity", async () => {
@@ -40,17 +40,19 @@ test("user updates inventory quantity", async () => {
     saved: [{ productId: "product-123", quantity: 12 }],
   })
 
-  await session.dispatchRaw("GoBack")
-  await session.precondition("InventoryList", { _tag: "ready" })
-  expect(session.state).toMatchObject({ products: [{ id: "product-123", quantity: 12 }, {}, {}] })
+  await session.raw.dispatchRaw("GoBack")
+  await session.raw.precondition("InventoryList", { _tag: "ready" })
+  expect(session.raw.state).toMatchObject({
+    products: [{ id: "product-123", quantity: 12 }, {}, {}],
+  })
 })
 
 test("a failed save surfaces in state and as a typed operation failure", async () => {
   const session = await pool.open(app)
-  await session.dispatchRaw("OpenProduct", { productId: "product-123" })
-  await session.dispatchRaw("FailNextSave")
+  await session.raw.dispatchRaw("OpenProduct", { productId: "product-123" })
+  await session.raw.dispatchRaw("FailNextSave")
 
-  const result = await session.dispatchRaw("Save")
+  const result = await session.raw.dispatchRaw("Save")
 
   expect(result).toMatchObject({
     status: "failed",
@@ -61,37 +63,37 @@ test("a failed save surfaces in state and as a typed operation failure", async (
       data: { _tag: "ApiError", message: "Server error" },
     },
   })
-  expect(session.state).toMatchObject({ _tag: "editing", error: "Server error" })
+  expect(session.raw.state).toMatchObject({ _tag: "editing", error: "Server error" })
   expect(await (await session.node(InventoryFixture)).state()).toMatchObject({ saved: [] })
 
   // The failure was one-shot: retrying works and clears the error.
-  expect((await session.dispatchRaw("Save")).status).toBe("completed")
-  expect(session.state).toMatchObject({ error: null })
+  expect((await session.raw.dispatchRaw("Save")).status).toBe("completed")
+  expect(session.raw.state).toMatchObject({ error: null })
 })
 
 test("virtual time drives timeouts without waiting for them", async () => {
   const session = await pool.open(app, { scenario: "slow-network" })
-  await session.dispatchRaw("OpenProduct", { productId: "product-123" })
+  await session.raw.dispatchRaw("OpenProduct", { productId: "product-123" })
 
-  const operation = await session.start("Save")
+  const operation = await session.raw.start("Save")
   await session.waitFor({ match: { _tag: "saving" } })
 
   await session.advanceTime(4_999)
-  expect(session.state).toMatchObject({ _tag: "saving" })
+  expect(session.raw.state).toMatchObject({ _tag: "saving" })
 
   await session.advanceTime(1)
   await session.waitFor({ operationId: operation.operationId })
 
-  expect(session.state).toMatchObject({ _tag: "editing", error: "Save timed out" })
+  expect(session.raw.state).toMatchObject({ _tag: "editing", error: "Save timed out" })
 })
 
 test("leaving a screen cancels its in-flight save", async () => {
   const session = await pool.open(app, { scenario: "slow-network" })
-  await session.dispatchRaw("OpenProduct", { productId: "product-123" })
-  const operation = await session.start("Save")
+  await session.raw.dispatchRaw("OpenProduct", { productId: "product-123" })
+  const operation = await session.raw.start("Save")
   await session.waitFor({ match: { _tag: "saving" } })
 
-  await session.dispatchRaw("GoBack")
+  await session.raw.dispatchRaw("GoBack")
   await session.waitFor({ operationId: operation.operationId })
 
   const result = await session.client.request("app.operation", {
@@ -109,8 +111,8 @@ test("leaving a screen cancels its in-flight save", async () => {
 
 test("an operation can be cancelled by its id", async () => {
   const session = await pool.open(app, { scenario: "slow-network" })
-  await session.dispatchRaw("OpenProduct", { productId: "product-123" })
-  const operation = await session.start("Save")
+  await session.raw.dispatchRaw("OpenProduct", { productId: "product-123" })
+  const operation = await session.raw.start("Save")
   await session.client.request("app.cancel", { operationId: operation.operationId })
   await session.waitFor({ operationId: operation.operationId })
   const finished = await session.client.request("app.operation", {
@@ -121,8 +123,8 @@ test("an operation can be cancelled by its id", async () => {
 
 test("availability is enforced, not just advertised", async () => {
   const session = await pool.open(app, { scenario: "slow-network" })
-  await session.dispatchRaw("OpenProduct", { productId: "product-123" })
-  await session.start("Save")
+  await session.raw.dispatchRaw("OpenProduct", { productId: "product-123" })
+  await session.raw.start("Save")
   await session.waitFor({ match: { _tag: "saving" } })
 
   const { node } = await session.inspect()
@@ -130,7 +132,7 @@ test("availability is enforced, not just advertised", async () => {
     available: false,
     unavailableReason: "Requires editing state",
   })
-  await expect(session.start("Save")).rejects.toMatchObject({ code: -32004 })
+  await expect(session.raw.start("Save")).rejects.toMatchObject({ code: -32004 })
 })
 
 test("GoBack is unavailable at the root and comes from the navigation node", async () => {
@@ -140,12 +142,12 @@ test("GoBack is unavailable at the root and comes from the navigation node", asy
     nodeId: expect.stringContaining("navigation/"),
     available: false,
   })
-  await expect(session.dispatchRaw("GoBack")).rejects.toMatchObject({ code: -32004 })
+  await expect(session.raw.dispatchRaw("GoBack")).rejects.toMatchObject({ code: -32004 })
 })
 
 test("inputs are validated against the encoded schema", async () => {
   const session = await pool.open(app)
-  await session.dispatchRaw("OpenProduct", { productId: "product-123" })
+  await session.raw.dispatchRaw("OpenProduct", { productId: "product-123" })
   for (const input of [
     { quantity: -1 },
     { quantity: 1.5 },
@@ -153,19 +155,21 @@ test("inputs are validated against the encoded schema", async () => {
     { quantity: 1, extra: true },
     {},
   ]) {
-    await expect(session.dispatchRaw("SetQuantity", input)).rejects.toMatchObject({ code: -32003 })
+    await expect(session.raw.dispatchRaw("SetQuantity", input)).rejects.toMatchObject({
+      code: -32003,
+    })
   }
-  await expect(session.dispatchRaw("Save", { unexpected: 1 })).rejects.toMatchObject({
+  await expect(session.raw.dispatchRaw("Save", { unexpected: 1 })).rejects.toMatchObject({
     code: -32003,
   })
-  expect(session.state).toMatchObject({ quantity: 5 })
+  expect(session.raw.state).toMatchObject({ quantity: 5 })
 })
 
 test("a stale observation cannot act", async () => {
   const session = await pool.open(app)
-  await session.dispatchRaw("OpenProduct", { productId: "product-123" })
+  await session.raw.dispatchRaw("OpenProduct", { productId: "product-123" })
   const { node } = await session.inspect()
-  await session.dispatchRaw("Increment")
+  await session.raw.dispatchRaw("Increment")
 
   await expect(
     session.client.request("app.dispatch", {
@@ -178,7 +182,7 @@ test("a stale observation cannot act", async () => {
 test("screens below the top of the stack cannot be driven by handle", async () => {
   const session = await pool.open(app)
   const { node: list } = await session.inspect()
-  await session.dispatchRaw("OpenProduct", { productId: "product-123" })
+  await session.raw.dispatchRaw("OpenProduct", { productId: "product-123" })
   await expect(
     session.client.request("app.dispatch", {
       nodeId: toNodeId(String(list?.id)),
@@ -189,18 +193,18 @@ test("screens below the top of the stack cannot be driven by handle", async () =
 
 test("navigation is reachable like a deep link, with validated params", async () => {
   const session = await pool.open(app)
-  await session.dispatchRaw("Navigate", {
+  await session.raw.dispatchRaw("Navigate", {
     route: "InventoryDetail",
     params: { productId: "product-456" },
   })
-  await session.precondition("InventoryDetail", { title: "Grey Hoodie" })
+  await session.raw.precondition("InventoryDetail", { title: "Grey Hoodie" })
   await expect(
-    session.dispatchRaw("Navigate", { route: "Nope", params: {} }),
+    session.raw.dispatchRaw("Navigate", { route: "Nope", params: {} }),
   ).rejects.toMatchObject({
     code: -32003,
   })
   await expect(
-    session.dispatchRaw("Navigate", { route: "InventoryDetail", params: {} }),
+    session.raw.dispatchRaw("Navigate", { route: "InventoryDetail", params: {} }),
   ).rejects.toMatchObject({ code: -32003 })
   expect((await session.inspectRaw("Navigation")).state).toMatchObject({
     stack: [
@@ -212,11 +216,11 @@ test("navigation is reachable like a deep link, with validated params", async ()
 
 test("secrets never leave the process", async () => {
   const session = await pool.open(app)
-  await session.dispatchRaw("OpenSettings")
-  await session.precondition("Settings", { _tag: "ready" })
+  await session.raw.dispatchRaw("OpenSettings")
+  await session.raw.precondition("Settings", { _tag: "ready" })
 
-  expect(session.state).toMatchObject({ apiToken: "<redacted>" })
-  await session.dispatchRaw("SetLowStockThreshold", { threshold: 3 })
+  expect(session.raw.state).toMatchObject({ apiToken: "<redacted>" })
+  await session.raw.dispatchRaw("SetLowStockThreshold", { threshold: 3 })
 
   const everything = JSON.stringify([
     await session.client.request("app.inspect", { tree: true }),
@@ -240,14 +244,14 @@ test("settings change what other screens compute", async () => {
 
 test("reset rebuilds the app, and stale handles die with the old session", async () => {
   const session = await pool.open(app)
-  await session.dispatchRaw("OpenProduct", { productId: "product-123" })
-  await session.dispatchRaw("SetQuantity", { quantity: 99 })
-  await session.dispatchRaw("Save")
+  await session.raw.dispatchRaw("OpenProduct", { productId: "product-123" })
+  await session.raw.dispatchRaw("SetQuantity", { quantity: 99 })
+  await session.raw.dispatchRaw("Save")
   const { node: stale } = await session.inspect()
 
   await session.reset("empty-inventory")
 
-  expect(session.state).toMatchObject({ _tag: "ready", products: [] })
+  expect(session.raw.state).toMatchObject({ _tag: "ready", products: [] })
   expect(await (await session.node(InventoryFixture)).state()).toMatchObject({ saved: [] })
   await expect(
     session.client.request("app.dispatch", {
@@ -260,8 +264,8 @@ test("reset rebuilds the app, and stale handles die with the old session", async
 
 test("a missing product is reported on the screen", async () => {
   const session = await pool.open(app)
-  await session.dispatchRaw("OpenProduct", { productId: "does-not-exist" })
-  expect(session.state).toMatchObject({ _tag: "missing", error: 'No product "does-not-exist"' })
+  await session.raw.dispatchRaw("OpenProduct", { productId: "does-not-exist" })
+  expect(session.raw.state).toMatchObject({ _tag: "missing", error: 'No product "does-not-exist"' })
 })
 
 test("real-time sessions refuse to advance time", async () => {
@@ -276,35 +280,37 @@ test("network access fails loudly during a journey", async () => {
 
 test("quantity is bounded the same way by every action that sets it", async () => {
   const session = await pool.open(app)
-  await session.dispatchRaw("OpenProduct", { productId: "product-123" })
+  await session.raw.dispatchRaw("OpenProduct", { productId: "product-123" })
 
-  await session.dispatchRaw("SetQuantity", { quantity: QUANTITY_MAX })
-  expect(session.state).toMatchObject({ quantity: QUANTITY_MAX })
+  await session.raw.dispatchRaw("SetQuantity", { quantity: QUANTITY_MAX })
+  expect(session.raw.state).toMatchObject({ quantity: QUANTITY_MAX })
   await expect(
-    session.dispatchRaw("SetQuantity", { quantity: QUANTITY_MAX + 1 }),
+    session.raw.dispatchRaw("SetQuantity", { quantity: QUANTITY_MAX + 1 }),
   ).rejects.toMatchObject({
     code: ErrorCode.InvalidInput,
   })
-  await expect(session.dispatchRaw("Increment")).rejects.toMatchObject({
+  await expect(session.raw.dispatchRaw("Increment")).rejects.toMatchObject({
     code: ErrorCode.ActionUnavailable,
   })
 
-  await session.dispatchRaw("SetQuantity", { quantity: 0 })
-  await expect(session.dispatchRaw("Decrement")).rejects.toMatchObject({
+  await session.raw.dispatchRaw("SetQuantity", { quantity: 0 })
+  await expect(session.raw.dispatchRaw("Decrement")).rejects.toMatchObject({
     code: ErrorCode.ActionUnavailable,
   })
-  await session.dispatchRaw("Increment")
-  expect(session.state).toMatchObject({ quantity: 1 })
+  await session.raw.dispatchRaw("Increment")
+  expect(session.raw.state).toMatchObject({ quantity: 1 })
 })
 
 test("the low stock threshold is bounded at both ends", async () => {
   const session = await pool.open(app)
-  await session.dispatchRaw("OpenSettings")
-  await session.precondition("Settings", { _tag: "ready" })
-  await session.dispatchRaw("SetLowStockThreshold", { threshold: 0 })
-  await session.dispatchRaw("SetLowStockThreshold", { threshold: 1_000 })
+  await session.raw.dispatchRaw("OpenSettings")
+  await session.raw.precondition("Settings", { _tag: "ready" })
+  await session.raw.dispatchRaw("SetLowStockThreshold", { threshold: 0 })
+  await session.raw.dispatchRaw("SetLowStockThreshold", { threshold: 1_000 })
   for (const threshold of [-1, 1_001]) {
-    await expect(session.dispatchRaw("SetLowStockThreshold", { threshold })).rejects.toMatchObject({
+    await expect(
+      session.raw.dispatchRaw("SetLowStockThreshold", { threshold }),
+    ).rejects.toMatchObject({
       code: ErrorCode.InvalidInput,
     })
   }
@@ -314,19 +320,19 @@ test("a route without params refuses junk from a deep link", async () => {
   const session = await pool.open(app)
   for (const params of [5, "junk", [1, 2], true, { x: 1 }]) {
     await expect(
-      session.dispatchRaw("Navigate", { route: "Settings", params }),
+      session.raw.dispatchRaw("Navigate", { route: "Settings", params }),
     ).rejects.toMatchObject({
       code: ErrorCode.InvalidInput,
     })
   }
-  await session.dispatchRaw("Navigate", { route: "Settings", params: {} })
-  await session.precondition("Settings")
+  await session.raw.dispatchRaw("Navigate", { route: "Settings", params: {} })
+  await session.raw.precondition("Settings")
 })
 
 test("the shared real-services behavior journey passes with guarded headless fixtures", async () => {
   const { servicesJourney } = await import("../examples/inventory/journeys/services.ts")
   const session = await pool.open(app)
   await servicesJourney(session, async () => {
-    await session.dispatchRaw("FailNextSave")
+    await session.raw.dispatchRaw("FailNextSave")
   })
 })

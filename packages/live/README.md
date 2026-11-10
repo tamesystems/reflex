@@ -27,7 +27,7 @@ The application decides whether and when to connect, and supplies its AppHost an
 
 ## Using it
 
-```ts
+```ts partial: integration excerpt; the host and environment are application-owned
 import { serveLive } from "@reflex/live"
 const server = await serveLive(app, { setting })
 // On shutdown:
@@ -47,3 +47,10 @@ await server.close()
 on close. Low-level LiveSessions/controller/node-source helpers remain available through
 the bridge-free session entry. `send` is secondary to typed node.actions and returns its
 correlated outcome union. See [adopting](../../docs/adopting.md).
+
+## Entry points
+
+`@reflex/live` owns bridge connections and framework-free serving. `@reflex/live/session`
+provides platform-free session/controller and UI action infrastructure without the dialler.
+`@reflex/live/vite` owns Vite's development guard and dynamically loads the bridge. These
+entries deliberately remain separate so production UI builds exclude transport code.

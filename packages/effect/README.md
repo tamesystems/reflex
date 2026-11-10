@@ -1,41 +1,56 @@
 # @reflex/effect
 
-Contracts precede handlers, so navigation never imports feature implementations:
+Contracts precede implementations. Navigation imports contracts; features import navigation.
+One app value then supplies host bindings and journey membership.
 
 ```ts
+import { defineApp, defineNavigation, defineScreen } from "@reflex/effect"
+import * as Layer from "effect/Layer"
+import * as Schema from "effect/Schema"
+
 const DetailScreen = defineScreen({
   name: "Detail",
-  state: Schema.TaggedStruct("loading", { id: Schema.String }),
+  state: Schema.NumberFromString,
   params: Schema.Struct({ id: Schema.String }),
-  initial: ({ id }) => ({ _tag: "loading", id }),
+  initial: () => 0,
 })
 const Nav = defineNavigation("app/Navigation", { Detail: DetailScreen })
 const Detail = DetailScreen.implement({
   actions: (action) => ({
-    Open: action({ error: NavigationRefused, handler: () => Nav.push("Detail", { id: "next" }) }),
+    Open: action({ handler: () => Nav.push("Detail", { id: "next" }) }),
+    Close: action({ handler: () => Nav.back }),
   }),
 })
-const root = Nav.layer({
-  screens: { Detail },
-  initial: { route: "Detail", params: { id: "first" } },
+export const app = defineApp({
+  name: "detail",
+  navigation: Nav.implement({ Detail }, { initial: { route: "Detail", params: { id: "first" } } }),
+  scenarios: { default: { layer: Layer.empty } },
+  defaultScenario: "default",
 })
 ```
 
-Use unique navigation keys. Push tuples keep route/params correlated. A route without
-params takes no argument. The app derives screen membership from `root`; scenario fixture
-layers use `withNodes(layer, { Fixture })`. `InferState`, `InferInput` and `InferError`
-derive consumer wire types. Handlers keep decoded state.
+A param-free initial route can be a string. Navigation runs after a successful handler;
+returning from a pop reports `completed`. Stack/build refusals become `refused` without
+an action error declaration. Other failures require `error: Schema`. Only checked values
+from the action builder may appear in an action map.
 
-`action.when(tag)` narrows reads and updates, rechecking the tag at commit.
-`state.when(otherTag)` selects another transition phase after asynchronous work.
-`Screen.handler` and `Screen.when(tag).handler` infer shared helper arguments.
-Handle focus errors into state; `onFocus` has no declared failure channel.
-`mount(capability, initial, { focus: true })` supports Effect apps without navigation.
+Contracts share runtime identity with every implementation. Composition checks identity,
+checks literal names, and rejects duplicate/conflicting implementations. TypeScript cannot
+generate a fresh nominal type on every function call: where independently declared
+same-name contracts must be distinguished statically, pass `identity: token` with an
+explicit `const token = Symbol("Detail")` unique symbol. No token is needed for ordinary
+unique names. Navigator keys must be unique in an app.
 
-Normal handles expose `actions`; `dispatchDecoded`, `mountOwned`, registry, redaction and
-custom factory navigation are integration APIs under `/internal`. `mountWithAccess` is
-for fixture/service owners retaining the sole state write path. Popping a navigation
-entry retires its node before closing the scope and cancelling its work.
+`InferState`, `InferInput` and `InferError` describe encoded consumer values; handlers keep
+decoded values. Tuples retain positions and length. `action.when(tag)` narrows state and
+rechecks the tag at commit. `state.when(tag)` selects another phase after suspension.
+`Screen.handler` and `Screen.when(tag).handler` infer shared helper arguments. Focus hooks
+handle expected load errors into state; their error channel is empty.
 
-See [ADR 0021](../../docs/decisions/0021-contracts-before-implementations.md) for limitations,
-including custom JSON hooks and static identity for same-name definitions.
+Root exports are the four definers, `action` (a standalone state-bound builder factory)
+and `Infer*` types. `/advanced` holds ownership types and `mount` for custom non-navigation
+roots. `/internal` holds registry, `mountWithAccess` for fixtures, redaction, decoded
+dispatch and custom factory navigation. Scenarios stay plain Layers; declare fixtures once
+with `defineApp({ fixtures: { Fixture }, ... })`.
+
+[ADR 0022](../../docs/decisions/0022-contract-identity-and-app-bindings.md) records these changes.

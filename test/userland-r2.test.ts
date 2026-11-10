@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from "bun:test"
-import { defineApp, defineCapability, defineScreen, mount } from "@reflex/effect"
+import { defineApp, defineCapability, defineScreen } from "@reflex/effect"
+import { mount } from "@reflex/effect/advanced"
 import { defineStoreApp, defineStoreNode } from "@reflex/runtime"
 import { createTestAppPool } from "@reflex/test"
 import { createRuntime } from "@reflex/runtime/internal"
@@ -7,7 +8,7 @@ import { createStore } from "zustand/vanilla"
 import * as Layer from "effect/Layer"
 import * as Schema from "effect/Schema"
 import { expoRoutes } from "../packages/expo/src/routes-effect.ts"
-import { ROUTE_MAPPING } from "../packages/expo/src/route-token.ts"
+import { ROUTE_MAPPING, SCREEN_BINDING } from "../packages/expo/src/route-token.ts"
 import inventory from "../examples/inventory/src/app.ts"
 import { InventoryList } from "../examples/inventory/src/features/inventory-list.ts"
 import { InventoryDetail } from "../examples/inventory/src/features/inventory-detail.ts"
@@ -81,7 +82,7 @@ test("journeys fail on refusal and domain errors, and handles read live state", 
   await expect(detail.actions.Save()).rejects.toThrow("ApiError: Server error")
   await detail.actions.SetQuantity({ quantity: 0 })
   await expect(detail.actions.Decrement()).rejects.toThrow("refused")
-  expect((await detail.expectFailure.Decrement()).status).toBe("refused")
+  expect((await detail.expectRefusal.Decrement()).status).toBe("refused")
   await detail.allowCancellation.SaveAndClose()
   await session.focused(InventoryList, { _tag: "ready" })
   await expect(detail.state()).rejects.toThrow()
@@ -115,7 +116,7 @@ test("URL codecs round trip transformed and optional fields; invalid params name
     { screens: { Detail } },
     { Detail: { pathname: "/detail/[id]", params: { id: "id", query: "query" } } },
   )
-  expect(routes.Detail.params({ id: "12" })).toEqual({ id: 12 })
+  expect(routes.Detail[SCREEN_BINDING].params({ id: "12" })).toEqual({ id: 12 })
   expect(routes[ROUTE_MAPPING].toHref({ route: "Detail", params: { id: "12" } })).toEqual({
     pathname: "/detail/[id]",
     params: { id: "12" },
@@ -124,7 +125,7 @@ test("URL codecs round trip transformed and optional fields; invalid params name
     route: "Detail",
     params: { id: "12" },
   })
-  expect(() => routes.Detail.params({ id: "invalid" })).toThrow(
+  expect(() => routes.Detail[SCREEN_BINDING].params({ id: "invalid" })).toThrow(
     'Route "Detail" has invalid URL params',
   )
 })
@@ -136,7 +137,7 @@ test("store app membership includes router-mounted definitions without eagerly m
     project: (value) => value,
     actions: () => ({}),
   })
-  const host = defineStoreApp({ name: "routes", routes: { Route } })
+  const host = defineStoreApp({ name: "routes", screens: { Route } })
   expect(host.nodes.Route).toBe(Route)
   const session = await host.start("default", { sessionId: "routes" })
   expect(session.runtime.inspect().node).toBeNull()

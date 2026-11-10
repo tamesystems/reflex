@@ -1,4 +1,5 @@
-import { defineCapability, type LiveNode } from "@reflex/effect"
+import { defineCapability } from "@reflex/effect"
+import type { LiveNode } from "@reflex/effect/advanced"
 import * as Effect from "effect/Effect"
 import * as Schema from "effect/Schema"
 import { send } from "../src/ui-actions.ts"

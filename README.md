@@ -47,7 +47,7 @@ live bridge need no React, React Native or Expo.
 Behavior is declared once; validation, JSON Schema, availability and input generators
 derive from it. From `examples/inventory/src/features/inventory-detail.ts`:
 
-```ts
+```ts partial: action-map excerpt from inventory-detail.ts
 SetQuantity: action.when("editing").reduce({
   input: Schema.Struct({ quantity: Quantity }),
   reducer: ({ quantity }, state) => ({ ...state, quantity }),
@@ -58,12 +58,18 @@ A journey drives the app through the real protocol, with inferred inputs and sta
 `examples/inventory/test/journey.test.ts`:
 
 ```ts
+import { createTestAppPool } from "@reflex/test"
+import app from "@reflex/example-inventory"
+import { InventoryList } from "@reflex/example-inventory/features/inventory-list.ts"
+import { InventoryDetail } from "@reflex/example-inventory/features/inventory-detail.ts"
+const pool = createTestAppPool()
 const session = await pool.open(app, { scenario: "inventory-with-products" })
 const list = await session.focused(InventoryList, { _tag: "ready" })
 await list.actions.OpenProduct({ productId: "product-123" })
 const detail = await session.focused(InventoryDetail, { _tag: "editing" })
 await detail.actions.SetQuantity({ quantity: 12 })
-expect((await detail.actions.Save()).status).toBe("completed")
+await detail.actions.Save()
+await pool.disposeAll()
 ```
 
 ## Start here
@@ -124,5 +130,6 @@ bun run reflex --target device stop
 ```
 
 `device` is the existing target name for any bridged app, including a server process.
-React apps import `ReflexProvider`, `useNode`, `useNodeFocus`, `useNodeState` and `send`
-from `@reflex/react`; optional capability lookup is `@reflex/react/effect`.
+React apps bind a real app with `createReflex(app)` from `@reflex/react`. Expo and
+React Router use `createReflexExpo` and `createReflexRouter`. Their bound hooks infer
+contracts and scenario names. Raw dispatch lives in `@reflex/react/advanced`.

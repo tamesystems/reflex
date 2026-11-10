@@ -1,15 +1,9 @@
 import { expect, test } from "bun:test"
 import type { InspectResult } from "@reflex/protocol"
-import {
-  type ActionsOf,
-  type Capability,
-  defineApp,
-  defineCapability,
-  mount,
-  NoParams,
-} from "@reflex/effect"
+import { defineApp, defineCapability } from "@reflex/effect"
+import { type ActionsOf, type Capability, mount, NoParams } from "@reflex/effect/advanced"
 import { Registry } from "@reflex/effect/internal"
-import { explore, inputsFor } from "@reflex/test"
+import { explore } from "@reflex/test"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
 import * as Schema from "effect/Schema"
@@ -34,6 +28,7 @@ const focusedApp = <A extends ActionsOf<Record<string, never>>>(
 ) =>
   defineApp({
     name: "explored",
+    nodes: { Recording: capability },
     defaultScenario: "default",
     root: Layer.effectDiscard(
       Effect.gen(function* () {
@@ -53,11 +48,9 @@ const hangingHost = focusedApp(
   }),
 )
 
-const knownInputs = [
-  inputsFor(app.nodes.InventoryList, {
-    OpenProduct: [{ productId: "product-123" }, { productId: "product-456" }],
-  }),
-]
+const knownInputs = {
+  InventoryList: { OpenProduct: [{ productId: "product-123" }, { productId: "product-456" }] },
+}
 
 const quantityNeverNegative = ({ node }: InspectResult) => {
   const state = node?.state
@@ -151,7 +144,7 @@ test("a null among known inputs is used, not replaced by a generated one", async
   const result = await explore(hostWithInput(inputs), {
     runCount: 1,
     stepCount: 3,
-    knownInputs: [{ node: "Recording", inputs: { Go: [null] } }],
+    knownInputs: { Recording: { Go: [null] } },
   })
   expect(result.failure).toBeUndefined()
   expect(inputs.length).toBeGreaterThan(0)

@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from "bun:test"
-import { defineApp, defineCapability, mount } from "@reflex/effect"
+import { defineApp, defineCapability } from "@reflex/effect"
+import { mount } from "@reflex/effect/advanced"
 import { Registry } from "@reflex/effect/internal"
 import {
   BRIDGE_WAITERS_MAX,

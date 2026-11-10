@@ -27,12 +27,17 @@ See [architecture](../../docs/ARCHITECTURE.md) and [development](../../docs/deve
 
 `defineStoreNode` captures the store factory, public projection and contextual action builder.
 `standardInput(schema)` derives JSON Schema through the Standard JSON Schema contract,
-with an explicit override when needed. Input types before/after validation remain distinct.
+with an explicit override when needed. Input types before/after validation remain distinct;
+consumer inputs are transport-safe. A node may also declare params with standardInput;
+its store factory receives decoded route params.
 `defineStoreApp({ name, nodes })` owns runtime construction, default focus and disposal.
-Scenarios accept typed stores overrides; `.withScenarios` composes them without losing
+Router-mounted definitions belong in `screens`; session factories apply their scenario
+overrides when the route mounts. Scenarios accept typed stores overrides; `.withScenarios` composes them without losing
 node/state/scenario contracts.
 `node.actions.Action(input)` returns an ActionOutcome; `availability` is shared with the
-protocol and React. Declared store errors use a schema and typed context.fail(error).
+protocol and React. Declared store errors use a Standard Schema validator directly and typed context.fail(error).
+Error transforms run before publication; only failures validated by that invocation can
+publish domain data. Tagged outcomes retain the declared tag/data relationship.
 AppHost remains an explicit escape hatch. `mountStore` and createRuntime are advanced
 ownership seams under `@reflex/runtime/internal`.
 

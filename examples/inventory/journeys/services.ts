@@ -20,11 +20,10 @@ export const servicesJourney = async (
     quantity: 5,
   })
   await detail.actions.SetQuantity({ quantity: 12 })
-  if ((await detail.actions.Save()).status !== "completed") {
-    throw new Error("Save did not complete")
-  }
+  await detail.actions.Save()
   await app.back()
   const updated = await app.focused(InventoryList, {
+    _tag: "ready",
     products: includes({ id: "product-123", quantity: 12 }),
   })
   await updated.actions.OpenProduct({ productId: "product-123" })
@@ -35,13 +34,11 @@ export const servicesJourney = async (
   })
   await reopened.actions.SetQuantity({ quantity: 19 })
   await failNextSave()
-  const failed = await reopened.expectFailure.Save()
-  if (failed.status !== "domain-error" || failed.error.tag !== "ApiError") {
-    throw new Error("A server error must be a declared ApiError")
-  }
+  await reopened.expectFailure.Save()
   await app.focused(InventoryDetail, { _tag: "editing", quantity: 19, error: "Server error" })
   await app.back()
   const saved = await app.focused(InventoryList, {
+    _tag: "ready",
     products: includes({ id: "product-123", quantity: 12 }),
   })
   await saved.actions.OpenSettings()

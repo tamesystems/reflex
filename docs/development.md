@@ -92,7 +92,7 @@ The `bun test` suites, by kind:
   protocol, serialized to JSON as a remote peer would see it. `advanceTime` moves virtual
   time; nothing sleeps. `explore(host, { invariant })` walks random available actions with
   schema-generated inputs and shrinks a failure, within a budget of 200 replays. Give it
-  `knownInputs: [inputsFor(Definition, { Action: [input] })]` for values a schema cannot know, such as ids that must exist: otherwise
+  `knownInputs: { Node: { Action: [input] } }` for values a schema cannot know, such as ids that must exist: otherwise
   a walk only ever finds the "not found" path.
 - **Process**, in `packages/cli/test`: each command is a real `reflex` process against a
   real daemon.
@@ -143,9 +143,9 @@ Its exact Zustand/Zod dev dependencies are installed in apps/mobile; no third in
 ### Add a screen
 
 1. Define state, params and `initial(params)` with `defineScreen` in a contract module.
-2. Build navigation from contracts. Attach handlers with `.implement`, and pass implementations to `Nav.layer({ screens, initial })`.
+2. Build navigation from contracts. Attach handlers with `.implement`, and compose implementations with `Nav.implement(screens, { initial })` in `defineApp`.
 3. Add a typed journey using `session.focused(Capability, match)` and `node.actions`.
-4. Register its file path and param-name mapping with `expoRoutes` and render with `useScreen`.
+4. Register every file path and param-name mapping with `createReflexExpo(app, registration)` and render with `useScreen`.
 5. Use the composed `useScreen` view for state and action controls; granular hooks remain available.
 
 Navigate with `Nav.push`/`Nav.back` Effects from handlers. See [adopting.md](adopting.md).
@@ -154,7 +154,7 @@ Navigate with `Nav.push`/`Nav.back` Effects from handlers. See [adopting.md](ado
 
 A scenario is a name and a `Layer` of services in `defineApp`'s `scenarios`; set
 `virtualTime: true` to run it on a `TestClock`. To let tests and agents steer a double,
-declare the layer's mounted definitions with `withNodes`, and mount a node with `type: "fixture"` and give it actions, as `fixtures.ts`'s
+declare fixtures once in `defineApp({ fixtures })`, and mount a node with `type: "fixture"` and give it actions, as `fixtures.ts`'s
 `FailNextSave` does. Fixture nodes are ambient, so their actions work from any screen.
 
 ### Add a CLI command
@@ -315,3 +315,18 @@ its VM execution remains for the configured CI job or a local VM install.
 and web checks. It prints extended diagnostics and fails above the recorded instantiation
 budget plus 10%. Baselines and the budget live in docs/performance/. Inspect any increase
 before changing the budget; timings are machine-dependent, instantiation counts are the gate.
+
+### Documentation snippets
+
+`bun scripts/check-docs.ts` extracts TypeScript blocks from README.md, docs/adopting.md
+and package READMEs and typechecks complete blocks. Excerpts must explicitly use
+`ts partial: reason` or `tsx partial: reason`. This runs in `bun run check` on both platforms.
+
+### Contract identity and host bindings
+
+See [ADR 0022](decisions/0022-contract-identity-and-app-bindings.md). UI modules import screen
+contracts and app-bound hooks. Use an explicit unique-symbol identity when independently
+declared same-name contracts need static distinction. Ordinary unique names need no token.
+`defineStoreApp` registers router-mounted definitions with `screens`; reserve routes for URL
+bindings. Fixture state access lives only in `@reflex/effect/internal`. Navigation queues
+behind the handler, so journeys assert successful SaveAndClose through ordinary actions.

@@ -1,22 +1,21 @@
-import { ROUTE_MAPPING } from "./route-token.ts"
-import type { Capability } from "@reflex/effect"
+import { ROUTE_MAPPING, SCREEN_BINDING } from "./route-token.ts"
 import type { Destination } from "@reflex/navigation"
 import { defined, isRecord, type Json } from "@reflex/protocol"
 import * as Schema from "effect/Schema"
 
 // Heterogeneous screens are checked individually where defined.
 // biome-ignore lint/suspicious/noExplicitAny: each binding retains its concrete capability.
-type AnyScreen = Capability<any, any, any, any>
+export type AnyScreen = { readonly params: Schema.Codec<any, any> }
 type Params<C extends AnyScreen> = Schema.Schema.Type<C["params"]>
 type WireParams<C extends AnyScreen> = Schema.Codec.Encoded<C["params"]>
 type UrlFields<C extends AnyScreen> = {
-  readonly [K in keyof Params<C>]: K extends keyof WireParams<C>
+  readonly [K in keyof Params<C>]-?: K extends keyof WireParams<C>
     ? WireParams<C>[K] extends string | undefined
       ? string
       : { readonly error: "URL params must encode strings"; readonly field: K }
     : { readonly error: "URL param keys must match encoded keys"; readonly field: K }
 }
-type Registration<C extends AnyScreen> = keyof Params<C> extends never
+export type Registration<C extends AnyScreen> = keyof Params<C> extends never
   ? string
   : string extends keyof Params<C>
     ? string
@@ -25,12 +24,13 @@ type Registration<C extends AnyScreen> = keyof Params<C> extends never
         readonly params: UrlFields<C>
       }
 export interface ScreenRoute<C extends AnyScreen> {
-  readonly capability: C
-  /** Validate file-route params and translate the application's chosen names. */
-  params(raw: Record<string, string | readonly string[] | undefined>): Params<C> | null
-  encodedParams(
-    raw: Record<string, string | readonly string[] | undefined>,
-  ): Record<string, unknown> | null
+  readonly [SCREEN_BINDING]: {
+    readonly capability: C
+    params(raw: Record<string, string | readonly string[] | undefined>): Params<C> | null
+    encodedParams(
+      raw: Record<string, string | readonly string[] | undefined>,
+    ): Record<string, unknown> | null
+  }
 }
 
 export class InvalidRouteParams extends Error {
@@ -52,6 +52,9 @@ const validateUrlParams = (
   pathname: string,
   mapping: Record<string, string>,
 ): void => {
+  if (new Set(Object.values(mapping)).size !== Object.keys(mapping).length) {
+    throw new Error(`Route "${name}" URL param mapping targets must be unique`)
+  }
   const document = Schema.toJsonSchemaDocument(Schema.toCodecJson(capability.params))
   const schema = document.schema
   if ("properties" in schema && schema.properties) {
@@ -90,12 +93,12 @@ const validateUrlParams = (
 type Placeholders<P extends string> = P extends `${string}[${infer Segment}]${infer Rest}`
   ? Segment | Placeholders<Rest>
   : never
-type CheckPath<R> = R extends {
+export type CheckPath<R> = R extends {
   readonly pathname: infer P extends string
   readonly params: infer M extends Record<string, unknown>
 }
   ? Exclude<Placeholders<P>, M[keyof M]> extends never
-    ? unknown
+    ? UniqueTargets<M>
     : {
         readonly "Pathname placeholders need matching param names": Exclude<
           Placeholders<P>,
@@ -107,6 +110,11 @@ type CheckPath<R> = R extends {
       ? unknown
       : { readonly "Pathname placeholders need params": Placeholders<R> }
     : unknown
+export type UniqueTargets<M extends Record<string, unknown>> = {
+  [K in keyof M]: { [J in Exclude<keyof M, K>]: M[J] extends M[K] ? J : never }[Exclude<keyof M, K>]
+}[keyof M] extends never
+  ? unknown
+  : { readonly "URL param mapping targets must be unique": never }
 export const expoRoutes = <
   const D extends Record<string, AnyScreen>,
   const R extends { readonly [K in keyof D]: Registration<D[K]> },
@@ -156,18 +164,20 @@ export const expoRoutes = <
     entries.map((entry) => [
       entry.name,
       {
-        capability: entry.capability,
-        params: entry.params,
-        encodedParams: (raw: Record<string, string | readonly string[] | undefined>) => {
-          const params = entry.params(raw)
-          if (params === null) {
-            return null
-          }
-          const encoded = entry.encode(params)
-          if (!isRecord(encoded)) {
-            throw new Error(`Route "${entry.name}" params must encode an object`)
-          }
-          return encoded
+        [SCREEN_BINDING]: {
+          capability: entry.capability,
+          params: entry.params,
+          encodedParams: (raw: Record<string, string | readonly string[] | undefined>) => {
+            const params = entry.params(raw)
+            if (params === null) {
+              return null
+            }
+            const encoded = entry.encode(params)
+            if (!isRecord(encoded)) {
+              throw new Error(`Route "${entry.name}" params must encode an object`)
+            }
+            return encoded
+          },
         },
       },
     ]),

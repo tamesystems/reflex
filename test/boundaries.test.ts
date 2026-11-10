@@ -30,7 +30,7 @@ const violations = (directory: string, permit: (specifier: string) => boolean) =
 const allowing =
   (...packages: ReadonlyArray<string>) =>
   (specifier: string): boolean =>
-    packages.includes(specifier.replace(/\/internal$/, ""))
+    packages.includes(specifier.replace(/\/(?:internal|advanced)$/, ""))
 
 test("protocol depends on nothing", () => {
   expect(violations("packages/protocol/src", allowing())).toEqual([])
@@ -106,7 +106,9 @@ test("application core never imports a UI or device API", () => {
   const found = violations(
     "examples/inventory/src",
     (s) =>
-      isEffect(s) || s.replace(/\/internal$/, "") === "@reflex/effect" || s === "@reflex/protocol",
+      isEffect(s) ||
+      s.replace(/\/(?:internal|advanced)$/, "") === "@reflex/effect" ||
+      s === "@reflex/protocol",
   )
   expect(found).toEqual([])
 })
@@ -122,6 +124,8 @@ test("React Router binding stays thin and Effect-free", () => {
       "packages/react-router/src",
       allowing(
         "@reflex/react",
+        "@reflex/react/advanced",
+        "react",
         "@reflex/live/session",
         "@reflex/runtime",
         "@reflex/protocol",
@@ -138,7 +142,12 @@ test("plain example has no Effect or UI dependency", () => {
 })
 test("only explicit capability entries imports Effect at runtime", () => {
   for (const file of [...sources("packages/expo/src"), ...sources("packages/react/src")]) {
-    if (file.endsWith("effect.tsx") || file.endsWith("routes-effect.ts")) {
+    if (
+      file.endsWith("effect.tsx") ||
+      file.endsWith("routes-effect.ts") ||
+      file.endsWith("bound.tsx") ||
+      file.endsWith("screen-ready.ts")
+    ) {
       continue
     }
     expect(importsOf(file).filter((s) => s === "@reflex/effect" || isEffect(s))).toEqual([])

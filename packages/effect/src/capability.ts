@@ -1,3 +1,6 @@
+import { ActionNavigation } from "./action-navigation.ts"
+import type { NavigationRefused } from "./navigation.ts"
+import { contractIdentity } from "./screen-identity.ts"
 import {
   type ActionDescriptor,
   assert,
@@ -83,7 +86,10 @@ const narrowAccess = <S, K extends S extends { readonly _tag: infer T } ? T & st
 // biome-ignore lint/suspicious/noConfusingVoidType: void models a handler parameter, including ignored return values.
 export type NoInput = void
 
+const CHECKED_ACTION = Symbol("reflex/checked-action")
+
 export interface ActionDefinition<S, I, E, R, Next = S, W = E, In = I> {
+  readonly [CHECKED_ACTION]: true
   readonly description?: string
   /** Omit for actions that take no input. */
   readonly input?: Schema.Codec<I, In>
@@ -95,7 +101,10 @@ export interface ActionDefinition<S, I, E, R, Next = S, W = E, In = I> {
    * Runs synchronously up to its first suspension. To exclude a second dispatch
    * through `available`, update state before suspending.
    */
-  readonly handler: (input: NoInfer<I>, state: StateAccess<S, Next>) => Effect.Effect<unknown, E, R>
+  readonly handler: (
+    input: NoInfer<I>,
+    state: StateAccess<S, Next>,
+  ) => Effect.Effect<unknown, E | NavigationRefused, R>
 }
 
 // Actions differ in I, E and R, and `Requirements` below is what recovers R.
@@ -117,8 +126,8 @@ export type PublicState<T> =
         ? readonly PublicState<Item>[]
         : T extends Date | bigint
           ? string
-          : T extends readonly (infer Item)[]
-            ? readonly PublicState<Item>[]
+          : T extends readonly unknown[]
+            ? { readonly [K in keyof T]: PublicState<T[K]> }
             : T extends object
               ? {
                   readonly [K in keyof T as K extends string
@@ -131,6 +140,7 @@ export type PublicState<T> =
 
 export interface Capability<S, A extends ActionsOf<S>, R, P = Record<string, never>, W = S>
   extends ConsumerDefinition<PublicState<W>, ActionCalls<A>> {
+  resolve(runtime: Runtime, id?: NodeId): LiveNode<PublicState<W>, A> | undefined
   readonly params: WireCodec<P>
   readonly initial: ((params: P) => S) | undefined
   readonly name: string
@@ -140,72 +150,89 @@ export interface Capability<S, A extends ActionsOf<S>, R, P = Record<string, nev
   readonly onFocus: ((state: StateAccess<S>) => Effect.Effect<unknown, never, R>) | undefined
 }
 
-/** Binds `S` so that each action infers its own input, error and services. */
-type DeclaredAction<S, I, E, R, Next = S, W = E, In = I> = Omit<
-  ActionDefinition<S, I, E, R, Next, W, In>,
-  "handler" | "error"
-> & {
-  readonly error: Schema.Codec<E, W>
+type SchemaOption = WireCodec<Erased> | undefined
+type DecodedInput<I> = I extends WireCodec<Erased> ? I["Type"] : undefined
+type EncodedInput<I> = I extends WireCodec<Erased> ? I["Encoded"] : undefined
+type DeclaredError<E> = E extends WireCodec<Erased> ? E["Type"] : never
+type EncodedError<E> = E extends WireCodec<Erased> ? E["Encoded"] : never
+type HandlerInput<I> =
+  I extends WireCodec<Erased>
+    ? I["Type"]
+    :
+        | undefined
+        | {
+            readonly "Annotating the handler input does not declare a schema; add input:": never
+          }
+
+/** Schema presence, rather than the handler's annotations, determines input and errors. */
+type CheckedActionBuilder<S, N = S> = <
+  const I extends SchemaOption = undefined,
+  const E extends SchemaOption = undefined,
+  R = never,
+>(definition: {
+  readonly description?: string
+  readonly input?: I
+  readonly error?: E
+  readonly available?: (state: N) => true | string
   readonly handler: (
-    input: NoInfer<I>,
-    state: StateAccess<S, Next>,
-  ) => Effect.Effect<unknown, NoInfer<E>, R>
+    input: NoInfer<HandlerInput<I>>,
+    state: StateAccess<N, S>,
+  ) => Effect.Effect<
+    unknown,
+    | NoInfer<
+        E extends WireCodec<Erased>
+          ? E["Type"]
+          : { readonly "Declare action failures with error:": never }
+      >
+    | NavigationRefused,
+    R
+  >
+}) => NoInfer<
+  ActionDefinition<
+    S,
+    DecodedInput<NoInfer<I>>,
+    DeclaredError<NoInfer<E>>,
+    R,
+    S,
+    EncodedError<NoInfer<E>>,
+    EncodedInput<NoInfer<I>>
+  > &
+    (NoInfer<I> extends WireCodec<Erased> ? { readonly input: I } : Record<never, never>)
+>
+interface GuardedActionBuilder<S, N> extends CheckedActionBuilder<S, N> {
+  reduce<I extends SchemaOption = undefined>(definition: {
+    readonly description?: string
+    readonly input?: I
+    readonly available?: (state: N) => true | string
+    readonly reducer: (
+      input: NoInfer<I extends WireCodec<Erased> ? I["Type"] : undefined>,
+      state: N,
+    ) => S
+  }): NoInfer<
+    ActionDefinition<
+      S,
+      DecodedInput<NoInfer<I>>,
+      never,
+      never,
+      S,
+      never,
+      EncodedInput<NoInfer<I>>
+    > &
+      (NoInfer<I> extends WireCodec<Erased> ? { readonly input: I } : Record<never, never>)
+  >
 }
-type WithoutInputError<D> = Omit<D, "input" | "error"> & {
-  readonly input?: never
-  readonly error?: never
-}
-type WithInput<D, I, In> = Omit<D, "input" | "error"> & {
-  readonly input: Schema.Codec<I, In>
-  readonly error?: never
-}
-interface GuardedActionBuilder<S, N> {
-  <R = never>(
-    definition: WithoutInputError<ActionDefinition<N, void, never, R, S, never, void>>,
-  ): ActionDefinition<S, void, never, R, S, never, void>
-  <I, In, R = never>(
-    definition: WithInput<ActionDefinition<N, I, never, R, S, never, In>, I, In>,
-  ): ActionDefinition<S, I, never, R, S, never, In> & { readonly input: Schema.Codec<I, In> }
-  <E, W, R = never>(
-    definition: DeclaredAction<N, void, E, R, S, W, void> & { readonly input?: never },
-  ): ActionDefinition<S, void, E, R, S, W, void>
-  <I, E, W, In, R = never>(
-    definition: DeclaredAction<N, I, E, R, S, W, In> & { readonly input: Schema.Codec<I, In> },
-  ): ActionDefinition<S, I, E, R, S, W, In> & { readonly input: Schema.Codec<I, In> }
-  reduce(
-    definition: Omit<WithoutInputError<ActionDefinition<N, void, never, never, S>>, "handler"> & {
-      readonly reducer: (input: undefined, state: N) => S
-    },
-  ): ActionDefinition<S, void, never, never, S>
-  reduce<I, In>(
-    definition: Omit<
-      WithInput<ActionDefinition<N, I, never, never, S, never, In>, I, In>,
-      "handler"
-    > & { readonly reducer: (input: NoInfer<I>, state: N) => S },
-  ): ActionDefinition<S, I, never, never, S, never, In> & { readonly input: Schema.Codec<I, In> }
-}
-interface ActionBuilder<S> {
-  <R = never>(
-    definition: WithoutInputError<ActionDefinition<S, void, never, R, S, never, void>>,
-  ): ActionDefinition<S, void, never, R, S, never, void>
-  <I, In, R = never>(
-    definition: WithInput<ActionDefinition<S, I, never, R, S, never, In>, I, In>,
-  ): ActionDefinition<S, I, never, R, S, never, In> & { readonly input: Schema.Codec<I, In> }
-  <E, W, R = never>(
-    definition: DeclaredAction<S, void, E, R, S, W, void> & { readonly input?: never },
-  ): ActionDefinition<S, void, E, R, S, W, void>
-  <I, E, W, In, R = never>(
-    definition: DeclaredAction<S, I, E, R, S, W, In> & { readonly input: Schema.Codec<I, In> },
-  ): ActionDefinition<S, I, E, R, S, W, In> & { readonly input: Schema.Codec<I, In> }
+interface ActionBuilder<S> extends CheckedActionBuilder<S> {
   when<K extends S extends { readonly _tag: infer T } ? T & string : never>(
     tag: K,
     reason?: string,
   ): GuardedActionBuilder<S, Extract<S, { readonly _tag: K }>>
 }
 
-const actionBuilder = <S>(): ActionBuilder<S> =>
+export const actionBuilder = <S>(): ActionBuilder<S> =>
   Object.assign(
-    <I = NoInput, E = never, R = never>(definition: ActionDefinition<S, I, E, R>) => definition,
+    <I = NoInput, E = never, R = never>(
+      definition: Omit<ActionDefinition<S, I, E, R>, typeof CHECKED_ACTION>,
+    ) => ({ ...definition, [CHECKED_ACTION]: true as const }),
     {
       when: <K extends S extends { readonly _tag: infer T } ? T & string : never>(
         tag: K,
@@ -215,9 +242,10 @@ const actionBuilder = <S>(): ActionBuilder<S> =>
         const matches = (state: S): state is N =>
           typeof state === "object" && state !== null && "_tag" in state && state._tag === tag
         const build = <I = NoInput, E = never, R = never>(
-          definition: ActionDefinition<N, I, E, R, S, Erased, Erased>,
+          definition: Omit<ActionDefinition<N, I, E, R, S, Erased, Erased>, typeof CHECKED_ACTION>,
         ): ActionDefinition<S, I, E, R, S, Erased, Erased> => ({
           ...definition,
+          [CHECKED_ACTION]: true,
           available: (state) => (matches(state) ? (definition.available?.(state) ?? true) : reason),
           handler: (input, state) =>
             definition.handler(input, {
@@ -231,7 +259,10 @@ const actionBuilder = <S>(): ActionBuilder<S> =>
         })
         return Object.assign(build, {
           reduce: <I = NoInput>(
-            definition: Omit<ActionDefinition<N, I, never, never, S>, "handler"> & {
+            definition: Omit<
+              ActionDefinition<N, I, never, never, S>,
+              "handler" | typeof CHECKED_ACTION
+            > & {
               readonly reducer: (input: I, state: N) => S
             },
           ) =>
@@ -300,7 +331,18 @@ export function defineCapability<
   definition: CapabilityDefinition<S, A, R, P, W, Name>,
 ): Capability<S, A, R | Requirements<A>, P, W> & { readonly name: Name } {
   const actions = definition.actions(actionBuilder<S>())
+  for (const [name, action] of Object.entries(actions)) {
+    if (action[CHECKED_ACTION] !== true) {
+      throw new Error(
+        `Capability "${definition.name}" action "${name}" must be created with the action builder`,
+      )
+    }
+  }
   return {
+    resolve(runtime, id) {
+      const nodeId = id ?? runtime.inspect({ name: definition.name }).node?.id
+      return nodeId === undefined ? undefined : liveNodeOf(runtime, nodeId, this)
+    },
     params: definition.params ?? (Schema.Record(Schema.String, Schema.Never) as WireCodec<P>),
     initial: definition.initial,
     name: definition.name,
@@ -308,6 +350,10 @@ export function defineCapability<
     state: definition.state,
     actions,
     "~reflex": {
+      decodeParams: (raw) =>
+        Schema.decodeUnknownSync(
+          Schema.toCodecJson(definition.params ?? Schema.Record(Schema.String, Schema.Never)),
+        )(raw),
       input: (name, args) => {
         const action = defined(actions[name], "action names come from the definition")
         return action.input === undefined ? undefined : (args[0] as Json)
@@ -590,7 +636,15 @@ const toOutcome = (
   }
   const failure = Cause.findErrorOption(exit.cause)
   if (Option.isSome(failure)) {
-    if (schema === undefined) {
+    const tag = failureFields(failure.value)._tag
+    if (tag === "NavigationStackFull" || tag === "ScreenBuildTimedOut") {
+      return { status: "failed", error: describeFailure(failure.value, undefined) }
+    }
+    if (
+      schema === undefined &&
+      failureFields(failure.value)._tag !== "NavigationStackFull" &&
+      failureFields(failure.value)._tag !== "ScreenBuildTimedOut"
+    ) {
       return {
         status: "failed",
         error: {
@@ -721,7 +775,11 @@ class NodeInstance<S, A extends ActionsOf<S>, R, P, W>
   }
 
   isInstanceOf(capability: unknown): boolean {
-    return this.capability === capability
+    return (
+      typeof capability === "object" &&
+      capability !== null &&
+      contractIdentity(this.capability) === contractIdentity(capability)
+    )
   }
 
   getSnapshot = (): PublicState<W> => this.encoded as PublicState<W>
@@ -922,12 +980,22 @@ class NodeInstance<S, A extends ActionsOf<S>, R, P, W>
     effect: Effect.Effect<unknown, unknown, R>,
     schema: WireCodec<unknown> | undefined,
   ): Invocation {
-    const fiber = this.host.fork(effect)
+    const pending: Effect.Effect<void, unknown>[] = []
+    let fiber = this.host.fork(Effect.provideService(effect, ActionNavigation, { pending }))
     this.host.supervise(fiber)
     return {
       done: new Promise((resolve) => {
-        fiber.addObserver((exit) => {
+        const finish = (exit: Exit.Exit<unknown, unknown>) =>
           resolve(toSafeOutcome(exit, schema, (error) => this.host.registry.report(error)))
+        fiber.addObserver((exit) => {
+          if (Exit.isFailure(exit) || pending.length === 0) {
+            finish(exit)
+            return
+          }
+          // The handler is finished before a pop can retire its scope. Navigation's
+          // own lifetime belongs to the navigator rather than the departed screen.
+          fiber = this.host.fork(Effect.forEach(pending, (work) => work, { discard: true }))
+          fiber.addObserver(finish)
         })
       }),
       cancel: () => fiber.interruptUnsafe(),

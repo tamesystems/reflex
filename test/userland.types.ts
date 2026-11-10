@@ -1,16 +1,19 @@
-import { defineApp, defineCapability, defineNavigation, type NodeOf } from "@reflex/effect"
+import { defineApp, defineCapability, defineNavigation, defineScreen } from "@reflex/effect"
+import type { NodeOf } from "@reflex/effect/advanced"
 import { defineStoreApp, defineStoreNode, standardInput } from "@reflex/runtime"
 import * as Layer from "effect/Layer"
 import * as Schema from "effect/Schema"
 import { z } from "zod"
 import { expoRoutes } from "../packages/expo/src/routes-effect.ts"
-import { createTestAppPool, inputsFor } from "@reflex/test"
+import { createTestAppPool, explore } from "@reflex/test"
 
-const Detail = defineCapability({
+const DetailContract = defineScreen({
   name: "Detail",
   state: Schema.TaggedStruct("editing", { quantity: Schema.Number }),
   params: Schema.Struct({ productId: Schema.String }),
   initial: () => ({ _tag: "editing" as const, quantity: 0 }),
+})
+const Detail = DetailContract.implement({
   actions: (action) => ({
     SetQuantity: action.when("editing").reduce({
       input: Schema.Struct({ quantity: Schema.Number }),
@@ -18,13 +21,13 @@ const Detail = defineCapability({
     }),
   }),
 })
-const Home = defineCapability({
+const HomeContract = defineScreen({
   name: "Home",
   state: Schema.Number,
   initial: () => 0,
-  actions: () => ({}),
 })
-const Nav = defineNavigation("types", { Detail, Home })
+const Home = HomeContract.implement({ actions: () => ({}) })
+const Nav = defineNavigation("types", { Detail: DetailContract, Home: HomeContract })
 defineNavigation("invalid", {
   // @ts-expect-error Navigation screens must own initial(params).
   Missing: defineCapability({ name: "Missing", state: Schema.Number, actions: () => ({}) }),
@@ -33,7 +36,7 @@ defineNavigation("invalid", {
 const app = defineApp({
   name: "typed",
   root: Nav.layer({ screens: { Detail, Home }, initial: { route: "Home", params: {} } }),
-  nodes: Nav.screens,
+  nodes: { Detail, Home },
   scenarios: { default: { layer: Layer.empty } },
   defaultScenario: "default",
 })
@@ -79,11 +82,11 @@ export const contracts = async (node: NodeOf<typeof Detail>) => {
   expoRoutes(Nav, { Home: "/", Detail: { pathname: "/detail/[id]", params: { productId: "id" } } })
   // @ts-expect-error Mapper keys derive from route params.
   expoRoutes(Nav, { Home: "/", Detail: { pathname: "/detail/[id]", params: { id: "id" } } })
-  inputsFor(Detail, { SetQuantity: [{ quantity: 1 }] })
+  await explore(app, { knownInputs: { Detail: { SetQuantity: [{ quantity: 1 }] } } })
   // @ts-expect-error Exploration inputs derive from the node's actions.
-  inputsFor(Detail, { SetQuantity: [{ quantity: "wrong" }] })
+  await explore(app, { knownInputs: { Detail: { SetQuantity: [{ quantity: "wrong" }] } } })
   // @ts-expect-error Unknown action.
-  inputsFor(Detail, { Save: [{}] })
+  await explore(app, { knownInputs: { Detail: { Save: [{}] } } })
   await node.actions.SetQuantity({ quantity: 2 })
   await pool.disposeAll()
 }
@@ -101,11 +104,11 @@ export const Store = defineStoreNode({
       },
     }),
     Fail: action({
-      error: standardInput(z.strictObject({ _tag: z.literal("Rejected"), message: z.string() })),
+      error: z.strictObject({ _tag: z.literal("Rejected"), message: z.string() }),
       handler: (_, { fail }) => fail({ _tag: "Rejected", message: "no" }),
     }),
     BadFailure: action({
-      error: standardInput(z.strictObject({ _tag: z.literal("Rejected") })),
+      error: z.strictObject({ _tag: z.literal("Rejected") }),
       handler: (_, { fail }) => {
         // @ts-expect-error Store failures match their declared schema.
         return fail({ _tag: "Wrong" })
@@ -156,15 +159,10 @@ export const scenarioContracts = () => {
 }
 
 // Round two: contracts establish state and routes before any handlers import navigation.
-import {
-  defineScreen,
-  NavigationRefused,
-  type InferState,
-  type InferInput,
-  type InferError,
-} from "@reflex/effect"
+import type { InferState, InferInput, InferError } from "@reflex/effect"
+import { NavigationRefused } from "@reflex/effect/advanced"
 import * as Effect from "effect/Effect"
-import { explore, includes } from "@reflex/test"
+import { includes } from "@reflex/test"
 import { serveLive } from "@reflex/live"
 const First = defineScreen({
   name: "First",
@@ -302,6 +300,7 @@ defineStoreNode({
   store: () => ({ getState: () => 0, subscribe: () => () => undefined }),
   project: (s) => s,
   actions: () => ({
+    // @ts-expect-error Raw action objects must pass through the checked builder.
     Raw: {
       handler: (value, context) => {
         // @ts-expect-error Plain handlers receive unknown, rather than any; use action({input, handler}) for schema inference.
@@ -333,3 +332,6 @@ export const noOwnership = (node: NodeOf<typeof Detail>) => {
   // @ts-expect-error Decoded dispatch is an explicit advanced function.
   node.send("SetQuantity", { quantity: 1 })
 }
+
+// @ts-expect-error Optional fields still need a URL field-name mapping.
+expoRoutes({ screens: { OptionalRoute } }, { OptionalRoute: { pathname: "/optional", params: {} } })

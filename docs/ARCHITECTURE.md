@@ -90,13 +90,13 @@ packages/
               session-owner.ts, node-source.ts and ui-actions.ts. session.ts excludes
               the bridge for UI bundles. See packages/live/README.md.
   react/      React-only provider and hooks (react.tsx), generic route binding,
-              optional Effect capability lookup (effect.tsx). See packages/react/README.md.
+              app-bound factories and advanced session/route seams. See packages/react/README.md.
   navigation/ Router-neutral projection rules/controller and Navigation core port.
               No framework, router or Effect. See packages/navigation/README.md.
   react-router/ Existing React Router 8 route focus, via @reflex/react.
               See packages/react-router/README.md.
   expo/       Expo Router projection adapter, router-actions.ts,
-              router-specific hooks and Effect route convenience entry.
+              app-bound hooks and symbol-hidden URL bindings.
               See packages/expo/README.md.
 examples/
   inventory/  A three-screen app core with fixture scenarios and an optional HTTP service
@@ -138,16 +138,15 @@ runtime + live ◄── examples/live-counter
 - Core packages (`protocol`, `runtime`, `rpc`, `cli`, `test`, `effect`) import no UI framework.
 - `live` imports no React, React Native, Expo, Effect or Node APIs; it needs a global WebSocket.
 - `live` reaches RPC only through the platform-free `@reflex/rpc/connection` entry.
-- `react` depends on React, with no React Native or Expo imports. Only `react/effect`
-  imports Effect capability lookup; the default entry remains Effect-free.
+- `react` depends on React, with no React Native or Expo imports. Its root and advanced entries remain Effect-free.
 - UI bindings import `@reflex/live/session`, whose exports exclude the bridge. Apps load
   `@reflex/live` and read the bridge setting only behind `__DEV__` (Expo) or
   `import.meta.env.DEV` (Vite) in UI builds.
 - `navigation` imports only protocol/runtime; no framework, router, Effect or platform.
 - `expo` adapts navigation ports to Expo Router and owns route-param integration.
 - `react-router` imports only `@reflex/react`, React Router, live/session and runtime/protocol;
-  it reports focus in existing routes and owns no navigation. Its only React hooks are
-  delegated to `@reflex/react`; no Expo, React Native or Effect.
+  it reports focus in existing routes and owns no navigation. It uses React to memoize URL bindings and delegates node/session ownership to
+  `@reflex/react`; no Expo, React Native or Effect.
 - An app core never imports React, Expo or a device API.
 - Only `packages/expo/src/router-actions.ts` imports Expo Router's private modules.
 
@@ -456,20 +455,28 @@ Expo's registration derives both mapping directions. React owns commit-time moun
 history-entry retention. Runtime setFocus invokes the adapter lifecycle only on arrival;
 routers and core navigation call this same operation.
 
-Public roots expose author APIs. Effect and React integration helpers are under `/internal`;
-React raw runtime access is under `/advanced`. These subpaths keep their package's existing
-dependency direction. Expo's dev entry alone may reach the live bridge, behind `__DEV__`;
-its explicit Effect entry and routes-effect helper may import Effect. Generic entries remain
-Effect-free. Vite's live/vite entry dynamically imports the dialler only in development.
+Public roots expose author APIs. Effect integration helpers are under `/internal`, with ownership APIs under `/advanced`;
+React has only its root and `/advanced`. These subpaths keep their package's existing
+dependency direction. Expo exports its bound factory, projection and guarded development bridge from the root;
+its `/internal` entry also supplies the bridge to plain integrations without importing Effect.
+Expo URL binding helpers may import Effect. Generic React entries remain Effect-free. Vite's live/vite entry dynamically imports the dialler only in development.
 Production exclusion is checked by browser builds. UI entry files delegate optional test
 instrumentation to a development module, which production Metro removes.
 
 ## Contract and consumer boundary
 
-Screen contracts precede handler imports (ADR 0021). Navigation layers carry screen
-definitions; scenario layers declare fixture definitions with withNodes. UI and journey
+Screen contracts precede handler imports (ADRs 0021 and 0022) and share identity with
+implementations. `defineApp` composes a navigation implementation and declares fixtures
+once; scenario layers remain plain Layers. UI and journey
 consumers read wire state, while handlers read decoded state. Store projections are JSON
 and guards publish independently of projection equality. React owns bounded history-entry
 retention; router adapters supply only location identity and focus. Protocol probes live
 in root test/, and examples teach typed stories. Mobile E2E instrumentation lives in
-e2e/, loaded only through the compile-time entry selector in provider.tsx.
+e2e/, loaded only through the compile-time selector in e2e/entry.tsx.
+
+Host binding factories attach the app to a Provider and typed screen/session hooks (ADR 0022).
+Session route factories provide Effect services and scenario store overrides. React Router
+mounts through these factories; Expo resolves core-owned screen instances. Navigating actions
+finish their handler before queued navigation can retire the screen, so a successful back
+reports completed. Other work on a popped screen is still cancelled. Documentation snippets
+and compiler diagnostic text are checked in CI alongside the instantiation budget.

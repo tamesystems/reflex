@@ -1,17 +1,21 @@
+import { Suspense } from "react"
 import { developmentBridge } from "@reflex/live/vite"
-import { ReflexProvider } from "@reflex/react"
-import { useScreen } from "@reflex/react-router"
+import type { ScreenView } from "@reflex/react"
+import { createReflexRouter } from "@reflex/react-router"
 import { createRoot } from "react-dom/client"
 import { BrowserRouter, Link, Route, Routes } from "react-router"
 import { List, Detail, host } from "./host.ts"
 
-const useListScreen = () => useScreen(List)
+const { Provider, useScreen, useScreenSuspense } = createReflexRouter(host, {
+  List: "/",
+  Detail: { pathname: "/detail/:id", params: { id: "id" } },
+})
 const CounterScreen = ({
   title,
   view,
 }: {
   readonly title: string
-  readonly view: ReturnType<typeof useListScreen>
+  readonly view: ScreenView<typeof List>
 }) => {
   if (view.status === "pending") {
     return <p>Loading…</p>
@@ -20,6 +24,7 @@ const CounterScreen = ({
     <main>
       <h1>{title}</h1>
       <p>Count: {view.state.count}</p>
+      {title === "Detail" && <p>Item: {view.state.id}</p>}
       <button
         type="button"
         disabled={!view.actions.Increment.available}
@@ -35,7 +40,7 @@ const CounterScreen = ({
   )
 }
 const ListScreen = () => <CounterScreen title="List" view={useScreen(List)} />
-const DetailScreen = () => <CounterScreen title="Detail" view={useScreen(Detail)} />
+const DetailScreen = () => <CounterScreen title="Detail" view={useScreenSuspense(Detail)} />
 
 const bridge = developmentBridge()
 const root = document.getElementById("root")
@@ -43,12 +48,14 @@ if (root === null) {
   throw new Error("Missing root")
 }
 createRoot(root).render(
-  <ReflexProvider host={host} bridge={bridge}>
+  <Provider bridge={bridge}>
     <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<ListScreen />} />
-        <Route path="/detail/:id" element={<DetailScreen />} />
-      </Routes>
+      <Suspense fallback={<p>Loading…</p>}>
+        <Routes>
+          <Route path="/" element={<ListScreen />} />
+          <Route path="/detail/:id" element={<DetailScreen />} />
+        </Routes>
+      </Suspense>
     </BrowserRouter>
-  </ReflexProvider>,
+  </Provider>,
 )

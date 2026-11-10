@@ -1,3 +1,5 @@
+import { afterAction } from "./action-navigation.ts"
+import { SCREEN_CONTRACT, contractIdentity } from "./screen-identity.ts"
 import {
   assert,
   defined,
@@ -33,6 +35,16 @@ import { isLimitReached } from "./failures.ts"
 /** The stack's lock is held meanwhile, so a screen cannot be allowed to take forever. */
 const SCREEN_BUILD_TIMEOUT = "30 seconds"
 const SCREEN_TEARDOWN_TIMEOUT = "10 seconds"
+
+/** A named requirement, independent of the screen implementation graph. */
+export interface NavigatorRequirement<Key extends string> {
+  readonly "~reflex/navigator": Key
+}
+type InitialRoute<Routes extends RouteSchemas> = {
+  readonly [K in keyof Routes & string]:
+    | { readonly route: K; readonly params: ParamsOf<Routes, K> }
+    | (Record<string, never> extends ParamsOf<Routes, K> ? K : never)
+}[keyof Routes & string]
 
 type RouteSchemas = { readonly [route: string]: WireCodec<Erased> }
 
@@ -168,104 +180,75 @@ const defineSchemaNavigation = <const Routes extends RouteSchemas>(key: string, 
   }
 }
 
-/** A screen contract carries its params and initial state; the navigator mounts it. */
 type ScreenDefinitions = Record<
   string,
-  Capability<Erased, Erased, Erased, Erased> & { readonly initial: (params: Erased) => Erased }
+  Capability<Erased, Erased, Erased, Erased, Erased> & {
+    readonly initial: (params: Erased) => Erased
+  }
 >
-type ScreenParams<D extends ScreenDefinitions> = { readonly [K in keyof D]: D[K]["params"] }
 type ScreenRequirements<D extends ScreenDefinitions> =
-  D[keyof D] extends Capability<Erased, Erased, infer R, Erased> ? R : never
-
-/** Advanced schema/factory navigation remains available for custom screen ownership. */
+  D[keyof D] extends Capability<Erased, Erased, infer R, Erased, Erased> ? R : never
 export const defineNavigationFactories = defineSchemaNavigation
 
-const buildScreenNavigation = <const D extends ScreenDefinitions>(key: string, screens: D) => {
-  const params = Object.fromEntries(
-    Object.entries(screens).map(([name, screen]) => [name, screen.params]),
-  ) as ScreenParams<D>
-  const navigation = defineSchemaNavigation(key, params)
-  const factories = Object.fromEntries(
-    Object.entries(screens).map(([name, screen]) => [
-      name,
-      (params: unknown) => {
-        assert(screen.initial !== undefined, `Screen "${name}" must define initial(params)`)
-        return Effect.map(mountWithAccess(screen, screen.initial(params)), ({ node }) => node)
-      },
-    ]),
-  ) as unknown as {
-    readonly [K in keyof D]: ScreenFactory<
-      Schema.Schema.Type<D[K]["params"]>,
-      ScreenRequirements<D>
-    >
-  }
-  return {
-    ...navigation,
-    screens,
-    layer: (options: {
-      readonly initial: {
-        readonly [K in keyof D]: {
-          readonly route: K
-          readonly params: Schema.Schema.Type<D[K]["params"]>
-        }
-      }[keyof D]
-    }) => navigation.layer({ ...options, screens: factories }),
-  }
-}
-
-/** Resolve screens after module initialization, so features may navigate through this value. */
-export const defineLegacyNavigation = <const D extends ScreenDefinitions>(
-  key: string,
-  screens: () => D,
-) => {
-  type Built = ReturnType<typeof buildScreenNavigation<D>>
-  let built: Built | undefined
-  const get = (): Built => (built ??= buildScreenNavigation(key, screens()))
-  return {
-    get screens(): D {
-      return screens()
-    },
-    layer: (options: Parameters<Built["layer"]>[0]) => get().layer(options),
-    push: <K extends keyof D & string>(
-      route: K,
-      ...args: Record<string, never> extends ParamsOf<ScreenParams<D>, K>
-        ? [params?: ParamsOf<ScreenParams<D>, K>]
-        : [params: ParamsOf<ScreenParams<D>, K>]
-    ): Effect.Effect<void, NavigationRefused, NavigationService> =>
-      Effect.suspend(() => get().push(route, ...args)),
-    back: Effect.suspend(() => get().back),
-  }
-}
-
 /** Contract-first navigation: implementations are supplied only when composing the app. */
-export const defineContractNavigation = <
-  const Key extends string,
-  const D extends Record<
-    string,
-    {
-      readonly name: string
-      readonly state: WireCodec<Erased>
-      readonly params?: WireCodec<Erased>
-      readonly initial: (params: Erased) => Erased
+type ScreenContracts = Record<
+  string,
+  {
+    readonly implement: (...args: never[]) => unknown
+    readonly [SCREEN_CONTRACT]: { readonly key: symbol | string }
+    readonly name: string
+    readonly state: WireCodec<Erased>
+    readonly params?: WireCodec<Erased>
+    readonly initial: (params: Erased) => Erased
+  }
+>
+
+const validateImplementations = (
+  key: string,
+  contracts: ScreenContracts,
+  screens: ScreenDefinitions,
+): void => {
+  const identities = new Set<object>()
+  for (const [name, contract] of Object.entries(contracts)) {
+    const screen = screens[name]
+    if (screen === undefined || contractIdentity(screen) !== contractIdentity(contract)) {
+      throw new Error(`Navigator "${key}" screen "${name}" must implement its registered contract`)
     }
-  >,
->(
+    if (identities.has(contractIdentity(screen))) {
+      throw new Error(
+        `Navigator "${key}" has duplicate implementations of contract "${contract.name}"`,
+      )
+    }
+    identities.add(contractIdentity(screen))
+  }
+}
+
+const assertContracts = (key: string, contracts: ScreenContracts): void => {
+  for (const [name, contract] of Object.entries(contracts)) {
+    if (typeof contract.implement !== "function") {
+      throw new Error(
+        `Navigator "${key}" slot "${name}" must use a defineScreen contract, not a capability implementation`,
+      )
+    }
+  }
+}
+
+const defineContractNavigation = <const Key extends string, const D extends ScreenContracts>(
   key: Key,
   contracts: D,
 ) => {
-  // Legacy definitions remain accepted during migration; new code passes contracts directly.
-  const definitions = () => contracts
+  assertContracts(key, contracts)
   type Routes = {
     readonly [K in keyof D]: D[K] extends { readonly params: infer P extends WireCodec<Erased> }
       ? P
       : typeof NoParams
   }
   const routes = Object.fromEntries(
-    Object.entries(definitions()).map(([name, screen]) => [name, screen.params ?? NoParams]),
+    Object.entries(contracts).map(([name, screen]) => [name, screen.params ?? NoParams]),
   ) as Routes
   const navigation = defineSchemaNavigation(key, routes)
   // A literal service key is a type-level identity, as well as the runtime lookup key.
-  type Service = Navigator<Routes> & { readonly "~reflex/navigator": Key }
+  type Service = NavigatorRequirement<Key>
   const Service = Context.Service<Service, Navigator<Routes>>(key)
   type Args = {
     [K in keyof Routes & string]: keyof ParamsOf<Routes, K> extends never
@@ -275,28 +258,33 @@ export const defineContractNavigation = <
         : [route: K, params: ParamsOf<Routes, K>]
   }[keyof Routes & string]
   return {
-    screens: definitions(),
+    screens: contracts,
+    key,
     push: (...[route, params]: Args): Effect.Effect<void, NavigationRefused, Service> =>
       Effect.flatMap(Service, (nav) =>
-        nav.push(route, params ?? ({} as ParamsOf<Routes, keyof Routes>)),
+        afterAction(nav.push(route, params ?? ({} as ParamsOf<Routes, keyof Routes>))),
       ),
-    back: Effect.flatMap(Service, (nav) => nav.back),
+    back: Effect.flatMap(Service, (nav) => afterAction(nav.back)),
     layer: <
       const Screens extends {
         readonly [K in keyof D]: Capability<
           Schema.Schema.Type<D[K]["state"]>,
           Erased,
           Erased,
-          Schema.Schema.Type<Routes[K]>
-        > & { readonly initial: (params: Erased) => Erased }
+          Schema.Schema.Type<Routes[K]>,
+          D[K]["state"]["Encoded"]
+        > & {
+          readonly name: D[K]["name"]
+          readonly [SCREEN_CONTRACT]: D[K][typeof SCREEN_CONTRACT]
+          readonly initial: (params: Erased) => Erased
+        }
       },
     >(options: {
-      readonly initial: {
-        readonly [K in keyof Routes]: { readonly route: K; readonly params: ParamsOf<Routes, K> }
-      }[keyof Routes]
+      readonly initial: InitialRoute<Routes>
       readonly screens: Screens
     }) => {
       const screens = options.screens
+      validateImplementations(key, contracts, screens)
       const factories = Object.fromEntries(
         Object.entries(screens).map(([name, screen]) => [
           name,
@@ -309,16 +297,30 @@ export const defineContractNavigation = <
           ScreenRequirements<Screens>
         >
       }
-      return Object.assign(navigation.layer({ initial: options.initial, screens: factories }), {
-        nodes: screens,
-      }) as unknown as Layer.Layer<
+      return Object.assign(
+        navigation.layer({
+          initial: (typeof options.initial === "string"
+            ? { route: options.initial, params: {} }
+            : options.initial) as {
+            readonly [K in keyof Routes]: { route: K; params: ParamsOf<Routes, K> }
+          }[keyof Routes],
+          screens: factories,
+        }),
+        {
+          nodes: screens,
+          navigatorKeys: [key],
+          contracts,
+        },
+      ) as unknown as Layer.Layer<
         Service,
         never,
         Exclude<ScreenRequirements<Screens>, Service | Scope.Scope> | Registry
-      > & { readonly nodes: Screens }
+      > & { readonly nodes: Screens; readonly contracts: D; readonly navigatorKeys: readonly Key[] }
     },
   }
 }
+
+const navigatorKeys = new WeakMap<Runtime, Set<string>>()
 
 const buildNavigator = <Routes extends RouteSchemas>(
   Tag: Context.Service<Navigator<Routes>, Navigator<Routes>>,
@@ -330,6 +332,12 @@ const buildNavigator = <Routes extends RouteSchemas>(
 ) =>
   Effect.gen(function* () {
     const registry = yield* Registry
+    const keys = navigatorKeys.get(registry) ?? new Set<string>()
+    if (keys.has(Tag.key)) {
+      throw new Error(`Duplicate navigator key "${Tag.key}" in this app; use unique keys`)
+    }
+    keys.add(Tag.key)
+    navigatorKeys.set(registry, keys)
     const context = yield* Effect.context<never>()
     const fibers = yield* FiberSet.make<unknown, unknown>()
     const stack = new RouteStack<Routes>({
@@ -621,4 +629,31 @@ class RouteStack<Routes extends RouteSchemas> implements Navigator<Routes> {
   }
 }
 
-export const defineNavigation = defineContractNavigation
+export const defineNavigation = <const Key extends string, const D extends ScreenContracts>(
+  key: Key,
+  contracts: D,
+) => {
+  const navigation = defineContractNavigation(key, contracts)
+  return {
+    ...navigation,
+    implement: <const Screens extends Parameters<typeof navigation.layer>[0]["screens"]>(
+      screens: Screens,
+      options: {
+        readonly initial: InitialRoute<{
+          readonly [K in keyof D]: D[K] extends {
+            readonly params: infer P extends WireCodec<Erased>
+          }
+            ? P
+            : typeof NoParams
+        }>
+      },
+    ) => ({
+      ...navigation,
+      layer: navigation.layer<Screens>({
+        screens,
+        initial: options.initial as Parameters<typeof navigation.layer>[0]["initial"],
+      }),
+      nodes: screens,
+    }),
+  }
+}

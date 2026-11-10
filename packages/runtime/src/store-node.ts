@@ -1,3 +1,4 @@
+import { DEFINITION_IDENTITY } from "./definition-identity.ts"
 import {
   boundedText,
   ErrorCode,
@@ -98,6 +99,20 @@ export const standardInput = <T, I = unknown>(
   },
 })
 
+const validateStandard = <T>(validator: StandardValidator<T, unknown>, value: unknown): T => {
+  const result = validator["~standard"].validate(value)
+  if (result instanceof Promise || "then" in result) {
+    void Promise.resolve(result).catch(() => undefined)
+    throw new Error("Store error validators must be synchronous")
+  }
+  if (result.issues !== undefined) {
+    throw new Error(
+      `Store failure does not match its declared error: ${result.issues.map(issueText).join("; ")}`,
+    )
+  }
+  return result.value
+}
+
 const schemaFor = (
   standard: StandardValidator<unknown>["~standard"],
   override: unknown,
@@ -129,9 +144,12 @@ export class StoreFailure extends Error {
   }
 }
 
+const CHECKED_STORE_ACTION = Symbol("reflex/checked-store-action")
+
 export interface StoreAction<S, I = unknown, T extends Store<S> = Store<S>, W = I, E = never> {
+  readonly [CHECKED_STORE_ACTION]: true
   readonly input?: StoreInput<I, W>
-  readonly error?: StoreInput<E>
+  readonly error?: StandardValidator<E, unknown>
   readonly description?: string
   readonly available?: (state: S) => true | string
   handler(
@@ -209,7 +227,10 @@ const publicState = (value: unknown): Json => {
   return freeze(JSON.parse(text) as Json)
 }
 
-const invoke = (handler: (signal: AbortSignal) => unknown): Invocation => {
+const invoke = (
+  handler: (signal: AbortSignal) => unknown,
+  validatedFailures: WeakSet<StoreFailure>,
+): Invocation => {
   const controller = new AbortController()
   let finish!: (outcome: OperationOutcome) => void
   const done = new Promise<OperationOutcome>((resolve) => {
@@ -222,15 +243,18 @@ const invoke = (handler: (signal: AbortSignal) => unknown): Invocation => {
   try {
     Promise.resolve(handler(controller.signal)).then(
       () => finish({ status: "completed" }),
-      (error: unknown) => finish(failedOutcome(error)),
+      (error: unknown) => finish(failedOutcome(error, validatedFailures)),
     )
   } catch (error) {
-    finish(failedOutcome(error))
+    finish(failedOutcome(error, validatedFailures))
   }
   return { done, cancel }
 }
 
-const failedOutcome = (error: unknown): OperationOutcome => {
+const failedOutcome = (
+  error: unknown,
+  validatedFailures: WeakSet<StoreFailure>,
+): OperationOutcome => {
   try {
     const limited = error instanceof ProtocolError && error.code === ErrorCode.ResourceExhausted
     return {
@@ -238,12 +262,14 @@ const failedOutcome = (error: unknown): OperationOutcome => {
       error: {
         tag: limited
           ? "ResourceExhausted"
-          : error instanceof StoreFailure
+          : error instanceof StoreFailure && validatedFailures.has(error)
             ? boundedText(error.tag)
             : "Defect",
         message: boundedText(error instanceof Error ? error.message : String(error)),
-        defect: !limited && !(error instanceof StoreFailure),
-        ...(error instanceof StoreFailure && error.data !== undefined
+        defect: !limited && !(error instanceof StoreFailure && validatedFailures.has(error)),
+        ...(error instanceof StoreFailure &&
+        validatedFailures.has(error) &&
+        error.data !== undefined
           ? { data: publicState(error.data) }
           : {}),
       },
@@ -257,48 +283,66 @@ const failedOutcome = (error: unknown): OperationOutcome => {
 }
 
 // Heterogeneous definitions erase variance only after the builder checked each action.
-type AnyStoreAction<S> = Omit<StoreAction<S, unknown, Store<S>, unknown, never>, "error"> & {
-  readonly error?: StoreInput<unknown>
+type AnyStoreAction<S> = Omit<
+  StoreAction<S, unknown, Store<S>, unknown, never>,
+  "error" | typeof CHECKED_STORE_ACTION
+> & {
+  readonly error?: StandardValidator<unknown, unknown>
 }
+/** Transport values are JSON; rich objects may only appear after decoding. */
+type TransportInput<T> = unknown extends T
+  ? Json | undefined
+  : T extends Date | Map<unknown, unknown> | Set<unknown>
+    ? never
+    : T extends readonly unknown[]
+      ? { readonly [K in keyof T]: TransportInput<T[K]> }
+      : T extends object
+        ? { readonly [K in keyof T]: TransportInput<T[K]> }
+        : T extends Json | undefined
+          ? T
+          : never
 type StoreArgs<D> = D extends { readonly input: StoreInput<unknown, infer I> }
-  ? [input: I]
+  ? [input: TransportInput<I>]
   : D extends { readonly input?: StoreInput<infer I, infer W> }
     ? [I] extends [undefined]
       ? []
-      : [input: W]
+      : [input: TransportInput<W>]
     : []
 
 export type StoreActions<A> = {
   readonly [K in keyof A]: (
     ...args: StoreArgs<A[K]>
-  ) => Promise<ActionOutcome<A[K] extends { readonly error?: StoreInput<infer E> } ? E : never>>
+  ) => Promise<
+    ActionOutcome<A[K] extends { readonly error?: StandardValidator<infer E, unknown> } ? E : never>
+  >
 }
-type NoStoreInput<D> = Omit<D, "input" | "error"> & {
-  readonly input?: never
-  readonly error?: never
-}
-type HasStoreInput<D, I, W> = Omit<D, "input" | "error"> & {
-  readonly input: StoreInput<I, W>
-  readonly error?: never
-}
-export interface StoreActionBuilder<S, T extends Store<S> = Store<S>> {
-  (action: NoStoreInput<StoreAction<S, void, T, void, never>>): StoreAction<S, void, T, void, never>
-  <I, W>(
-    action: HasStoreInput<StoreAction<S, I, T, W, never>, I, W>,
-  ): StoreAction<S, I, T, W, never> & { readonly input: StoreInput<I, W> }
-  <E>(
-    action: StoreAction<S, void, T, void, E> & {
-      readonly input?: never
-      readonly error: StoreInput<E>
-    },
-  ): StoreAction<S, void, T, void, E>
-  <I, W, E>(
-    action: StoreAction<S, I, T, W, E> & {
-      readonly input: StoreInput<I, W>
-      readonly error: StoreInput<E>
-    },
-  ): StoreAction<S, I, T, W, E> & { readonly input: StoreInput<I, W> }
-}
+type StoreInputOption = StoreInput<unknown, unknown> | undefined
+type StoreErrorOption = StandardValidator<unknown, unknown> | undefined
+type DecodedStoreInput<I> = I extends StoreInput<infer D, unknown> ? D : undefined
+type EncodedStoreInput<I> = I extends StoreInput<unknown, infer W> ? W : undefined
+type StoreErrorOutput<E> = E extends StandardValidator<infer O, unknown> ? O : never
+export type StoreActionBuilder<S, T extends Store<S> = Store<S>> = <
+  const I extends StoreInputOption = undefined,
+  const E extends StoreErrorOption = undefined,
+>(action: {
+  readonly input?: I
+  readonly error?: E
+  readonly description?: string
+  readonly available?: (state: S) => true | string
+  readonly handler: (
+    input: NoInfer<DecodedStoreInput<I>>,
+    context: {
+      readonly store: T
+      readonly signal: AbortSignal
+    } & (E extends StandardValidator<unknown, infer In>
+      ? { fail(error: In): never }
+      : Record<never, never>),
+  ) => unknown
+}) => NoInfer<
+  StoreAction<S, DecodedStoreInput<I>, T, EncodedStoreInput<I>, StoreErrorOutput<E>> &
+    (I extends StoreInput<unknown, unknown> ? { readonly input: I } : Record<never, never>) &
+    (E extends StandardValidator<unknown, unknown> ? { readonly error: E } : Record<never, never>)
+>
 
 type CheckedStoreActions<A> = {
   readonly [K in keyof A]: A[K] extends { readonly input: StoreInput<infer I, unknown> }
@@ -313,23 +357,38 @@ export const defineStoreNode = <
   // biome-ignore lint/suspicious/noExplicitAny: factory variance only; handler inputs are checked separately.
   T extends Store<any>,
   P extends Json,
-  A extends Record<string, AnyStoreAction<ReturnType<T["getState"]>>>,
+  A extends Record<
+    string,
+    AnyStoreAction<ReturnType<T["getState"]>> & { readonly [CHECKED_STORE_ACTION]: true }
+  >,
   const Name extends string,
+  const Params extends StoreInputOption = undefined,
 >(definition: {
   readonly name: Name
   readonly type?: NodeType
-  readonly store: () => T
+  readonly params?: Params
+  readonly store: (params: NoInfer<DecodedStoreInput<Params>>) => T
   readonly project: (state: ReturnType<T["getState"]>) => P
   readonly actions: (
     action: StoreActionBuilder<ReturnType<T["getState"]>, T>,
   ) => A & CheckedStoreActions<A>
 }) => {
   const identity = {}
-  const actions = definition.actions(
-    ((action: unknown) => action) as StoreActionBuilder<ReturnType<T["getState"]>, T>,
-  )
+  const actions = definition.actions(((action: object) => ({
+    ...action,
+    [CHECKED_STORE_ACTION]: true,
+  })) as StoreActionBuilder<ReturnType<T["getState"]>, T>)
+  for (const [name, action] of Object.entries(actions)) {
+    if (action[CHECKED_STORE_ACTION] !== true) {
+      throw new Error(
+        `Store "${definition.name}" action "${name}" must be created with the action builder`,
+      )
+    }
+  }
   return {
+    [DEFINITION_IDENTITY]: identity,
     "~reflex": {
+      decodeParams: (raw: unknown) => definition.params?.decode(raw) ?? {},
       input: (_name: string, args: readonly unknown[]) => args[0] as Json | undefined,
       state: (raw: Json): DeepReadonly<P> => raw as DeepReadonly<P>,
       actions: (
@@ -339,10 +398,15 @@ export const defineStoreNode = <
           actionOutcome(() => run(name, args[0] as Json | undefined)),
         ),
     },
+    params: definition.params as Params,
     name: definition.name,
     type: definition.type ?? "service",
-    createStore: definition.store,
-    mount(runtime: Runtime, store: T = definition.store()) {
+    createStore: (
+      ...args: Params extends StoreInput<unknown, unknown>
+        ? [params: DecodedStoreInput<Params>]
+        : [params?: undefined]
+    ) => definition.store(args[0] as DecodedStoreInput<Params>),
+    mount(runtime: Runtime, store: T = definition.store(undefined as DecodedStoreInput<Params>)) {
       return mountStore(runtime, {
         identity,
         name: definition.name,
@@ -506,35 +570,40 @@ class StoreNode<S, P, A extends Readonly<Record<string, AnyStoreAction<S>>>>
       decodeInput(action.input, value),
     )
     return () => {
-      const work = invoke((signal) =>
-        Promise.resolve(
-          action.handler(
-            input,
-            Object.assign(
-              {
-                store: this.definition.store,
-                signal,
-              },
-              {
-                fail: (error: unknown) => {
-                  if (action.error === undefined) {
-                    throw new Error(`Action "${name}" has no declared error`)
-                  }
-                  const data = publicState(action.error.decode(error))
-                  const tag =
-                    isRecord(data) && typeof data._tag === "string" ? data._tag : "Failure"
-                  const message =
-                    isRecord(data) && typeof data.message === "string" ? data.message : tag
-                  throw new StoreFailure(tag, message, data)
+      const validatedFailures = new WeakSet<StoreFailure>()
+      const work = invoke(
+        (signal) =>
+          Promise.resolve(
+            action.handler(
+              input,
+              Object.assign(
+                {
+                  store: this.definition.store,
+                  signal,
                 },
-              },
+                {
+                  fail: (error: unknown) => {
+                    if (action.error === undefined) {
+                      throw new Error(`Action "${name}" has no declared error`)
+                    }
+                    const data = publicState(validateStandard(action.error, error))
+                    const tag =
+                      isRecord(data) && typeof data._tag === "string" ? data._tag : "Failure"
+                    const message =
+                      isRecord(data) && typeof data.message === "string" ? data.message : tag
+                    const failure = new StoreFailure(tag, message, data)
+                    validatedFailures.add(failure)
+                    throw failure
+                  },
+                },
+              ),
             ),
-          ),
-        ).then(() => {
-          if (this.unpublishable !== null) {
-            throw this.unpublishable.error
-          }
-        }),
+          ).then(() => {
+            if (this.unpublishable !== null) {
+              throw this.unpublishable.error
+            }
+          }),
+        validatedFailures,
       )
       this.running.add(work)
       void work.done.then(() => this.running.delete(work))

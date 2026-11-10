@@ -4,11 +4,12 @@ import { createTestAppPool } from "@reflex/test"
 import { defineStoreApp, defineStoreNode, standardInput } from "@reflex/runtime"
 import { z } from "zod"
 import { createStore } from "zustand/vanilla"
-import app, { screens } from "../examples/inventory/src/app.ts"
+import app from "../examples/inventory/src/app.ts"
+const screens = app.screens
 import { InventoryList } from "../examples/inventory/src/features/inventory-list.ts"
 import { InventoryDetail } from "../examples/inventory/src/features/inventory-detail.ts"
 import { QUANTITY_MAX } from "../examples/inventory/src/domain.ts"
-import { ROUTE_MAPPING } from "../packages/expo/src/route-token.ts"
+import { ROUTE_MAPPING, SCREEN_BINDING } from "../packages/expo/src/route-token.ts"
 import { expoRoutes } from "../packages/expo/src/routes-effect.ts"
 
 const pool = createTestAppPool()
@@ -21,12 +22,12 @@ test("typed journey actions expose declared data and guard refusals", async () =
   await list.actions.OpenProduct({ productId: "product-123" })
   const detail = await session.focused(InventoryDetail, { _tag: "editing" })
   await detail.actions.SetQuantity({ quantity: QUANTITY_MAX })
-  expect(await detail.expectFailure.Increment()).toMatchObject({
+  expect(await detail.expectRefusal.Increment()).toMatchObject({
     status: "refused",
     code: ErrorCode.ActionUnavailable,
     reason: "Quantity is already at its maximum",
   })
-  await session.dispatchRaw("FailNextSave")
+  await session.raw.dispatchRaw("FailNextSave")
   const outcome = await detail.expectFailure.Save()
   expect(outcome.status).toBe("domain-error")
   if (outcome.status === "domain-error") {
@@ -48,7 +49,7 @@ test("store handles retain transformed inputs, projected state, errors and focus
         handler: (count, { store }) => store.setState({ count }),
       }),
       Refuse: action({
-        error: standardInput(z.strictObject({ _tag: z.literal("Rejected"), message: z.string() })),
+        error: z.strictObject({ _tag: z.literal("Rejected"), message: z.string() }),
         handler: (_, { fail }) => fail({ _tag: "Rejected", message: "Try again" }),
       }),
       Crash: action({
@@ -143,21 +144,20 @@ test("Expo registration derives both directions and validates renamed incoming p
 })
 
 test("route binding compares encoded params after decoding an incoming transform", async () => {
-  const { defineCapability, defineNavigation } = await import("@reflex/effect")
+  const { defineScreen, defineNavigation } = await import("@reflex/effect")
   const Schema = await import("effect/Schema")
-  const Detail = defineCapability({
+  const Detail = defineScreen({
     name: "NumericDetail",
     state: Schema.Number,
     params: Schema.Struct({ id: Schema.NumberFromString }),
     initial: () => 0,
-    actions: () => ({}),
   })
   const navigation = defineNavigation("numeric-routes", { Detail })
   const routes = expoRoutes(navigation, {
     Detail: { pathname: "/detail/[sku]", params: { id: "sku" } },
   })
-  expect(routes.Detail.params({ sku: "42" })).toEqual({ id: 42 })
-  expect(routes.Detail.encodedParams({ sku: "42" })).toEqual({ id: "42" })
+  expect(routes.Detail[SCREEN_BINDING].params({ sku: "42" })).toEqual({ id: 42 })
+  expect(routes.Detail[SCREEN_BINDING].encodedParams({ sku: "42" })).toEqual({ id: "42" })
   expect(routes[ROUTE_MAPPING].fromLocation(["detail", "[sku]"], { sku: "42" })).toEqual({
     route: "Detail",
     params: { id: "42" },
@@ -169,7 +169,7 @@ test("typed focused access selects the top instance when screen names repeat", a
   const list = await session.focused(InventoryList, { _tag: "ready" })
   await list.actions.OpenProduct({ productId: "product-123" })
   const lower = await session.focused(InventoryDetail, { _tag: "editing" })
-  await session.dispatchRaw("Navigate", {
+  await session.raw.dispatchRaw("Navigate", {
     route: "InventoryDetail",
     params: { productId: "product-123" },
   })
@@ -183,7 +183,8 @@ test("typed focused access selects the top instance when screen names repeat", a
 })
 
 test("Effect actions accept encoded inputs locally and in journeys, decoding once for handlers", async () => {
-  const { defineApp, defineCapability, mount } = await import("@reflex/effect")
+  const { defineApp, defineCapability } = await import("@reflex/effect")
+  const { mount } = await import("@reflex/effect/advanced")
   const Effect = await import("effect/Effect")
   const Layer = await import("effect/Layer")
   const Schema = await import("effect/Schema")

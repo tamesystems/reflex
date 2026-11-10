@@ -6,7 +6,7 @@ import {
   ProtocolError,
 } from "@reflex/protocol"
 import type { AppHost, ConsumerDefinition, ScenarioName } from "@reflex/runtime/internal"
-import type { StateOf } from "./journey-client.ts"
+import type { InferState } from "./journey-client.ts"
 import { createTestApp, type TestApp } from "./test-app.ts"
 
 const RUN_COUNT_DEFAULT = 25
@@ -33,35 +33,11 @@ export interface ExploreStep {
   readonly input: Json
 }
 
-export interface NodeInputs {
+interface NodeInputs {
   readonly node: string
   readonly inputs: Readonly<Record<string, ReadonlyArray<Json>>>
 }
-/** Inputs belong to a definition and action, even when another node uses the same name. */
-export const inputsFor = <D extends ConsumerDefinition>(
-  definition: D,
-  inputs: {
-    readonly [K in keyof import("./journey-client.ts").ActionsOf<NoInfer<D>>]?: ReadonlyArray<
-      import("./journey-client.ts").ActionsOf<D>[K] extends (...args: infer Args) => unknown
-        ? Args extends [infer I]
-          ? I
-          : never
-        : never
-    >
-  },
-): NodeInputs => ({
-  node: definition.name,
-  inputs: Object.fromEntries(
-    Object.entries(inputs).map(([action, values]) => [
-      action,
-      (values as readonly unknown[]).map(
-        (value) => definition["~reflex"].input(action, [value]) ?? {},
-      ),
-    ]),
-  ),
-})
-
-export interface ExploreOptions {
+interface WalkOptions {
   readonly scenario?: string
   readonly runCount?: number
   readonly stepCount?: number
@@ -96,17 +72,53 @@ export interface ExploreResult {
  */
 type HostNodes<H> = H extends { readonly nodes: infer N } ? N : Record<never, never>
 export type ExplorationInvariants<H> = {
-  readonly [K in keyof HostNodes<H>]?: (state: StateOf<HostNodes<H>[K]>) => string | undefined
+  readonly [K in keyof HostNodes<H>]?: (state: InferState<HostNodes<H>[K]>) => string | undefined
+}
+export type ExplorationInputs<H> = {
+  readonly [K in keyof HostNodes<H>]?: {
+    readonly [A in keyof import("./journey-client.ts").InferActions<
+      HostNodes<H>[K]
+    >]?: ReadonlyArray<
+      import("./journey-client.ts").InferActions<HostNodes<H>[K]>[A] extends (
+        ...args: infer Args
+      ) => unknown
+        ? Args extends [infer I]
+          ? I
+          : never
+        : never
+    >
+  }
+}
+export type ExploreOptions<H> = Omit<WalkOptions, "scenario" | "knownInputs"> & {
+  readonly scenario?: ScenarioName<H>
+  readonly knownInputs?: ExplorationInputs<H>
+  readonly invariants?: ExplorationInvariants<H>
 }
 export const explore = async <H extends AppHost>(
   host: H,
-  input: Omit<ExploreOptions, "scenario"> & {
-    readonly scenario?: ScenarioName<NoInfer<H>>
-    readonly invariants?: ExplorationInvariants<NoInfer<H>>
-  } = {},
+  input: ExploreOptions<NoInfer<H>> = {},
 ): Promise<ExploreResult> => {
-  const options: ExploreOptions = {
+  const options: WalkOptions = {
     ...input,
+    knownInputs: Object.entries(input.knownInputs ?? {}).map(([key, inputs]) => {
+      const nodes = ("nodes" in host ? host.nodes : {}) as Record<string, ConsumerDefinition>
+      const definition = nodes[key]
+      if (definition === undefined) {
+        throw new Error(`Unknown exploration node "${key}"`)
+      }
+      return {
+        node: definition.name,
+        inputs: Object.fromEntries(
+          Object.entries(inputs as Record<string, readonly unknown[]>).map(([action, values]) => [
+            action,
+            values.map((value) => {
+              const encoded = definition["~reflex"].input(action, [value])
+              return encoded === undefined ? {} : encoded
+            }),
+          ]),
+        ),
+      }
+    }),
     invariant: (snapshot) => {
       const failure = input.invariant?.(snapshot)
       if (failure !== undefined || snapshot.node === null) {
@@ -171,11 +183,11 @@ const requireSeed = (seed: number, runCount: number): number => {
   return seed
 }
 
-const appOptions = ({ scenario }: ExploreOptions) => (scenario === undefined ? {} : { scenario })
+const appOptions = ({ scenario }: WalkOptions) => (scenario === undefined ? {} : { scenario })
 
 const walk = async (
   host: AppHost,
-  options: ExploreOptions,
+  options: WalkOptions,
   { seed, stepCount }: { readonly seed: number; readonly stepCount: number },
 ) => {
   const next = seededRandom(seed)
@@ -212,7 +224,7 @@ const walk = async (
 const chooseInput = async (
   app: TestApp,
   choice: { readonly nodeId: NodeId; readonly action: string },
-  options: ExploreOptions,
+  options: WalkOptions,
   next: () => number,
 ): Promise<Json> => {
   const { node } = await app.client.request("app.inspect", { nodeId: choice.nodeId })
@@ -265,7 +277,7 @@ interface PerformMode {
 const perform = async (
   app: TestApp,
   step: ExploreStep,
-  options: ExploreOptions,
+  options: WalkOptions,
   mode: PerformMode,
 ): Promise<string | undefined> => {
   const { client } = app
@@ -306,10 +318,7 @@ const perform = async (
 }
 
 /** Starting can crash too, in work no step set off, and with no step to blame. */
-const initialProblem = async (
-  app: TestApp,
-  options: ExploreOptions,
-): Promise<string | undefined> => {
+const initialProblem = async (app: TestApp, options: WalkOptions): Promise<string | undefined> => {
   const [defect] = app.takeDefects()
   return defect ?? options.invariant?.(await app.client.request("app.inspect", {}))
 }
@@ -328,7 +337,7 @@ const refusalMessage = (error: ProtocolError, step: ExploreStep, mode: PerformMo
 const replay = async (
   host: AppHost,
   steps: ReadonlyArray<ExploreStep>,
-  options: ExploreOptions,
+  options: WalkOptions,
 ): Promise<string | undefined> => {
   const app = await createTestApp(host, appOptions(options))
   try {
@@ -357,7 +366,7 @@ const replay = async (
 const shrink = async (
   host: AppHost,
   steps: ReadonlyArray<ExploreStep>,
-  options: ExploreOptions & { readonly failure: string },
+  options: WalkOptions & { readonly failure: string },
 ): Promise<ReadonlyArray<ExploreStep>> => {
   let current = steps
   let replayCount = 0

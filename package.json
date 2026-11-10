@@ -12,7 +12,7 @@
     "typecheck": "bun scripts/type-budget.ts && bun run --cwd apps/mobile typecheck && bun run --cwd apps/web typecheck",
     "format": "biome format --write .",
     "lint": "biome lint .",
-    "check": "biome check . && bun run typecheck && bun test",
+    "check": "biome check . && bun scripts/check-docs.ts && bun run typecheck && bun test",
     "bench": "bun bench/wire.ts",
     "reflex": "bun packages/cli/src/cli.ts"
   },

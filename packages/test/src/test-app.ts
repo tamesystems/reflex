@@ -14,6 +14,7 @@ import {
   type Controller,
   type ConsumerDefinition,
   createController,
+  definitionIdentity,
 } from "@reflex/runtime/internal"
 
 import { createJourneyClient, type JourneyClient } from "./journey-client.ts"
@@ -36,8 +37,7 @@ export interface TestAppOptions<H = AppHost> {
 }
 
 export interface TestApp<H = AppHost> extends JourneyClient<DefinitionsOf<H>> {
-  /** State of the focused node as of the last call. */
-  readonly state: unknown
+  readonly raw: RawTestApp
   /** The most recent events, in order, up to a limit on their size. */
   readonly events: ReadonlyArray<RuntimeEvent>
   /** Crashes since the last call, including those of work nobody dispatched. */
@@ -46,16 +46,21 @@ export interface TestApp<H = AppHost> extends JourneyClient<DefinitionsOf<H>> {
   inspect(): Promise<InspectResult>
   /** Snapshot of a node by name, including fixtures. */
   inspectRaw(name: string): Promise<NodeSnapshot>
+  waitFor(params: WaitParams): Promise<void>
+  advanceTime(durationMs: number): Promise<void>
+  reset(scenario?: ScenarioName<H>): Promise<void>
+  dispose(): Promise<void>
+}
+
+export interface RawTestApp {
+  /** State of the focused node as of the last call. */
+  readonly state: unknown
   /** Assert where the journey is before continuing. */
   precondition(screen: string, match?: Json): Promise<void>
   /** Dispatch and wait for the effect and anything it started to settle. */
   dispatchRaw(action: string, input?: Json): Promise<OperationInfo>
   /** Dispatch without waiting, for work that needs time to be advanced. */
   start(action: string, input?: Json): Promise<OperationInfo>
-  waitFor(params: WaitParams): Promise<void>
-  advanceTime(durationMs: number): Promise<void>
-  reset(scenario?: ScenarioName<H>): Promise<void>
-  dispose(): Promise<void>
 }
 
 /** Runs a journey through the real protocol, serialized as a remote peer would. */
@@ -64,10 +69,21 @@ export const createTestApp = async <H extends AppHost>(
   options: TestAppOptions<NoInfer<H>> = {},
 ): Promise<TestApp<H>> => {
   const { scenario } = options
-  return createTestAppOn(
+  const app = await createTestAppOn(
     () => createController(host, scenario === undefined ? {} : { scenario }),
     options,
   )
+  if ("nodes" in host && typeof host.nodes === "object" && host.nodes !== null) {
+    const definitions = Object.values(host.nodes) as ConsumerDefinition[]
+    ;(app as Journey).validateDefinition = (definition) => {
+      if (
+        !definitions.some((member) => definitionIdentity(member) === definitionIdentity(definition))
+      ) {
+        throw new Error(`Node "${definition.name}" is not a contract in app "${host.name}"`)
+      }
+    }
+  }
+  return app as TestApp<H>
 }
 
 /**
@@ -182,6 +198,8 @@ class Journey implements TestApp {
   readonly node: JourneyClient["node"]
   readonly focused: JourneyClient["focused"]
   readonly back: JourneyClient["back"]
+  readonly raw: RawTestApp = this
+  validateDefinition: (definition: ConsumerDefinition) => void = () => {}
   readonly events: Array<RuntimeEvent> = []
   state: unknown
   private defects: Array<string> = []
@@ -195,6 +213,8 @@ class Journey implements TestApp {
   ) {
     this.client = createLoopbackClient(controller)
     const journey = createJourneyClient({
+      validateDefinition: (definition) => this.validateDefinition(definition),
+      subscribe: (listener) => this.client.onEvent(listener),
       inspect: async (name, nodeId) =>
         nodeId !== undefined
           ? defined(

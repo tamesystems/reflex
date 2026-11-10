@@ -1,10 +1,10 @@
-import { useScreen } from "@reflex/expo/effect"
-import { routes } from "../../src/routes.ts"
+import { InventoryDetailScreen as InventoryDetailScreenContract } from "@reflex/example-inventory/screens.ts"
+import { useScreen } from "../../src/routes.ts"
 import { Text } from "react-native"
 import { Action, Screen, styles } from "../../src/ui.tsx"
 
 export default function InventoryDetailScreen() {
-  const node = useScreen(routes.InventoryDetail)
+  const node = useScreen(InventoryDetailScreenContract)
   const { status, state, actions } = node
   if (status === "pending") {
     return null

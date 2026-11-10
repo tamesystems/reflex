@@ -1,5 +1,6 @@
 /** What a request costs through the protocol, and what events cost to log and encode. */
-import { defineApp, defineCapability, mount } from "@reflex/effect"
+import { defineApp, defineCapability } from "@reflex/effect"
+import { mount } from "@reflex/effect/advanced"
 import { Registry } from "@reflex/effect/internal"
 import { type RuntimeEvent, toNodeId } from "@reflex/protocol"
 import { createEventEncoder, createLoopbackClient } from "@reflex/rpc"

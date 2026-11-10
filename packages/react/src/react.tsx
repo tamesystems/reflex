@@ -5,6 +5,9 @@ import {
   type AppHost,
   type AppSession,
   type Runtime,
+  mountSessionRoute,
+  definitionIdentity,
+  type NodeHandle,
   systemTimers,
 } from "@reflex/runtime/internal"
 import {
@@ -38,15 +41,18 @@ const ControlsContext = React.createContext<{
   reset(scenario?: string): Promise<void>
 } | null>(null)
 /** Session controls; raw registry access is an explicit advanced import. */
-export const useSession = <H extends AppHost = AppHost>(
-  host?: H,
+const useBoundSession = <H extends AppHost>(
+  host: H,
 ): { readonly scenario: ScenarioName<H>; reset(scenario?: ScenarioName<H>): Promise<void> } => {
   const controls = React.useContext(ControlsContext)
   if (controls === null) {
     throw new Error("useSession requires ReflexProvider")
   }
-  // The app is a type witness: providers may wrap a host with development services.
-  void host
+  if (definitionIdentity(controls.host) !== definitionIdentity(host)) {
+    throw new Error(
+      `useSession is bound to app "${host.name}" but the provider owns "${controls.host.name}"`,
+    )
+  }
   return { scenario: controls.scenario as ScenarioName<H>, reset: controls.reset }
 }
 export const useRuntime = (): Runtime => useRuntimeSession().runtime
@@ -276,9 +282,16 @@ export const useNodeHandle = <N,>(definition: {
 interface OwnedNode {
   dispose(): void
 }
+const disposeOwned = (node: OwnedNode | Promise<OwnedNode>): void => {
+  if (node instanceof Promise) {
+    void node.then((owned) => owned.dispose(), reportFailure)
+  } else {
+    node.dispose()
+  }
+}
 interface Ownership {
   readonly definition: object
-  readonly node: OwnedNode
+  readonly node: OwnedNode | Promise<OwnedNode>
   users: number
   retained: boolean
 }
@@ -288,7 +301,7 @@ const OwnedNodes = ({ children }: { readonly children: React.ReactNode }) => {
   React.useEffect(
     () => () => {
       for (const { node } of nodes.values()) {
-        node.dispose()
+        disposeOwned(node)
       }
       nodes.clear()
     },
@@ -321,7 +334,7 @@ const retainHistoryEntry = (
     const entry = owner.get(obsolete)
     if (entry !== undefined && entry.users === 0) {
       owner.delete(obsolete)
-      entry.node.dispose()
+      disposeOwned(entry.node)
     }
   }
   history.keys.push(key)
@@ -333,7 +346,7 @@ const retainHistoryEntry = (
 
 /** Mount after commit; history entries are retained until the session ends. */
 export const useMountedNode = <N extends OwnedNode>(
-  definition: { mount(runtime: Runtime): N },
+  definition: { readonly identity?: object; mount(runtime: Runtime): N | Promise<N> },
   options: {
     readonly key: string
     readonly lifetime?: "component" | "history-entry"
@@ -341,18 +354,23 @@ export const useMountedNode = <N extends OwnedNode>(
   },
 ): N | null => {
   const { runtime } = useRuntimeSession()
+  const identity = definition.identity ?? definition
   const owner = React.useContext(OwnershipContext)
   const { key, lifetime = "component", navigationType } = options
   const [mounted, setMounted] = React.useState<{ key: string; definition: object; node: N } | null>(
     null,
   )
+  const [failure, setFailure] = React.useState<{ error: unknown } | null>(null)
+  if (failure !== null) {
+    throw failure.error
+  }
   React.useEffect(() => {
     if (owner === null) {
       throw new Error("useMountedNode requires ReflexProvider")
     }
     retainHistoryEntry(owner, key, navigationType)
     let entry = owner.get(key)
-    if (entry !== undefined && entry.definition !== definition) {
+    if (entry !== undefined && entry.definition !== identity) {
       throw new Error(`History entry "${key}" already owns another definition`)
     }
     if (entry === undefined) {
@@ -363,12 +381,12 @@ export const useMountedNode = <N extends OwnedNode>(
           }
           if (old.users === 0) {
             owner.delete(oldKey)
-            old.node.dispose()
+            disposeOwned(old.node)
           }
         }
       }
       entry = {
-        definition,
+        definition: identity,
         node: definition.mount(runtime),
         users: 0,
         retained: lifetime === "history-entry",
@@ -378,16 +396,29 @@ export const useMountedNode = <N extends OwnedNode>(
     entry.users++
     entry.retained ||= lifetime === "history-entry"
     const owned = entry
-    setMounted({ key, definition, node: entry.node as N })
+    let active = true
+    Promise.resolve(entry.node).then(
+      (node) => {
+        if (active) {
+          setMounted({ key, definition: identity, node: node as N })
+        }
+      },
+      (error: unknown) => {
+        if (active) {
+          setFailure({ error })
+        }
+      },
+    )
     return () => {
+      active = false
       owned.users--
       if (!owned.retained && owned.users === 0 && owner.get(key) === owned) {
         owner.delete(key)
-        owned.node.dispose()
+        disposeOwned(owned.node)
       }
     }
-  }, [runtime, owner, definition, key, lifetime, navigationType])
-  return mounted?.key === key && mounted.definition === definition ? mounted.node : null
+  }, [runtime, owner, definition, identity, key, lifetime, navigationType])
+  return mounted?.key === key && mounted.definition === identity ? mounted.node : null
 }
 
 export type ActionViews<A> = {
@@ -481,4 +512,78 @@ export const useNode = <S, A extends ViewActions>(
   const node = useNodeHandle(definition)
   useNodeFocus(node, options.focus === true)
   return useNodeView(node)
+}
+
+/** Derive a composed view from its definition. */
+export type ScreenView<D> = D extends import("@reflex/runtime/internal").ConsumerDefinition<
+  infer S,
+  infer A
+>
+  ? NodeView<S, A>
+  : never
+
+/** Bind session controls and ambient definitions to one provider identity. */
+export const createReflex = <H extends AppHost>(app: H) => ({
+  // biome-ignore lint/correctness/noComponentHookFactories: This explicit app binding factory is called once at module scope.
+  Provider: (props: Omit<React.ComponentProps<typeof ReflexProvider<H>>, "host">) => (
+    <ReflexProvider {...props} host={app} />
+  ),
+  useSession: () => useBoundSession(app),
+  useNode: <S, A extends ViewActions>(
+    definition: { resolve(runtime: Runtime): NodeHandle<S, A> | undefined },
+    options: { readonly focus?: boolean } = {},
+  ) => {
+    useBoundSession(app)
+    return useNode(definition, options)
+  },
+})
+
+const suspenseRoutes = new WeakMap<
+  Runtime,
+  Map<
+    string,
+    {
+      readonly definition: object
+      readonly promise: Promise<import("@reflex/runtime/internal").OwnedRoute>
+    }
+  >
+>()
+/** A Suspense resource belongs to its session even when React abandons the render. */
+export const useSuspenseRoute = <S, A extends ViewActions>(
+  definition: {
+    resolve(runtime: Runtime, id?: NodeId): NodeHandle<S, A> | undefined
+  },
+  params: unknown,
+  key: string,
+): NodeHandle<S, A> => {
+  const { runtime } = useRuntimeSession()
+  let entries = suspenseRoutes.get(runtime)
+  if (entries === undefined) {
+    entries = new Map()
+    suspenseRoutes.set(runtime, entries)
+  }
+  let resource = entries.get(key)
+  if (resource !== undefined && resource.definition !== definition) {
+    throw new Error(`History entry "${key}" already owns another definition`)
+  }
+  if (resource === undefined) {
+    if (entries.size >= ROUTER_RETAINED_ENTRIES_MAX) {
+      const first = entries.entries().next().value
+      if (first !== undefined) {
+        entries.delete(first[0])
+        void first[1].promise.then((node) => node.dispose(), reportFailure)
+      }
+    }
+    resource = {
+      definition,
+      promise: Promise.resolve(mountSessionRoute(runtime, definition, params)),
+    }
+    entries.set(key, resource)
+  }
+  const owned = React.use(resource.promise)
+  const node = definition.resolve(runtime, owned.id)
+  if (node === undefined) {
+    throw new Error("The mounted Suspense route did not resolve")
+  }
+  return node
 }

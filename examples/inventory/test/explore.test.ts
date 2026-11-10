@@ -1,13 +1,10 @@
 import { expect, test } from "bun:test"
-import { explore, inputsFor } from "@reflex/test"
+import { explore } from "@reflex/test"
 import app from "../src/app.ts"
-import { InventoryList } from "../src/features/inventory-list.ts"
 
-const knownInputs = [
-  inputsFor(InventoryList, {
-    OpenProduct: [{ productId: "product-123" }, { productId: "product-456" }],
-  }),
-]
+const knownInputs = {
+  InventoryList: { OpenProduct: [{ productId: "product-123" }, { productId: "product-456" }] },
+}
 
 test("exploration keeps quantities nonnegative", async () => {
   const result = await explore(app, {

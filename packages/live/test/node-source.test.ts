@@ -68,7 +68,8 @@ test("external router focus gates screens; old cleanup cannot clear newer focus"
 })
 
 test("existing-router focus starts Effect onFocus once per arrival", async () => {
-  const { defineCapability, mount } = await import("@reflex/effect")
+  const { defineCapability } = await import("@reflex/effect")
+  const { mount } = await import("@reflex/effect/advanced")
   const { Registry } = await import("@reflex/effect/internal")
   const Effect = await import("effect/Effect")
   const Schema = await import("effect/Schema")

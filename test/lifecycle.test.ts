@@ -1,13 +1,12 @@
 /** Regressions from adversarial review: sessions, waits, and connections ending. */
 import { afterEach, expect, spyOn, test } from "bun:test"
+import { defineApp, defineCapability } from "@reflex/effect"
 import {
   type ActionsOf,
   type Capability,
-  defineApp,
-  defineCapability,
   NavigationRefused,
   NoParams,
-} from "@reflex/effect"
+} from "@reflex/effect/advanced"
 import { defineNavigationFactories, mountOwned as mount, Registry } from "@reflex/effect/internal"
 import {
   BATCH_LARGE_REPLY_CHARACTERS_MAX,
@@ -308,7 +307,7 @@ test("a failure that does not match its error schema still settles", async () =>
     }),
   })
   const session = await pool.open(focused("wrong", Wrong, { n: 0 }))
-  expect(await session.dispatchRaw("Go")).toMatchObject({
+  expect(await session.raw.dispatchRaw("Go")).toMatchObject({
     status: "failed",
     error: { defect: true },
   })
@@ -327,7 +326,7 @@ test("typed error data is scrubbed in results, events and replay", async () => {
     }),
   })
   const session = await pool.open(focused("leaky", Leaky, { n: 0 }))
-  const result = await session.dispatchRaw("Go")
+  const result = await session.raw.dispatchRaw("Go")
   expect(result).toMatchObject({ error: { data: { token: "<redacted>" } } })
   expect(JSON.stringify(session.events)).not.toContain("hunter2")
 
@@ -373,7 +372,7 @@ test("route params are scrubbed before they reach navigation state", async () =>
     scenarios: { default: { layer: Layer.empty } },
   })
   const session = await pool.open(host)
-  await session.dispatchRaw("Open")
+  await session.raw.dispatchRaw("Open")
   expect((await session.inspectRaw("Navigation")).state).toMatchObject({
     stack: [{ route: "Home" }, { route: "Vault", params: { token: "<redacted>" } }],
   })
@@ -397,7 +396,7 @@ test("cancelling a navigation abandons it, and it never lands later", async () =
     scenarios: { default: { layer: Layer.empty, virtualTime: true } },
   })
   const session = await pool.open(host)
-  const operation = await session.start("Navigate", { route: "B", params: {} })
+  const operation = await session.raw.start("Navigate", { route: "B", params: {} })
   await session.client.request("app.cancel", { operationId: operation.operationId })
   await session.waitFor({ operationId: operation.operationId })
   await session.advanceTime(5_000)
@@ -408,19 +407,19 @@ test("cancelling a navigation abandons it, and it never lands later", async () =
   expect((await session.inspectRaw("Navigation")).state).toMatchObject({ stack: [{ route: "A" }] })
 
   // The navigator still works afterwards.
-  const next = await session.start("Navigate", { route: "B", params: {} })
+  const next = await session.raw.start("Navigate", { route: "B", params: {} })
   await session.advanceTime(1_000)
   await session.waitFor({ operationId: next.operationId })
-  await session.precondition("B")
+  await session.raw.precondition("B")
 })
 
 test("the route stack is capped", async () => {
   const session = await pool.open(inventory)
   const settings = { route: "Settings", params: {} }
   for (let depth = 1; depth < NAVIGATION_STACK_DEPTH_MAX; depth++) {
-    await session.dispatchRaw("Navigate", settings)
+    await session.raw.dispatchRaw("Navigate", settings)
   }
-  await expect(session.dispatchRaw("Navigate", settings)).rejects.toMatchObject({
+  await expect(session.raw.dispatchRaw("Navigate", settings)).rejects.toMatchObject({
     code: ErrorCode.ActionUnavailable,
   })
 })
@@ -454,7 +453,7 @@ test("a route whose params cannot be encoded leaves the stack as it was", async 
     scenarios: { default: { layer: Layer.empty } },
   })
   const session = await pool.open(host)
-  expect(await session.dispatchRaw("Open")).toMatchObject({
+  expect(await session.raw.dispatchRaw("Open")).toMatchObject({
     status: "failed",
     error: { defect: true },
   })
@@ -467,15 +466,15 @@ test("a route whose params cannot be encoded leaves the stack as it was", async 
 
 test("a cancelled save leaves its screen usable", async () => {
   const session = await pool.open(inventory, { scenario: "slow-network" })
-  await session.dispatchRaw("OpenProduct", { productId: "product-123" })
-  const operation = await session.start("Save")
+  await session.raw.dispatchRaw("OpenProduct", { productId: "product-123" })
+  const operation = await session.raw.start("Save")
   await session.waitFor({ match: { _tag: "saving" } })
   await session.client.request("app.cancel", { operationId: operation.operationId })
   await session.waitFor({ operationId: operation.operationId })
 
-  expect(session.state).toMatchObject({ _tag: "editing", error: null })
-  await session.dispatchRaw("Increment")
-  expect(session.state).toMatchObject({ quantity: 6 })
+  expect(session.raw.state).toMatchObject({ _tag: "editing", error: null })
+  await session.raw.dispatchRaw("Increment")
+  expect(session.raw.state).toMatchObject({ quantity: 6 })
 })
 
 const reader = (lines: Array<string>, frameCharactersMax?: number) => {
@@ -800,7 +799,7 @@ test("a screen that fails to build leaves nothing behind", async () => {
     scenarios: { default: { layer: Layer.empty } },
   })
   const session = await pool.open(host)
-  const result = await session.dispatchRaw("Navigate", { route: "B", params: {} })
+  const result = await session.raw.dispatchRaw("Navigate", { route: "B", params: {} })
   expect(result.status).toBe("failed")
   expect(released).toBe(1)
   const { tree } = await session.client.request("app.inspect", { tree: true })
@@ -898,13 +897,13 @@ test("a wait's match is limited in size, as waits are held for a long time", asy
 
 test("coming back to a screen keeps its edits and its running save", async () => {
   const session = await pool.open(inventory, { scenario: "sluggish-network" })
-  await session.dispatchRaw("OpenProduct", { productId: "product-123" })
-  await session.dispatchRaw("SetQuantity", { quantity: 12 })
-  await session.dispatchRaw("Navigate", { route: "Settings", params: {} })
-  await session.dispatchRaw("GoBack")
-  expect(session.state).toMatchObject({ _tag: "editing", quantity: 12 })
+  await session.raw.dispatchRaw("OpenProduct", { productId: "product-123" })
+  await session.raw.dispatchRaw("SetQuantity", { quantity: 12 })
+  await session.raw.dispatchRaw("Navigate", { route: "Settings", params: {} })
+  await session.raw.dispatchRaw("GoBack")
+  expect(session.raw.state).toMatchObject({ _tag: "editing", quantity: 12 })
 
-  await session.start("Save")
+  await session.raw.start("Save")
   await session.waitFor({ match: { _tag: "saving" } })
   await session.client.request("app.dispatch", {
     action: "Navigate",
@@ -913,7 +912,7 @@ test("coming back to a screen keeps its edits and its running save", async () =>
   })
   await session.client.request("app.dispatch", { action: "GoBack", await: true })
   await session.inspect()
-  expect(session.state).toMatchObject({ _tag: "saving" })
+  expect(session.raw.state).toMatchObject({ _tag: "saving" })
 })
 
 const screenThatRedirects = () => {
@@ -940,7 +939,7 @@ const screenThatRedirects = () => {
 
 test("a screen that navigates while being built fails, instead of waiting on itself", async () => {
   const session = await pool.open(screenThatRedirects())
-  const result = await session.dispatchRaw("Navigate", { route: "Next", params: {} })
+  const result = await session.raw.dispatchRaw("Navigate", { route: "Next", params: {} })
   expect(result).toMatchObject({
     status: "failed",
     error: { message: expect.stringContaining("while being built") },
@@ -1429,23 +1428,23 @@ test("a push too large for state changes nothing, and is refused as expected", a
   const { host, refusals } = stackApp({ text })
   const session = await pool.open(host)
   const inspect = () => session.client.request("app.inspect", { tree: true })
-  expect((await session.dispatchRaw("Open")).status).toBe("completed")
+  expect((await session.raw.dispatchRaw("Open")).status).toBe("completed")
   const before = await inspect()
-  expect((await session.dispatchRaw("Open")).status).toBe("completed")
+  expect((await session.raw.dispatchRaw("Open")).status).toBe("completed")
   expect(refusals).toHaveLength(1)
   const after = await inspect()
   expect(after.focus).toEqual(before.focus)
   expect(JSON.stringify(after.tree)).toEqual(JSON.stringify(before.tree))
 
   // What is on the stack and what was published must still agree.
-  expect((await session.dispatchRaw("GoBack")).status).toBe("completed")
+  expect((await session.raw.dispatchRaw("GoBack")).status).toBe("completed")
   expect((await inspect()).node?.name).toBe("Home")
 })
 
 test("params too large for state are refused, not a crash, from a single push", async () => {
   const { host, refusals } = stackApp({ text: "x".repeat(NODE_STATE_CHARACTERS_MAX + 1) })
   const session = await pool.open(host)
-  expect((await session.dispatchRaw("Open")).status).toBe("completed")
+  expect((await session.raw.dispatchRaw("Open")).status).toBe("completed")
   expect(refusals).toHaveLength(1)
   expect((await session.client.request("app.inspect", {})).node?.name).toBe("Home")
 })
@@ -1454,7 +1453,7 @@ test("a stack's state is limited in total, however valid each push", async () =>
   const { host, refusals } = stackApp({ text: "x".repeat(NODE_STATE_CHARACTERS_MAX / 4) })
   const session = await pool.open(host)
   for (let index = 0; index < 5; index++) {
-    await session.dispatchRaw("Open")
+    await session.raw.dispatchRaw("Open")
   }
   expect(refusals.length).toBeGreaterThan(0)
 })
@@ -1463,8 +1462,8 @@ test("a screen's cleanup that fails cannot cost the app its focus", async () => 
   const report = spyOn(console, "error").mockImplementation(() => undefined)
   const { host } = stackApp({ finalizer: Effect.die(new Error("bad finalizer")) })
   const session = await pool.open(host)
-  await session.dispatchRaw("Open")
-  expect(await session.dispatchRaw("GoBack")).toMatchObject({
+  await session.raw.dispatchRaw("Open")
+  expect(await session.raw.dispatchRaw("GoBack")).toMatchObject({
     status: "failed",
     error: { defect: true },
   })
@@ -1472,7 +1471,7 @@ test("a screen's cleanup that fails cannot cost the app its focus", async () => 
   expect(JSON.stringify(report.mock.calls)).not.toContain("bad finalizer")
   report.mockRestore()
   expect((await session.client.request("app.inspect", {})).node?.name).toBe("Home")
-  expect((await session.dispatchRaw("Ping")).status).toBe("completed")
+  expect((await session.raw.dispatchRaw("Ping")).status).toBe("completed")
 })
 
 test("a screen is out of reach as soon as it is left, however long its cleanup", async () => {
@@ -1482,11 +1481,11 @@ test("a screen is out of reach as soon as it is left, however long its cleanup",
   })
   const { host } = stackApp({ finalizer: Effect.promise(() => cleanup) })
   const session = await pool.open(host)
-  await session.dispatchRaw("Open")
+  await session.raw.dispatchRaw("Open")
   const { client } = session
   const { focus } = await client.request("app.inspect", {})
   const nodeId = defined(focus ?? undefined, "a screen has focus")
-  const leaving = session.dispatchRaw("GoBack")
+  const leaving = session.raw.dispatchRaw("GoBack")
   await waitUntil(() => session.events.some(({ type }) => type === "node.removed"), "the node goes")
   expect((await client.request("app.inspect", {})).node?.name).toBe("Home")
   await expect(client.request("app.dispatch", { action: "Stay", nodeId })).rejects.toMatchObject({
@@ -1526,14 +1525,14 @@ test("a screen's cleanup cannot hold navigation forever", async () => {
   const report = spyOn(console, "error").mockImplementation(() => undefined)
   const { host } = stackApp({ finalizer: held.finalizer })
   const session = await pool.open(host)
-  await session.dispatchRaw("Open")
+  await session.raw.dispatchRaw("Open")
   const { operationId } = await session.client.request("app.dispatch", { action: "GoBack" })
   await waitUntil(() => held.heldCount() === 1, "the cleanup to start")
   await session.advanceTime(10_000)
   const { operation } = await session.client.request("app.wait", { operationId })
   expect(operation?.status).toBe("completed")
   expect(JSON.stringify(report.mock.calls)).toContain("too long to clean up")
-  expect((await session.dispatchRaw("Open")).status).toBe("completed")
+  expect((await session.raw.dispatchRaw("Open")).status).toBe("completed")
   held.finish()
   report.mockRestore()
 })
@@ -1554,7 +1553,7 @@ test("a build stuck acquiring cannot hold navigation, and leaves nothing when it
   await session.advanceTime(30_000)
   const { operation } = await session.client.request("app.wait", { operationId })
   expect(operation?.status).toBe("completed")
-  expect((await session.dispatchRaw("Ping")).status).toBe("completed")
+  expect((await session.raw.dispatchRaw("Ping")).status).toBe("completed")
 
   held.finish()
   await waitUntil(() => released, "what it acquired to be released")
@@ -1622,12 +1621,12 @@ test("builds that outrun their deadline are limited, and free their place when t
     await session.client.request("app.wait", { operationId })
   }
   const timedOut = refusals.length
-  await session.dispatchRaw("Open")
+  await session.raw.dispatchRaw("Open")
   expect(refusals.slice(timedOut)).toEqual([expect.stringContaining("still being built")])
   held.finish()
   await waitUntil(() => held.heldCount() === 0, "the builds to end")
   await nextTurn()
-  await session.dispatchRaw("Open")
+  await session.raw.dispatchRaw("Open")
   expect(refusals).toHaveLength(timedOut + 1)
 })
 
@@ -1664,7 +1663,7 @@ test("a session ending during an overdue cleanup is not a failure to report", as
   const report = spyOn(console, "error").mockImplementation(() => undefined)
   const { host } = stackApp({ finalizer: held.finalizer })
   const session = await pool.open(host)
-  await session.dispatchRaw("Open")
+  await session.raw.dispatchRaw("Open")
   await session.client.request("app.dispatch", { action: "GoBack" })
   await waitUntil(() => held.heldCount() === 1, "the cleanup to start")
   await session.advanceTime(10_000)
@@ -1687,7 +1686,7 @@ test("a failed build's cleanup cannot hold navigation forever", async () => {
   await session.advanceTime(10_000)
   const { operation } = await session.client.request("app.wait", { operationId })
   expect(operation).toMatchObject({ status: "failed", error: { defect: true } })
-  expect((await session.dispatchRaw("Ping")).status).toBe("completed")
+  expect((await session.raw.dispatchRaw("Ping")).status).toBe("completed")
   held.finish()
   spied.mockRestore()
 })
@@ -1698,7 +1697,7 @@ test("a refused push's cleanup cannot hold navigation forever", async () => {
   const text = "x".repeat(NODE_STATE_CHARACTERS_MAX * 0.6)
   const { host, refusals } = stackApp({ text, finalizer: held.finalizer })
   const session = await pool.open(host)
-  await session.dispatchRaw("Open")
+  await session.raw.dispatchRaw("Open")
   const { operationId } = await session.client.request("app.dispatch", { action: "Open" })
   await waitUntil(() => held.heldCount() === 1, "the cleanup to start")
   const { tree } = await session.client.request("app.inspect", { tree: true })
@@ -1714,7 +1713,7 @@ test("a screen whose own state is too large is refused, not a crash", async () =
   const text = "x".repeat(NODE_STATE_CHARACTERS_MAX + 1)
   const { host, refusals } = stackApp({ screenText: text })
   const session = await pool.open(host)
-  expect((await session.dispatchRaw("Open")).status).toBe("completed")
+  expect((await session.raw.dispatchRaw("Open")).status).toBe("completed")
   expect(refusals).toHaveLength(1)
   expect((await session.client.request("app.inspect", {})).node?.name).toBe("Home")
 })
@@ -1740,7 +1739,7 @@ test("a cleanup that fails past its deadline is reported, and only then", async 
   const report = spyOn(console, "error").mockImplementation(() => undefined)
   const { host } = stackApp({ finalizer: held.finalizer })
   const session = await pool.open(host)
-  await session.dispatchRaw("Open")
+  await session.raw.dispatchRaw("Open")
   await session.client.request("app.dispatch", { action: "GoBack" })
   await waitUntil(() => held.heldCount() === 1, "the cleanup to start")
   await session.advanceTime(10_000)
@@ -1759,19 +1758,19 @@ test("screens still cleaning up are limited, and free their place when they end"
   const { host, refusals } = stackApp({ finalizer: held.finalizer })
   const session = await pool.open(host)
   for (let index = 0; index < UNFINISHED_SCREEN_WORK_MAX; index++) {
-    expect((await session.dispatchRaw("Open")).status).toBe("completed")
+    expect((await session.raw.dispatchRaw("Open")).status).toBe("completed")
     expect(refusals).toEqual([])
     const { operationId } = await session.client.request("app.dispatch", { action: "GoBack" })
     await waitUntil(() => held.heldCount() === index + 1, "the cleanup to start")
     await session.advanceTime(10_000)
     await session.client.request("app.wait", { operationId })
   }
-  await session.dispatchRaw("Open")
+  await session.raw.dispatchRaw("Open")
   expect(refusals).toEqual(["Too many screens are still being built or cleaned up"])
   held.finish()
   await waitUntil(() => held.heldCount() === 0, "the cleanups to end")
   await nextTurn()
-  await session.dispatchRaw("Open")
+  await session.raw.dispatchRaw("Open")
   expect(refusals).toHaveLength(1)
   spied.mockRestore()
 })
@@ -1790,7 +1789,7 @@ test("leaving a screen stops its work, whatever its cleanup is doing", async () 
     ),
   })
   const session = await pool.open(host)
-  await session.dispatchRaw("Open")
+  await session.raw.dispatchRaw("Open")
   const { operationId } = await session.client.request("app.dispatch", { action: "Stay" })
   await session.client.request("app.dispatch", { action: "GoBack" })
   await waitUntil(() => held.heldCount() === 1, "the cleanup to start")
@@ -1804,8 +1803,8 @@ test("leaving a screen stops its work, whatever its cleanup is doing", async () 
 test("leaving a screen never leaves the app with nothing focused", async () => {
   const { host } = stackApp({})
   const session = await pool.open(host)
-  await session.dispatchRaw("Open")
-  await session.dispatchRaw("GoBack")
+  await session.raw.dispatchRaw("Open")
+  await session.raw.dispatchRaw("GoBack")
   const focuses = session.events.flatMap((event) =>
     event.type === "focus.changed" ? [event.nodeId] : [],
   )
@@ -2029,8 +2028,8 @@ test("a size refusal during navigation cannot hide a cleanup defect", async () =
   })
   const { host, refusals } = stackApp({ text, finalizer })
   const session = await pool.open(host)
-  expect(await session.dispatchRaw("Open")).toMatchObject({ status: "completed" })
-  expect(await session.dispatchRaw("Open")).toMatchObject({
+  expect(await session.raw.dispatchRaw("Open")).toMatchObject({ status: "completed" })
+  expect(await session.raw.dispatchRaw("Open")).toMatchObject({
     status: "failed",
     error: { defect: true, message: "cleanup beside limit" },
   })
@@ -2046,10 +2045,10 @@ test("a screen build size refusal cannot hide an acquired resource cleanup defec
     },
   })
   const session = await pool.open(host)
-  expect(await session.dispatchRaw("Open")).toMatchObject({
+  expect(await session.raw.dispatchRaw("Open")).toMatchObject({
     status: "failed",
     error: { defect: true, message: "build cleanup beside limit" },
   })
   expect(refusals).toEqual([])
-  expect(session.state).toEqual({})
+  expect(session.raw.state).toEqual({})
 })

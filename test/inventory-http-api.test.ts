@@ -9,7 +9,14 @@ import {
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
 import * as FetchHttpClient from "effect/http/FetchHttpClient"
-import { root } from "../examples/inventory/src/app.ts"
+import { Nav } from "../examples/inventory/src/navigation.ts"
+import { InventoryList } from "../examples/inventory/src/features/inventory-list.ts"
+import { InventoryDetail } from "../examples/inventory/src/features/inventory-detail.ts"
+import { Settings } from "../examples/inventory/src/features/settings.ts"
+const root = Nav.layer({
+  screens: { InventoryList, InventoryDetail, Settings },
+  initial: "InventoryList",
+})
 import { InventoryApi } from "../examples/inventory/src/domain.ts"
 import { fixtureSettings, seedProducts } from "../examples/inventory/src/fixtures.ts"
 import { httpInventoryApi } from "../examples/inventory/src/http-api.ts"

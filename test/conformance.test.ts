@@ -53,9 +53,9 @@ describe.each(BACKENDS)("%s backend", (_, controllerOf) => {
 
   test("dispatch runs the action and subscribers see the change in order", async () => {
     const app = await open()
-    await app.dispatchRaw("Add", { by: 2 })
-    await app.dispatchRaw("Add", { by: 3 })
-    expect(app.state).toEqual({ count: 5 })
+    await app.raw.dispatchRaw("Add", { by: 2 })
+    await app.raw.dispatchRaw("Add", { by: 3 })
+    expect(app.raw.state).toEqual({ count: 5 })
 
     const changes = app.events.flatMap((e) => (e.type === "state.changed" ? [e] : []))
     expect(changes.map((e) => e.state)).toEqual([{ count: 2 }, { count: 5 }])
@@ -65,31 +65,31 @@ describe.each(BACKENDS)("%s backend", (_, controllerOf) => {
 
   test("availability follows state", async () => {
     const app = await open()
-    expect(await app.dispatchRaw("Reset").catch((error: unknown) => error)).toMatchObject({
+    expect(await app.raw.dispatchRaw("Reset").catch((error: unknown) => error)).toMatchObject({
       code: ErrorCode.ActionUnavailable,
     })
-    await app.dispatchRaw("Add", { by: 1 })
-    expect((await app.dispatchRaw("Reset")).status).toBe("completed")
+    await app.raw.dispatchRaw("Add", { by: 1 })
+    expect((await app.raw.dispatchRaw("Reset")).status).toBe("completed")
   })
 
   test("invalid input and unknown actions are rejected without touching state", async () => {
     const app = await open()
     expect(
-      await app.dispatchRaw("Add", { by: "x" }).catch((error: unknown) => error),
+      await app.raw.dispatchRaw("Add", { by: "x" }).catch((error: unknown) => error),
     ).toMatchObject({
       code: ErrorCode.InvalidInput,
     })
-    expect(await app.dispatchRaw("Nope").catch((error: unknown) => error)).toMatchObject({
+    expect(await app.raw.dispatchRaw("Nope").catch((error: unknown) => error)).toMatchObject({
       code: ErrorCode.ActionNotFound,
     })
     await app.inspect()
-    expect(app.state).toEqual({ count: 0 })
+    expect(app.raw.state).toEqual({ count: 0 })
   })
 
   test("stale revisions are rejected", async () => {
     const app = await open()
     const { node } = await app.inspect()
-    await app.dispatchRaw("Add", { by: 1 })
+    await app.raw.dispatchRaw("Add", { by: 1 })
     expect(
       await app.client
         .request("app.dispatch", {
@@ -104,7 +104,7 @@ describe.each(BACKENDS)("%s backend", (_, controllerOf) => {
   test("wait resolves on a later state and times out with context", async () => {
     const app = await open()
     const waiting = app.waitFor({ match: { count: 7 } })
-    await app.dispatchRaw("Add", { by: 7 })
+    await app.raw.dispatchRaw("Add", { by: 7 })
     await waiting
     expect(
       await app.waitFor({ match: { count: 8 }, timeoutMs: 10 }).catch((error: unknown) => error),
@@ -128,25 +128,27 @@ describe.each(BACKENDS)("%s backend, held to an access policy,", (_, controllerO
     expect(await app.client.request("app.describe", {})).toMatchObject({
       access: { kind: "observe" },
     })
-    await expect(app.dispatchRaw("Add", { by: 1 })).rejects.toMatchObject({
+    await expect(app.raw.dispatchRaw("Add", { by: 1 })).rejects.toMatchObject({
       code: ErrorCode.NotPermitted,
     })
     await expect(app.reset()).rejects.toMatchObject({ code: ErrorCode.NotPermitted })
     await app.inspect()
-    expect(app.state).toEqual({ count: 0 })
+    expect(app.raw.state).toEqual({ count: 0 })
     // Observers may wait. One that is already satisfied keeps this free of timing.
     await app.waitFor({ match: { count: 0 } })
   })
 
   test("an allowlist runs the actions it names, and only those", async () => {
     const app = await open({ kind: "actions", actions: ["Add"] })
-    await app.dispatchRaw("Add", { by: 2 })
-    expect(app.state).toEqual({ count: 2 })
-    await expect(app.dispatchRaw("Reset")).rejects.toMatchObject({ code: ErrorCode.NotPermitted })
+    await app.raw.dispatchRaw("Add", { by: 2 })
+    expect(app.raw.state).toEqual({ count: 2 })
+    await expect(app.raw.dispatchRaw("Reset")).rejects.toMatchObject({
+      code: ErrorCode.NotPermitted,
+    })
     await expect(app.client.request("app.advanceTime", { durationMs: 1 })).rejects.toMatchObject({
       code: ErrorCode.NotPermitted,
     })
     await app.inspect()
-    expect(app.state).toEqual({ count: 2 })
+    expect(app.raw.state).toEqual({ count: 2 })
   })
 })

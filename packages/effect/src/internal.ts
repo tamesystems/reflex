@@ -9,6 +9,6 @@ export {
   mountWithAccess,
 } from "./capability.ts"
 export { redact, REDACTED_TEXT } from "./redaction.ts"
-export { defineNavigationFactories, defineLegacyNavigation } from "./navigation.ts"
+export { defineNavigationFactories } from "./navigation.ts"
 
 export type { PublicState } from "./capability.ts"

@@ -1,5 +1,5 @@
 import { ReflexProvider } from "@reflex/react"
-import { developmentBridge } from "@reflex/expo/dev"
+import { developmentBridge } from "@reflex/expo"
 import { useState, type ReactNode } from "react"
 import { Text } from "react-native"
 import { testHost, E2EBridge } from "./instrumentation.tsx"

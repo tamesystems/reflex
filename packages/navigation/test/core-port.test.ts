@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
-import { defineApp, defineCapability, NoParams } from "@reflex/effect"
+import { defineApp, defineCapability } from "@reflex/effect"
+import { NoParams } from "@reflex/effect/advanced"
 import { defineNavigationFactories, mountOwned as mount } from "@reflex/effect/internal"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"

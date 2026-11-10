@@ -1,12 +1,8 @@
 import { InventoryListScreen } from "../screens.ts"
-import { NavigationRefused } from "@reflex/effect"
 import * as Effect from "effect/Effect"
 import * as Schema from "effect/Schema"
-import { InventoryApi, type Product, SettingsStore } from "../domain.ts"
+import { InventoryApi, SettingsStore } from "../domain.ts"
 import { Nav } from "../navigation.ts"
-
-export const isLowStock = (product: Product, lowStockThreshold: number): boolean =>
-  product.quantity < lowStockThreshold
 
 const load = InventoryListScreen.handler((state) =>
   Effect.gen(function* () {
@@ -28,13 +24,11 @@ export const InventoryList = InventoryListScreen.implement({
   onFocus: load,
   actions: (action) => ({
     OpenProduct: action.when("ready")({
-      error: NavigationRefused,
       description: "Open a product's detail screen",
       input: Schema.Struct({ productId: Schema.String }),
       handler: ({ productId }) => Nav.push("InventoryDetail", { productId }),
     }),
     OpenSettings: action({
-      error: NavigationRefused,
       handler: () => Nav.push("Settings"),
     }),
     Refresh: action({

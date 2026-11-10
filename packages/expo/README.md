@@ -7,9 +7,10 @@ protocol. Generic React bindings live in `@reflex/react`; live serving in `@refl
 
 - `RouterProjection` keeps Expo Router showing the core Navigation stack and feeds accepted
   gestures, links and router actions back to the core.
-- `@reflex/expo/effect` provides `expoRoutes({ screens }, registration)` and `useScreen(routes.Detail)`.
-  Registration derives both mapping directions and validates incoming params.
-- `@reflex/expo/dev` provides `developmentBridge()`, with production exclusion.
+- `createReflexExpo(app, registration)` from `@reflex/expo` provides bound `Provider`,
+  `RouterProjection`, `useScreen`, `useScreenSuspense`, `useNode` and `useSession`.
+- `developmentBridge()` is exported from the root; the integration `/internal` entry
+  keeps the plain store bundle free of Effect.
 - Router-neutral infrastructure is available through `/internal` and @reflex/navigation,
   outside the root author surface.
 
@@ -28,19 +29,24 @@ Router decides gesture behavior. Existing routers can use `@reflex/react` indepe
 
 ## Using it
 
-```tsx
-import { ReflexProvider } from "@reflex/react"
-import { RouterProjection } from "@reflex/expo"
-
-;<ReflexProvider host={app} bridge={bridge}>
-  <RouterProjection routes={routes} />
+```tsx partial: application bindings; app and Stack come from the host
+import { createReflexExpo, developmentBridge } from "@reflex/expo"
+const { Provider, RouterProjection, useScreen, useSession } = createReflexExpo(app, {
+  InventoryList: "/",
+  InventoryDetail: { pathname: "/inventory/[id]", params: { productId: "id" } },
+  Settings: "/settings",
+})
+;<Provider bridge={developmentBridge()}>
+  <RouterProjection />
   <Stack />
-</ReflexProvider>
+</Provider>
 ```
 
-The registration maps core param names to the application's file-route names; see
-[mobile routes](../../apps/mobile/src/routes.ts). Screens use the composed `useScreen` view with explicit pending status, state and action controls from the Effect entry. Pass `developmentBridge()` as the provider bridge;
-the module owns the development guard and setting read.
+UI modules import contracts and call `useScreen(InventoryDetailScreen)`. Registration is
+total and mapping targets are unique, checked statically and at runtime. Pending/ready
+views expose state and action controls; `useScreenSuspense` supplies the ready view.
+The bound `useSession()` checks scenario names and provider identity. `/internal` holds
+projection plumbing behind symbols; the plain integration gets its bridge from `/internal`.
 
 ## How the router is followed
 
@@ -62,7 +68,7 @@ the module owns the development guard and setting read.
 
 - Components using core-owned navigation send actions rather than router.push/replace.
 - Only router-actions.ts imports Expo Router private modules; its exact version is pinned.
-- Default imports contain no Effect. Production UI bundles contain no bridge or token.
+- Production UI bundles contain no bridge or token. The bound factory supports Effect screens.
 - `e2e:plain` proves the generic store screen's Metro graph has no Effect modules.
 
 See [development.md](../../docs/development.md) for browser, live and Hermes checks.

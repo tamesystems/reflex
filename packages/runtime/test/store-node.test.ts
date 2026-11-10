@@ -206,7 +206,7 @@ test("declared failures and synchronous or asynchronous defects remain distinct"
   })
   expect(await node.dispatchRaw("Declared")).toMatchObject({
     status: "failed",
-    error: { tag: "Rejected", defect: false },
+    error: { tag: "Defect", defect: true },
   })
   expect(await node.dispatchRaw("Sync")).toMatchObject({
     status: "failed",

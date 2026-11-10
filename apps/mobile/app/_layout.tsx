@@ -1,13 +1,15 @@
-import { RouterProjection } from "@reflex/expo"
+import { Suspense } from "react"
 import { Stack } from "expo-router"
 import { AppProvider } from "../provider.tsx"
-import { routes } from "../src/routes.ts"
+import { RouterProjection } from "../src/routes.ts"
 
 export default function Layout() {
   return (
     <AppProvider>
-      <RouterProjection routes={routes} />
-      <Stack />
+      <RouterProjection />
+      <Suspense fallback={null}>
+        <Stack />
+      </Suspense>
     </AppProvider>
   )
 }

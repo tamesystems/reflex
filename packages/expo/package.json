@@ -6,9 +6,6 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./effect": "./src/effect.tsx",
-    "./projection": "./src/projection-entry.ts",
-    "./dev": "./src/dev.ts",
     "./internal": "./src/internal.ts"
   },
   "dependencies": {

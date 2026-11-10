@@ -1,11 +1,6 @@
 import { afterEach, expect, test } from "bun:test"
-import {
-  type ActionsOf,
-  type Capability,
-  defineApp,
-  defineCapability,
-  NoParams,
-} from "@reflex/effect"
+import { defineApp, defineCapability } from "@reflex/effect"
+import { type ActionsOf, type Capability, NoParams } from "@reflex/effect/advanced"
 import {
   defineNavigationFactories,
   mountOwned as mount,
@@ -62,12 +57,12 @@ const appFor = <S, A extends ActionsOf<S>, W>(
 
 test("a handler can pop its own screen without deadlocking", async () => {
   const session = await pool.open(app)
-  await session.dispatchRaw("OpenProduct", { productId: "product-123" })
-  await session.dispatchRaw("SetQuantity", { quantity: 30 })
+  await session.raw.dispatchRaw("OpenProduct", { productId: "product-123" })
+  await session.raw.dispatchRaw("SetQuantity", { quantity: 30 })
 
-  await session.dispatchRaw("SaveAndClose")
+  await session.raw.dispatchRaw("SaveAndClose")
 
-  await session.precondition("InventoryList", { _tag: "ready" })
+  await session.raw.precondition("InventoryList", { _tag: "ready" })
   expect((await session.inspectRaw("InventoryFixture")).state).toMatchObject({
     saved: [{ productId: "product-123", quantity: 30 }],
   })
@@ -75,31 +70,29 @@ test("a handler can pop its own screen without deadlocking", async () => {
 
 test("a handler that has suspended can still pop its own screen", async () => {
   const session = await pool.open(app, { scenario: "sluggish-network" })
-  await session.dispatchRaw("OpenProduct", { productId: "product-123" })
-  await session.dispatchRaw("SetQuantity", { quantity: 30 })
+  await session.raw.dispatchRaw("OpenProduct", { productId: "product-123" })
+  await session.raw.dispatchRaw("SetQuantity", { quantity: 30 })
 
-  const operation = await session.start("SaveAndClose")
+  const operation = await session.raw.start("SaveAndClose")
   await session.waitFor({ match: { _tag: "saving" } })
   await session.advanceTime(1000)
   await session.waitFor({ operationId: operation.operationId })
 
-  await session.precondition("InventoryList", { _tag: "ready" })
+  await session.raw.precondition("InventoryList", { _tag: "ready" })
   expect((await session.inspectRaw("InventoryFixture")).state).toMatchObject({
     saved: [{ productId: "product-123", quantity: 30 }],
   })
-  // Known limitation: popping your own screen interrupts you, so the operation
-  // reads as cancelled even though its work finished. Assert on state instead.
   const finished = await session.client.request("app.operation", {
     operationId: operation.operationId,
   })
-  expect(finished.status).toBe("cancelled")
+  expect(finished.status).toBe("completed")
 })
 
 test("back-to-back dispatches cannot both pass an availability check", async () => {
   const session = await pool.open(app, { scenario: "slow-network" })
-  await session.dispatchRaw("OpenProduct", { productId: "product-123" })
+  await session.raw.dispatchRaw("OpenProduct", { productId: "product-123" })
 
-  const results = await Promise.allSettled([session.start("Save"), session.start("Save")])
+  const results = await Promise.allSettled([session.raw.start("Save"), session.raw.start("Save")])
 
   expect(results.map((r) => r.status).sort()).toEqual(["fulfilled", "rejected"])
 })
@@ -142,7 +135,7 @@ const Crashy = defineCapability({
 
 test("a throwing handler is a defect on the operation, not a transport error", async () => {
   const session = await pool.open(appFor(Crashy, { n: 0 }))
-  const operation = await session.dispatchRaw("Throw")
+  const operation = await session.raw.dispatchRaw("Throw")
   expect(operation).toMatchObject({
     status: "failed",
     error: {
@@ -155,11 +148,11 @@ test("a throwing handler is a defect on the operation, not a transport error", a
 
 test("defects and declared failures are distinguished", async () => {
   const session = await pool.open(appFor(Crashy, { n: 0 }))
-  expect(await session.dispatchRaw("Die")).toMatchObject({
+  expect(await session.raw.dispatchRaw("Die")).toMatchObject({
     status: "failed",
     error: { defect: true },
   })
-  expect(await session.dispatchRaw("Fail")).toMatchObject({
+  expect(await session.raw.dispatchRaw("Fail")).toMatchObject({
     status: "failed",
     error: { tag: "Nope", message: "declared failure", defect: false },
   })
@@ -283,7 +276,7 @@ test("a state that cannot be sent is refused, and what was there stays", async (
   })
   const session = await pool.open(appFor(Holder, { value: 1 }))
   for (const action of ["TooDeep", "DeepAndLarge"]) {
-    expect(await session.dispatchRaw(action)).toMatchObject({
+    expect(await session.raw.dispatchRaw(action)).toMatchObject({
       status: "failed",
       error: { tag: "ResourceExhausted", defect: false },
     })
@@ -321,7 +314,7 @@ test("a defect beside a declared failure is still a defect, with its own message
     }),
   })
   const session = await pool.open(appFor(Both, {}))
-  expect(await session.dispatchRaw("Go")).toMatchObject({
+  expect(await session.raw.dispatchRaw("Go")).toMatchObject({
     status: "failed",
     error: { defect: true, message: "cleanup defect" },
   })
@@ -338,7 +331,7 @@ test("a journey keeps a bounded history of large events", async () => {
   })
   const session = await pool.open(appFor(Big, { n: 0, text: "" }))
   for (let index = 0; index < 20; index++) {
-    await session.dispatchRaw("Grow")
+    await session.raw.dispatchRaw("Grow")
   }
   expect(JSON.stringify(session.events).length).toBeLessThan(64 * 1024 * 1024)
   expect(session.events.at(-1)).toMatchObject({ type: "operation.finished" })
@@ -362,7 +355,7 @@ test("a state at its limits can be inspected, and sent as an event", async () =>
   })
   const session = await pool.open(appFor(Holder, { value: 1 }))
   for (const action of ["Fill", "Deepen"]) {
-    expect((await session.dispatchRaw(action)).status).toBe("completed")
+    expect((await session.raw.dispatchRaw(action)).status).toBe("completed")
     const { node } = await session.client.request("app.inspect", {})
     expect(node?.name).toBe("Holder")
     const changed = session.events.filter(({ type }) => type === "state.changed")
@@ -387,7 +380,7 @@ test("a state whose escapes take it over the limit is refused, and what was ther
     }),
   })
   const session = await pool.open(appFor(Holder, { text: "before" }))
-  expect(await session.dispatchRaw("Fill")).toMatchObject({
+  expect(await session.raw.dispatchRaw("Fill")).toMatchObject({
     status: "failed",
     error: { tag: "ResourceExhausted", defect: false },
   })
@@ -416,11 +409,11 @@ test("a limit reached beside a real crash does not hide the crash, in either ord
   })
   const session = await pool.open(appFor(Both, {}))
   for (const action of ["LimitFirst", "CrashFirst", "InCleanup"]) {
-    expect(await session.dispatchRaw(action)).toMatchObject({
+    expect(await session.raw.dispatchRaw(action)).toMatchObject({
       error: { defect: true, message: "cleanup defect" },
     })
   }
-  expect(await session.dispatchRaw("LimitOnly")).toMatchObject({
+  expect(await session.raw.dispatchRaw("LimitOnly")).toMatchObject({
     error: { tag: "ResourceExhausted", defect: false },
   })
 })
@@ -444,7 +437,7 @@ test("failure data too large to carry is left out, and the failure still arrives
     }),
   })
   const session = await pool.open(appFor(Refuser, {}))
-  const operation = await session.dispatchRaw("Go")
+  const operation = await session.raw.dispatchRaw("Go")
   expect(operation).toMatchObject({
     status: "failed",
     error: { tag: "Rejected", message: "no", defect: false },
@@ -481,8 +474,8 @@ test("redaction finds secrets wherever they sit", async () => {
       plain: new Map([["n", 1]]),
     }),
   )
-  expect(JSON.stringify(session.state)).not.toContain("hunter")
-  expect(session.state).toMatchObject({ plain: [["n", 1]], list: ["<redacted>"] })
+  expect(JSON.stringify(session.raw.state)).not.toContain("hunter")
+  expect(session.raw.state).toMatchObject({ plain: [["n", 1]], list: ["<redacted>"] })
 })
 
 test("a secret behind a getter or a hidden field does not get out", () => {
@@ -602,7 +595,7 @@ test("redaction reaches into nested and repeated values", async () => {
       ],
     }),
   )
-  expect(session.state).toEqual({
+  expect(session.raw.state).toEqual({
     accounts: [
       { name: "a", key: "<redacted>" },
       { name: "b", key: "<redacted>" },
@@ -627,10 +620,10 @@ test("domain types cross the wire in their encoded form", async () => {
     }),
   })
   const session = await pool.open(appFor(Dated, { at: new Date(0) }))
-  expect(session.state).toEqual({ at: "1970-01-01T00:00:00.000Z" })
-  await session.dispatchRaw("Set", { at: "2026-01-02T03:04:05.000Z" })
-  expect(session.state).toEqual({ at: "2026-01-02T03:04:05.000Z" })
-  await expect(session.dispatchRaw("Set", { at: 5 })).rejects.toMatchObject({
+  expect(session.raw.state).toEqual({ at: "1970-01-01T00:00:00.000Z" })
+  await session.raw.dispatchRaw("Set", { at: "2026-01-02T03:04:05.000Z" })
+  expect(session.raw.state).toEqual({ at: "2026-01-02T03:04:05.000Z" })
+  await expect(session.raw.dispatchRaw("Set", { at: 5 })).rejects.toMatchObject({
     code: ErrorCode.InvalidInput,
   })
 })
@@ -705,11 +698,11 @@ test("state that cannot be published does not become the state", async () => {
     scenarios: { default: { layer: Layer.empty } },
   })
   const session = await pool.open(host)
-  expect(await session.dispatchRaw("Break")).toMatchObject({
+  expect(await session.raw.dispatchRaw("Break")).toMatchObject({
     status: "failed",
     error: { defect: true },
   })
-  expect(session.state).toEqual({ n: 1 })
+  expect(session.raw.state).toEqual({ n: 1 })
   // The live state too, which is what a screen reads.
   expect(readState()).toEqual({ n: 1 })
 })
@@ -837,10 +830,10 @@ test("a focus hook that throws is that work's failure, not the navigation's", as
     scenarios: { default: { layer: Layer.empty } },
   })
   const session = await pool.open(host)
-  expect(await session.dispatchRaw("Navigate", { route: "Broken", params: {} })).toMatchObject({
+  expect(await session.raw.dispatchRaw("Navigate", { route: "Broken", params: {} })).toMatchObject({
     status: "completed",
   })
-  await session.precondition("Broken")
+  await session.raw.precondition("Broken")
   expect(session.takeDefects()).toEqual([expect.stringContaining("focus failed")])
 })
 
@@ -927,7 +920,7 @@ test("a live subscriber that throws cannot fail the action or starve the others"
     scenarios: { default: { layer: Layer.empty } },
   })
   const session = await pool.open(host)
-  expect((await session.dispatchRaw("Add")).status).toBe("completed")
+  expect((await session.raw.dispatchRaw("Add")).status).toBe("completed")
   expect(seen).toEqual([1])
 })
 
@@ -970,7 +963,7 @@ test("a sample is a valid input, whatever the schema demands of its secrets", as
   })
   const session = await pool.open(appFor(Login, {}))
   const { input } = await session.client.request("app.sample", { action: "SignIn", seed: 1 })
-  expect((await session.dispatchRaw("SignIn", input)).status).toBe("completed")
+  expect((await session.raw.dispatchRaw("SignIn", input)).status).toBe("completed")
 })
 
 test("an action taking anything is sent its input; one taking nothing is sent none", async () => {
@@ -1052,17 +1045,17 @@ test("refined secrets publish initial state, updates and typed error events", as
     }),
   })
   const session = await pool.open(appFor(Vault, { token: Redacted.make(value), count: 0 }))
-  expect(session.state).toEqual({ token: REDACTED_TEXT, count: 0 })
-  expect(await session.dispatchRaw("Change", { token: value })).toMatchObject({
+  expect(session.raw.state).toEqual({ token: REDACTED_TEXT, count: 0 })
+  expect(await session.raw.dispatchRaw("Change", { token: value })).toMatchObject({
     status: "completed",
   })
-  expect(session.state).toEqual({ token: REDACTED_TEXT, count: 1 })
-  expect(await session.dispatchRaw("Reject", { token: value })).toMatchObject({
+  expect(session.raw.state).toEqual({ token: REDACTED_TEXT, count: 1 })
+  expect(await session.raw.dispatchRaw("Reject", { token: value })).toMatchObject({
     status: "failed",
     error: { defect: false, data: { token: REDACTED_TEXT } },
   })
   expect(JSON.stringify(session.events)).not.toContain(value)
-  await expect(session.dispatchRaw("Change", { token: "short" })).rejects.toBeDefined()
+  await expect(session.raw.dispatchRaw("Change", { token: "short" })).rejects.toBeDefined()
 })
 
 test("redaction preserves Map and Set insertion order across rebuilt Options", () => {

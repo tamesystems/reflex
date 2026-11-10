@@ -1,4 +1,4 @@
-import { developmentBridge } from "@reflex/expo/dev"
+import { developmentBridge } from "@reflex/expo/internal"
 import { Counter, plainBackend } from "@reflex/example-plain"
 import { ReflexProvider, useNode } from "@reflex/react"
 import { registerRootComponent } from "expo"

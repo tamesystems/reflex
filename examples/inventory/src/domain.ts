@@ -39,3 +39,6 @@ export class SettingsStore extends Context.Service<
     setLowStockThreshold(value: number): Effect.Effect<void>
   }
 >()("inventory/SettingsStore") {}
+
+export const isLowStock = (product: Product, lowStockThreshold: number): boolean =>
+  product.quantity < lowStockThreshold

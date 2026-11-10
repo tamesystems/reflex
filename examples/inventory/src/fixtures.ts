@@ -1,4 +1,5 @@
-import { defineCapability, mountWithAccess } from "@reflex/effect"
+import { defineCapability } from "@reflex/effect"
+import { mountWithAccess } from "@reflex/effect/internal"
 import type * as Duration from "effect/Duration"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
@@ -34,10 +35,11 @@ export const seedProducts: ReadonlyArray<Product> = [
   { id: "product-789", title: "Canvas Tote", quantity: 2 },
 ]
 
-export const fixtureApi = (options: {
+export interface ScenarioOptions {
   readonly products: ReadonlyArray<Product>
   readonly saveDelay?: Duration.Input
-}) =>
+}
+export const fixtureApi = (options: ScenarioOptions) =>
   Layer.effect(
     InventoryApi,
     Effect.gen(function* () {

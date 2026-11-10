@@ -1,31 +1,38 @@
-import { defineStoreApp, defineStoreNode } from "@reflex/runtime"
+import { defineStoreApp, defineStoreNode, standardInput } from "@reflex/runtime"
+import { z } from "zod"
 
-const counter = <const Name extends string>(name: Name) =>
-  defineStoreNode({
-    name,
-    type: "screen",
-    store: () => {
-      let state = { count: 0 }
-      const listeners = new Set<() => void>()
-      return {
-        getState: () => state,
-        subscribe: (listener: () => void) => {
-          listeners.add(listener)
-          return () => {
-            listeners.delete(listener)
-          }
-        },
-        increment: () => {
-          state = { count: state.count + 1 }
-          for (const listener of listeners) {
-            listener()
-          }
-        },
+const createCounterStore = (id = "list") => {
+  let state = { count: 0, id }
+  const listeners = new Set<() => void>()
+  return {
+    getState: () => state,
+    subscribe: (listener: () => void) => {
+      listeners.add(listener)
+      return () => {
+        listeners.delete(listener)
       }
     },
-    project: (state) => state,
-    actions: (action) => ({ Increment: action({ handler: (_, { store }) => store.increment() }) }),
-  })
-export const List = counter("List")
-export const Detail = counter("Detail")
-export const host = defineStoreApp({ name: "router-counter", routes: { List, Detail } })
+    increment: () => {
+      state = { ...state, count: state.count + 1 }
+      for (const listener of listeners) {
+        listener()
+      }
+    },
+  }
+}
+export const List = defineStoreNode({
+  name: "List",
+  type: "screen",
+  store: () => createCounterStore(),
+  project: (state) => state,
+  actions: (action) => ({ Increment: action({ handler: (_, { store }) => store.increment() }) }),
+})
+export const Detail = defineStoreNode({
+  name: "Detail",
+  type: "screen",
+  params: standardInput(z.strictObject({ id: z.string() })),
+  store: ({ id }) => createCounterStore(id),
+  project: (state) => state,
+  actions: (action) => ({ Increment: action({ handler: (_, { store }) => store.increment() }) }),
+})
+export const host = defineStoreApp({ name: "router-counter", screens: { List, Detail } })

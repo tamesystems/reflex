@@ -1,5 +1,6 @@
 import { expect, spyOn, test } from "bun:test"
-import { defineApp, defineCapability, mount, type LiveNode } from "@reflex/effect"
+import { defineApp, defineCapability } from "@reflex/effect"
+import { mount, type LiveNode } from "@reflex/effect/advanced"
 import { Registry } from "@reflex/effect/internal"
 import { NODE_STATE_CHARACTERS_MAX } from "@reflex/protocol"
 import { waitUntil } from "@reflex/test"

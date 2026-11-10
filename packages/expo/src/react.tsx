@@ -11,7 +11,7 @@ import * as React from "react"
 import {
   useRuntimeSession as useSession,
   useRouteNode as useBoundRouteNode,
-} from "@reflex/react/internal"
+} from "@reflex/react/advanced"
 import { reportFailure } from "@reflex/live/session"
 import {
   corePortOf,

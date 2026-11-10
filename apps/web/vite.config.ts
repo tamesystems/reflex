@@ -9,6 +9,10 @@ export default defineConfig({
         import.meta.dirname,
         "../../packages/react-router/src/index.ts",
       ),
+      "@reflex/react/advanced": resolve(
+        import.meta.dirname,
+        "../../packages/react/src/advanced.ts",
+      ),
       "@reflex/react": resolve(import.meta.dirname, "../../packages/react/src/index.ts"),
       "@reflex/live/vite": resolve(import.meta.dirname, "../../packages/live/src/vite.ts"),
       "@reflex/live/session": resolve(import.meta.dirname, "../../packages/live/src/session.ts"),

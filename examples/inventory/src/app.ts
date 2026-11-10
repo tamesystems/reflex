@@ -1,23 +1,26 @@
-import { defineApp, withNodes } from "@reflex/effect"
+import { defineApp } from "@reflex/effect"
 import * as Layer from "effect/Layer"
-import { fixtureApi, fixtureSettings, seedProducts, InventoryFixture } from "./fixtures.ts"
+import {
+  fixtureApi,
+  fixtureSettings,
+  seedProducts,
+  InventoryFixture,
+  type ScenarioOptions,
+} from "./fixtures.ts"
 import { InventoryList } from "./features/inventory-list.ts"
 import { InventoryDetail } from "./features/inventory-detail.ts"
 import { Settings } from "./features/settings.ts"
 import { Nav } from "./navigation.ts"
 
-export const screens = { InventoryList, InventoryDetail, Settings }
-export const root = Nav.layer({
-  screens,
-  initial: { route: "InventoryList", params: {} },
-})
-
-const services = (options: Parameters<typeof fixtureApi>[0]) =>
-  withNodes(Layer.merge(fixtureApi(options), fixtureSettings), { InventoryFixture })
+const services = (options: ScenarioOptions) => Layer.merge(fixtureApi(options), fixtureSettings)
 
 export default defineApp({
   name: "inventory",
-  root,
+  navigation: Nav.implement(
+    { InventoryList, InventoryDetail, Settings },
+    { initial: "InventoryList" },
+  ),
+  fixtures: { InventoryFixture },
   defaultScenario: "inventory-with-products",
   scenarios: {
     "inventory-with-products": {
