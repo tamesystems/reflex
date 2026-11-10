@@ -4,6 +4,7 @@ Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) first: the code map, the runti
 the dependency rules and the invariants. [docs/development.md](docs/development.md) has
 the commands and the common changes; [docs/domain.md](docs/domain.md) the vocabulary.
 
+- Judge userland API changes against [docs/api-principles.md](docs/api-principles.md).
 - Run `bun run check` before saying a change works. It formats, lints, typechecks and tests.
 - `test/boundaries.test.ts` enforces which package may import which. Do not work around it.
 - Every limit a peer can reach belongs in `packages/protocol/src/limits.ts`.
