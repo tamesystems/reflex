@@ -10,7 +10,23 @@ import { isRecord } from "@reflex/protocol"
 import { useEffect, useState } from "react"
 import { createRoot } from "react-dom/client"
 import { BrowserRouter, Link, Route, Routes, useLocation } from "react-router"
-import { entryFor, host } from "./host.ts"
+import { type Entry, entryFor, existingEntry, host } from "./host.ts"
+
+/**
+ * The history entry's node: looked up during render, mounted only once committed, so a
+ * render React throws away never leaves a node behind. Retained until reset, so that
+ * browser forward finds the same node and state.
+ */
+const useEntry = (key: string, name: string): Entry | null => {
+  const { runtime } = useSession()
+  const [mounted, setMounted] = useState<{ readonly key: string; readonly entry: Entry } | null>(
+    null,
+  )
+  useEffect(() => {
+    setMounted({ key, entry: entryFor(runtime, key, name) })
+  }, [runtime, key, name])
+  return mounted?.key === key ? mounted.entry : existingEntry(runtime, key)
+}
 
 const Screen = ({
   name,
@@ -21,14 +37,13 @@ const Screen = ({
   readonly pattern: string
   readonly entryKey?: string
 }) => {
-  const { runtime } = useSession()
   const location = useLocation()
   const key = entryKey ?? location.key
-  const entry = entryFor(runtime, key, name)
-  const node = useNode(entry.id)
+  const entry = useEntry(key, name)
+  const node = useNode(entry?.id ?? null)
   const state = useNodeState(node)
-  useRouteFocus(entry.id, pattern, key)
-  if (key !== location.key) {
+  useRouteFocus(entry?.id ?? null, pattern, key)
+  if (key !== location.key || entry === null) {
     return null
   }
   return (

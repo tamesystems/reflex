@@ -129,7 +129,8 @@ Use `@reflex/react-router` with exactly react-router 8.5.1 and React >=19.2.7 <2
 Keep your BrowserRouter or data router and place its screens beneath ReflexProvider.
 In each exposed leaf route, call `useRouteFocus(nodeId, "/detail/:id", entryKey?)`.
 String patterns match to the end; PathPattern supports explicit match options.
-Node creation and disposal remain your responsibility. Providers, useNode, useNodeState
+Node creation and disposal remain your responsibility. Mount nodes in an effect, not
+during render: a render React abandons would leave a node the CLI sees and no screen shows. Providers, useNode, useNodeState
 and send come from @reflex/react; the new binding only reports router focus.
 
 Back/forward updates focus from useLocation/useMatch. Two entries can share a URL: use

@@ -27,11 +27,26 @@ const mountEntry = (runtime: Runtime, name: string) => {
   })
   return { id: node.id, add, dispose: node.dispose }
 }
-export const entryFor = (runtime: Runtime, key: string, name: string) => {
+export type Entry = ReturnType<typeof mountEntry>
+
+const cacheOf = (runtime: Runtime) => {
   const cache = entries.get(runtime)
   if (cache === undefined) {
     throw new Error("No entry owner for this session")
   }
+  return cache
+}
+
+/** The entry already mounted for a history key, if any. Pure, so safe during render. */
+export const existingEntry = (runtime: Runtime, key: string): Entry | null =>
+  cacheOf(runtime).get(key) ?? null
+
+/**
+ * Mounts the entry for a history key, once. Call it from an effect, never during render:
+ * a render React abandons would otherwise leave a node the CLI can see and nothing shows.
+ */
+export const entryFor = (runtime: Runtime, key: string, name: string): Entry => {
+  const cache = cacheOf(runtime)
   let entry = cache.get(key)
   if (entry === undefined) {
     entry = mountEntry(runtime, name)
