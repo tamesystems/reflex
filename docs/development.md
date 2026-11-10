@@ -281,3 +281,30 @@ negative/positive inference tests, not executable journeys. Keep expected errors
 actual invalid call. Record root diagnostics before and after with
 `bunx tsc --noEmit -p tsconfig.json --extendedDiagnostics`; all three typechecks still run
 in `bun run check`. Integration plumbing belongs under explicit internal subpaths.
+
+### ADR 0020 validation baseline
+
+Measured on macOS, Bun 1.4.4 and TypeScript 5.9.3, on 2026-11-10. Three paired root
+`tsc --noEmit -p tsconfig.json --extendedDiagnostics` runs compared the original source
+at `5961f3e` with the implementation at `dc86f64`. The baseline was a temporary source
+archive using the same installed dependencies and workspace module mappings; its type
+and instantiation counts matched the original checkout. Medians:
+
+| Metric         |    Before |     After |
+| -------------- | --------: | --------: |
+| Total time     |    1.79 s |    1.95 s |
+| Check time     |    1.07 s |    1.21 s |
+| Types          |    79,691 |    93,262 |
+| Instantiations |   223,920 |   290,689 |
+| Memory         | 461,505 K | 492,845 K |
+
+Total time increased by about 9% (0.16 s). This includes the new positive/negative type
+coverage. The initial pre-change run was 2.06 s total and 1.13 s check time; use paired
+runs when comparing future changes, since other build/test work affects elapsed times.
+
+Local validation passed `bun run check` (606 passed, three Windows-only skips), mobile
+`e2e`, `e2e:plain`, `e2e:live`, `e2e:services`, and web `e2e`. The bundle checks still
+exclude the production bridge/token and keep Effect out of the plain graph. The focus
+regression test was also run with lifecycle activation temporarily disabled and failed
+as intended. `hermes-smoke` was attempted but could not start because HERMES was unset;
+its VM execution remains for the configured CI job or a local VM install.
