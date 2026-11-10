@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { INVENTORY_HTTP_BODY_BYTES_MAX } from "@reflex/protocol"
+import { INVENTORY_HTTP_BODY_BYTES_MAX } from "../src/limits.ts"
 import { startInventoryServer } from "../server.ts"
 import { QUANTITY_MAX } from "../src/domain.ts"
 

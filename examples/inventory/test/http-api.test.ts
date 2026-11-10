@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import { createController } from "@reflex/runtime"
 import { defineApp } from "@reflex/effect"
 import { createLoopbackClient } from "@reflex/rpc"
-import { INVENTORY_HTTP_BODY_BYTES_MAX, INVENTORY_HTTP_TIMEOUT_MS } from "@reflex/protocol"
+import { INVENTORY_HTTP_BODY_BYTES_MAX, INVENTORY_HTTP_TIMEOUT_MS } from "../src/limits.ts"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
 import * as FetchHttpClient from "effect/http/FetchHttpClient"
@@ -55,6 +55,33 @@ for (const [label, fetcher, message] of [
     expect(error).toMatchObject({ _tag: "ApiError", message })
   })
 }
+
+test("HTTP refuses a declared oversize response without reading its body", async () => {
+  let pulled = false
+  const fetcher = fakeFetch(
+    async () =>
+      new Response(
+        new ReadableStream(
+          {
+            pull() {
+              // A body that never ends: reading it at all would hang this test.
+              pulled = true
+            },
+          },
+          // Without this the stream pulls once on its own, before anyone reads.
+          { highWaterMark: 0 },
+        ),
+        { headers: { "content-length": String(INVENTORY_HTTP_BODY_BYTES_MAX + 1) } },
+      ),
+  )
+  const error = await Effect.runPromise(
+    Effect.gen(function* () {
+      return yield* Effect.flip((yield* InventoryApi).list)
+    }).pipe(Effect.provide(withFetch(fetcher))),
+  )
+  expect(error).toMatchObject({ _tag: "ApiError", message: "Inventory response too large" })
+  expect(pulled).toBe(false)
+})
 
 test("HTTP accepts a valid response at the byte limit", async () => {
   const fetcher = fakeFetch(

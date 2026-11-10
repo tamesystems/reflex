@@ -99,7 +99,7 @@ packages/
               See packages/expo/README.md.
 examples/
   inventory/  A three-screen app core with fixture scenarios and an optional HTTP service
-              implementation. Imports Effect, @reflex/effect and protocol limits; no UI
+              implementation. Imports Effect and @reflex/effect; no UI
               or device APIs. server.ts is the separate local Bun JSON API.
   plain/      Real Zustand/Zod app core, no Effect; rendered by apps/mobile/plain.
   live-counter/ Plain process serving a service node through @reflex/live; no UI framework.

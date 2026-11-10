@@ -13,8 +13,7 @@ without making headless journeys depend on either.
 Export the inventory root layer separately from its fixture host. The app composes it
 with a platform-neutral HTTP InventoryApi and an app-only AsyncStorage SettingsStore.
 The headless host imports neither implementation and retains the unexpected-network
-request guard. The example core may import protocol limits; no device dependency moves
-into it. The Bun JSON server lives outside src, runs on all Bun platforms, stores three
+request guard. No device dependency moves into the example core. The Bun JSON server lives outside src, runs on all Bun platforms, stores three
 products in memory, validates writes with the domain Schema and exposes explicit POST
 /reset and /fail-next-save test controls. It is local development machinery with open
 CORS, no authentication and no production deployment claim.
@@ -24,9 +23,11 @@ without Node APIs. HttpClient.withScope and Effect.scoped own the whole exchange
 including reading and Schema-decoding its body. Closing a screen/session interrupts
 that scope and aborts the fetch signal. A four-second request deadline also aborts it;
 it sits below the existing five-second domain save deadline. Named HTTP deadline and
-64 KiB payload limits live in protocol/limits.ts because actions can reach them. The
-client checks buffered response bytes before JSON decoding (it does not claim to bound
-the fetch implementation's internal buffering). Network, status, JSON and Schema errors
+64 KiB payload limits live in the example's own src/limits.ts: they bound one app's
+requests to its server, not anything a Reflex peer can make Reflex hold, so they stay
+out of protocol/limits.ts. The client refuses a declared Content-Length over the limit
+before reading, and checks the buffered bytes before JSON decoding otherwise (it does
+not claim to bound the fetch implementation's internal buffering of an undeclared body). Network, status, JSON and Schema errors
 become ApiError; valid non-2xx JSON supplies its message. Cancellation stays interruption,
 not an ApiError. No retries: interruption cannot roll back a write already accepted by
 the server.

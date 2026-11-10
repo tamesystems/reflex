@@ -1,4 +1,4 @@
-import { INVENTORY_HTTP_BODY_BYTES_MAX } from "@reflex/protocol"
+import { INVENTORY_HTTP_BODY_BYTES_MAX } from "./src/limits.ts"
 import * as Schema from "effect/Schema"
 import { Quantity, type Product } from "./src/domain.ts"
 import { seedProducts } from "./src/fixtures.ts"

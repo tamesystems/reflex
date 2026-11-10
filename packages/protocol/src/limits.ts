@@ -126,7 +126,3 @@ export const LOCAL_UNACKNOWLEDGED_FRAMES_MAX = 65_536
 export const LOCAL_RECEIPT_BYTES = 16
 
 export const LOCAL_SHUTDOWN_RECEIPT_TIMEOUT_MS = 5_000
-
-/** Inventory example HTTP work reachable through screen actions. */
-export const INVENTORY_HTTP_TIMEOUT_MS = 4_000
-export const INVENTORY_HTTP_BODY_BYTES_MAX = 64 * 1024

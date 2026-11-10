@@ -1,4 +1,4 @@
-import { INVENTORY_HTTP_BODY_BYTES_MAX, INVENTORY_HTTP_TIMEOUT_MS } from "@reflex/protocol"
+import { INVENTORY_HTTP_BODY_BYTES_MAX, INVENTORY_HTTP_TIMEOUT_MS } from "./limits.ts"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
 import * as Schema from "effect/Schema"
@@ -26,6 +26,11 @@ export const httpInventoryApi = (baseUrl: string) =>
                   HttpClientRequest.bodyJsonUnsafe({ quantity }),
                 )
           const response = yield* client.execute(req)
+          // A declared size is refused before any of it is read; the rest is checked after.
+          const declared = Number(response.headers["content-length"] ?? Number.NaN)
+          if (declared > INVENTORY_HTTP_BODY_BYTES_MAX) {
+            return yield* new ApiError({ message: "Inventory response too large" })
+          }
           const bytes = yield* response.arrayBuffer
           if (bytes.byteLength > INVENTORY_HTTP_BODY_BYTES_MAX) {
             return yield* new ApiError({ message: "Inventory response too large" })
