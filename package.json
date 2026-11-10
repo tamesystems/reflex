@@ -19,6 +19,7 @@
   "devDependencies": {
     "@biomejs/biome": "2.6.6",
     "@reflex/effect": "workspace:*",
+    "@reflex/live": "workspace:*",
     "@reflex/protocol": "workspace:*",
     "@reflex/rpc": "workspace:*",
     "@reflex/runtime": "workspace:*",
@@ -29,8 +30,7 @@
     "typescript": "5.9.3",
     "xstate": "5.33.4",
     "zod": "4.6.7",
-    "zustand": "5.1.0",
-    "@reflex/live": "workspace:*"
+    "zustand": "5.1.0"
   },
   "packageManager": "bun@1.4.4"
 }

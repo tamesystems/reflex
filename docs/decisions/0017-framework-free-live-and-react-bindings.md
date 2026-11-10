@@ -28,7 +28,7 @@ Split the former Expo package into three layers:
 
 The live root exports connectBridge for plain processes. UI bindings use /session, whose
 exports exclude bridge.ts, because Metro includes barrel exports without tree-shaking.
-Expo apps load the live root and read EXPO_PUBLIC_REFLEX_BRIDGE only inside **DEV**.
+Expo apps load the live root and read EXPO_PUBLIC_REFLEX_BRIDGE only inside `__DEV__`.
 Production bridge/token exclusion and the plain screen's Effect-free Metro graph remain
 acceptance checks. A browser bundle test also rejects framework and bridge imports from
 the generic React entry. Boundaries tests enforce the new dependency rules.

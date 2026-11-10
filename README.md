@@ -1,10 +1,9 @@
 # Reflex
 
 Reflex is an application control protocol that makes behavior inspectable and executable
-with or without a UI. An
-app exposes a graph of stateful nodes; a client (the `reflex` CLI, a test, or a coding
-agent over MCP) reads their state, discovers their typed actions, runs them, and
-watches what changes. The same commands work against the app running headless or live
+with or without a UI. An app exposes a graph of stateful nodes; a client (the `reflex`
+CLI, a test, or a coding agent over MCP) reads their state, discovers their typed
+actions, runs them, and watches what changes. The same commands work against the app running headless or live
 through a bridge.
 
 It is inspired by Shopify's Reflex, as described in
@@ -17,8 +16,9 @@ Agents and tests usually learn what an app does from screenshots and source code
 drive it through a simulator. Both are slow and lossy. If behavior lives in a headless
 core with an explicit control surface, an agent can run most checks with no UI at all,
 then confirm selected behavior against the real app through the same commands. Reflex is
-that control surface for applications, with adapters for existing stores and [Effect](https://effect.website) v4.
-Expo is the first platform binding; the runtime and live bridge need no React, React Native or Expo.
+that control surface for applications, with adapters for existing stores and
+[Effect](https://effect.website) v4. Expo is the first platform binding; the runtime and
+live bridge need no React, React Native or Expo.
 
 ## System at a glance
 
