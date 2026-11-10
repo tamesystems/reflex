@@ -9,4 +9,4 @@ export type {
 export { defineStoreApp } from "./store-app.ts"
 export type { StoreApp, StoreScenario } from "./store-app.ts"
 export type { ActionOutcome, NodeHandle, ConsumerDefinition } from "./node-handle.ts"
-export type { AppHost } from "./controller.ts"
+export type { AppHost, ScenarioName } from "./controller.ts"

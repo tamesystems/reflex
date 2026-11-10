@@ -54,7 +54,8 @@ never inspects JSON to find its own state. `useAction` returns `run`, `available
 The secondary `send(node, action, input)` preserves correlated arguments and returns the
 same outcome union; await it or explicitly discard its Promise.
 
-`useSession()` exposes `scenario` and `reset`. Raw registry access is an explicit escape
+`useSession()` exposes `scenario` and `reset`. Pass the app value as `useSession(app)`
+to check scenario names in resets; provider scenario props are checked against their host too. Raw registry access is an explicit escape
 hatch: `useRuntime` and `useRawNode` from `@reflex/react/advanced`. Sibling integration
 helpers live under `/internal`, outside the author-facing root exports.
 

@@ -10,6 +10,7 @@ import {
 import { type Client, createLoopbackClient } from "@reflex/rpc"
 import {
   type AppHost,
+  type ScenarioName,
   type Controller,
   type ConsumerDefinition,
   createController,
@@ -20,10 +21,6 @@ import { createJourneyClient, type JourneyClient } from "./journey-client.ts"
 type DefinitionsOf<H> = H extends { readonly nodes: infer N }
   ? Extract<N[keyof N], ConsumerDefinition>
   : ConsumerDefinition
-export type ScenariosOf<H> = H extends { readonly scenarioNames: ReadonlyArray<infer K> }
-  ? K & string
-  : string
-
 const JOURNEY_STEP_TIMEOUT_MS_DEFAULT = 2_000
 /** A journey is short. More than this means something is looping. */
 const OBSERVED_EVENTS_MAX = 20_000
@@ -33,7 +30,7 @@ const CONDITION_TIMEOUT_MS = 2_000
 const CONDITION_POLL_MS = 1
 
 export interface TestAppOptions<H = AppHost> {
-  readonly scenario?: ScenariosOf<H>
+  readonly scenario?: ScenarioName<H>
   /** How long `do` and `precondition` may take in real time. */
   readonly timeoutMs?: number
 }
@@ -57,7 +54,7 @@ export interface TestApp<H = AppHost> extends JourneyClient<DefinitionsOf<H>> {
   start(action: string, input?: Json): Promise<OperationInfo>
   waitFor(params: WaitParams): Promise<void>
   advanceTime(durationMs: number): Promise<void>
-  reset(scenario?: ScenariosOf<H>): Promise<void>
+  reset(scenario?: ScenarioName<H>): Promise<void>
   dispose(): Promise<void>
 }
 

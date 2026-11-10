@@ -38,6 +38,10 @@ export interface SessionStartOptions {
   readonly onBackgroundError?: BackgroundReporter
 }
 
+export type ScenarioName<H> = H extends { readonly scenarioNames: ReadonlyArray<infer Name> }
+  ? Name & string
+  : string
+
 /** Something that can start sessions: the seam between protocol and app. */
 export interface AppHost {
   readonly name: string

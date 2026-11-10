@@ -1,6 +1,7 @@
 import { assertNever, ErrorCode, type NodeId } from "@reflex/protocol"
 import {
   type ActionOutcome,
+  type ScenarioName,
   type AppHost,
   type AppSession,
   type Runtime,
@@ -33,16 +34,22 @@ export const useRuntimeSession = (): AppSession => {
 }
 
 const ControlsContext = React.createContext<{
+  readonly host: AppHost
   readonly scenario: string
   reset(scenario?: string): Promise<void>
 } | null>(null)
 /** Session controls; raw registry access is an explicit advanced import. */
-export const useSession = () => {
+export const useSession = <H extends AppHost = AppHost>(
+  host?: H,
+): { readonly scenario: ScenarioName<H>; reset(scenario?: ScenarioName<H>): Promise<void> } => {
   const controls = React.useContext(ControlsContext)
   if (controls === null) {
     throw new Error("useSession requires ReflexProvider")
   }
-  return controls
+  if (host !== undefined && controls.host !== host) {
+    throw new Error("useSession(app) must name the provider host")
+  }
+  return { scenario: controls.scenario as ScenarioName<H>, reset: controls.reset }
 }
 export const useRuntime = (): Runtime => useRuntimeSession().runtime
 
@@ -57,15 +64,15 @@ export type { Bridge } from "@reflex/live/session"
  * the session on screen. A bridge's reset replaces that session, until `scenario` or
  * `host` next changes.
  */
-export const ReflexProvider = ({
+export const ReflexProvider = <H extends AppHost>({
   host,
   scenario,
   bridge,
   fallback = null,
   children,
 }: {
-  readonly host: AppHost
-  readonly scenario?: string
+  readonly host: H
+  readonly scenario?: NoInfer<ScenarioName<H>>
   readonly bridge?: Bridge | undefined
   readonly fallback?: React.ReactNode
   readonly children: React.ReactNode
@@ -102,6 +109,7 @@ export const ReflexProvider = ({
         >
           <ControlsContext.Provider
             value={{
+              host,
               scenario: sessions.scenario ?? host.defaultScenario,
               reset: async (scenario) => {
                 const result = await sessions.reset(scenario)

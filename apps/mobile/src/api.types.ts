@@ -1,8 +1,19 @@
-import { useAction } from "@reflex/react"
+import app from "./app.ts"
+import { useAction, useSession, ReflexProvider } from "@reflex/react"
 import type { NodeOf } from "@reflex/effect"
 import type { InventoryDetail } from "@reflex/example-inventory/features/inventory-detail.ts"
 
 export const useContracts = (node: NodeOf<typeof InventoryDetail> | null) => {
+  const controls = useSession(app)
+  void controls.reset("inventory-with-products")
+  // @ts-expect-error Session resets derive scenario names from the app value.
+  void controls.reset("missing-scenario")
+  ReflexProvider({
+    host: app,
+    children: null,
+    // @ts-expect-error Provider scenarios derive from the host, never from this argument.
+    scenario: "missing-scenario",
+  })
   const save = useAction(node, "Save")
   const set = useAction(node, "SetQuantity")
   void save.run()
