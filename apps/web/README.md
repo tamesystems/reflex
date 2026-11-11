@@ -13,8 +13,13 @@ bun run reflex --target device do Increment
 bun run --cwd apps/web e2e
 ```
 
-The own install keeps browser tooling out of the workspace lock. Vite aliases workspace
-sources and dedupes React/router. Entry state is retained until session disposal to support
-forward. Detail elements remain mounted across same-URL pushes to exercise focus gating; reset replaces all nodes and keeps the current URL. Production never loads the
-bridge or reads the setting. e2e verifies that with a real token supplied, then runs the
-live CLI/MCP/Playwright journey using Chrome and Node 24+, with a separate daemon process.
+The own install keeps browser tooling out of the workspace lock. The app's app/routes/
+views/main modules are the exact compiled spec example: two store screens, contract
+links, and a route-derived detail id. Vite aliases the Provider's inert development
+bridge seam to the Vite implementation and dedupes React/router. History uses bounded
+session-owned leases, so same-URL entries keep separate state. Reset keeps the URL.
+
+The journey checks production module/token exclusion before driving CLI/MCP and
+Playwright with a separate daemon. Its separate binding probe also exercises shared
+status/Suspense retry, Effect services, granular selectors, stale reset controls,
+startup error propagation and StrictMode bridge cleanup.

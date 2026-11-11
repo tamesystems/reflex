@@ -1,0 +1,148 @@
+{
+  "mode": "real-packages",
+  "typescript": "5.9.3",
+  "authoredFiles": 46,
+  "negativeCases": 29,
+  "compiledFiles": 45,
+  "jsonFiles": 1,
+  "checker": 0,
+  "examples": 0,
+  "negative": 0,
+  "measurements": [
+    {
+      "screens": 0,
+      "hooks": 0,
+      "instantiations": 66250,
+      "checkSeconds": 0.86
+    },
+    {
+      "screens": 0,
+      "hooks": 1,
+      "instantiations": 66250,
+      "checkSeconds": 1.91
+    },
+    {
+      "screens": 0,
+      "hooks": 10,
+      "instantiations": 66250,
+      "checkSeconds": 1.93
+    },
+    {
+      "screens": 100,
+      "hooks": 0,
+      "instantiations": 570053,
+      "checkSeconds": 2.56
+    },
+    {
+      "screens": 100,
+      "hooks": 1,
+      "instantiations": 592594,
+      "checkSeconds": 2.49
+    },
+    {
+      "screens": 100,
+      "hooks": 10,
+      "instantiations": 592594,
+      "checkSeconds": 1.86
+    },
+    {
+      "screens": 200,
+      "hooks": 0,
+      "instantiations": 1146953,
+      "checkSeconds": 4.48
+    },
+    {
+      "screens": 200,
+      "hooks": 1,
+      "instantiations": 1191994,
+      "checkSeconds": 4.94
+    },
+    {
+      "screens": 200,
+      "hooks": 10,
+      "instantiations": 1191994,
+      "checkSeconds": 4.43
+    },
+    {
+      "screens": 400,
+      "hooks": 0,
+      "instantiations": 2540753,
+      "checkSeconds": 9.74
+    },
+    {
+      "screens": 400,
+      "hooks": 1,
+      "instantiations": 2630794,
+      "checkSeconds": 8.67
+    },
+    {
+      "screens": 400,
+      "hooks": 10,
+      "instantiations": 2630794,
+      "checkSeconds": 11.81
+    }
+  ],
+  "slopes": [
+    {
+      "hooks": 0,
+      "from": 100,
+      "to": 200,
+      "instantiationsPerScreen": 5769,
+      "msPerScreen": 19.200000000000003
+    },
+    {
+      "hooks": 0,
+      "from": 200,
+      "to": 400,
+      "instantiationsPerScreen": 6969,
+      "msPerScreen": 26.3
+    },
+    {
+      "hooks": 1,
+      "from": 100,
+      "to": 200,
+      "instantiationsPerScreen": 5994,
+      "msPerScreen": 24.5
+    },
+    {
+      "hooks": 1,
+      "from": 200,
+      "to": 400,
+      "instantiationsPerScreen": 7194,
+      "msPerScreen": 18.65
+    },
+    {
+      "hooks": 10,
+      "from": 100,
+      "to": 200,
+      "instantiationsPerScreen": 5994,
+      "msPerScreen": 25.699999999999996
+    },
+    {
+      "hooks": 10,
+      "from": 200,
+      "to": 400,
+      "instantiationsPerScreen": 7194,
+      "msPerScreen": 36.900000000000006
+    }
+  ],
+  "repeated": [
+    {
+      "screens": 0,
+      "msPerAdditionalHook": 0
+    },
+    {
+      "screens": 100,
+      "msPerAdditionalHook": -0.7000000000000002
+    },
+    {
+      "screens": 200,
+      "msPerAdditionalHook": -0.2833333333333337
+    },
+    {
+      "screens": 400,
+      "msPerAdditionalHook": 0.8722222222222223
+    }
+  ],
+  "maxSlope": 24.5
+}

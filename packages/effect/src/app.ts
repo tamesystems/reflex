@@ -206,7 +206,12 @@ const startSession = async <Services, Root>(
 const attachRoutes = (
   runtime: import("@reflex/runtime/internal").Runtime,
   definition: { readonly root: object },
-  managed: { runPromise(effect: Effect.Effect<Erased, never, Erased>): Promise<Erased> },
+  managed: {
+    runPromise(
+      effect: Effect.Effect<Erased, never, Erased>,
+      options?: Effect.RunOptions,
+    ): Promise<Erased>
+  },
 ) => {
   const nodes = ("nodes" in definition.root ? definition.root.nodes : {}) as Record<
     string,
@@ -218,7 +223,7 @@ const attachRoutes = (
     new Map(
       Object.values(nodes).map((screen) => [
         screen,
-        async (params: unknown) => {
+        async (params: unknown, signal?: AbortSignal) => {
           const scope = Effect.runSync(Scope.make())
           scopes.add(scope)
           try {
@@ -227,6 +232,7 @@ const attachRoutes = (
             }
             const node = await managed.runPromise(
               mountOwned(screen, screen.initial(params)).pipe(Scope.provide(scope)),
+              signal === undefined ? undefined : { signal },
             )
             return {
               ...node,

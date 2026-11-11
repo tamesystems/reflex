@@ -33,6 +33,8 @@ export class LiveSessions {
   private release: (() => void) | null = null
   /** Each `open` gets its own; closing an older one must not end a newer one. */
   private lastOpening = 0
+  private resetQueue: Promise<unknown> = Promise.resolve()
+  private queuedResets = 0
   private readonly owner: SessionOwner
   private readonly listeners = new Set<() => void>()
   private readonly settling = new Set<Settling>()
@@ -83,6 +85,28 @@ export class LiveSessions {
 
   /** Starts over, on `scenario` if given. Settles with how that start turns out. */
   reset(scenario: string | undefined): Promise<SettledLifecycle> {
+    if (this.queuedResets >= LIFECYCLE_QUEUE_MAX) {
+      return Promise.reject(
+        new ProtocolError(ErrorCode.ResourceExhausted, "Too many resets are queued"),
+      )
+    }
+    const opening = this.lastOpening
+    this.queuedResets++
+    const work = this.resetQueue.then(() => {
+      if (opening !== this.lastOpening) {
+        throw new ProtocolError(
+          ErrorCode.SessionClosed,
+          "The provider changed while reset was queued",
+        )
+      }
+      return this.resetNow(scenario)
+    })
+    this.resetQueue = work.catch(() => undefined)
+    return work.finally(() => {
+      this.queuedResets--
+    })
+  }
+  private resetNow(scenario: string | undefined): Promise<SettledLifecycle> {
     const { target } = this
     if (target === null) {
       return Promise.reject(new ProtocolError(ErrorCode.SessionClosed, "The app is not running"))

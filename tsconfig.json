@@ -40,6 +40,10 @@
     "packages/react/src/internal.ts",
     "packages/react/src/advanced.ts",
     "packages/expo/src/index.ts",
-    "packages/expo/src/internal.ts"
+    "packages/expo/src/internal.ts",
+    "packages/react/src/binding.tsx",
+    "packages/react/src/binding-types.ts",
+    "packages/react-router/src/router.tsx",
+    "packages/react-router/src/route-types.ts"
   ]
 }

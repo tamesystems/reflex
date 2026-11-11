@@ -20,3 +20,5 @@ export { registerRouteFactories, mountSessionRoute } from "./route-mount.ts"
 export { DEFINITION_IDENTITY, definitionIdentity, APP_HOST_ADAPTER } from "./definition-identity.ts"
 
 export { publishJson } from "./publication.ts"
+
+export { createRouteRegistry, type RouteLease, type RouteSnapshot } from "./route-registry.ts"

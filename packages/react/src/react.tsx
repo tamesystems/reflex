@@ -1,5 +1,8 @@
-import { assertNever, ErrorCode, ROUTER_RETAINED_ENTRIES_MAX, type NodeId } from "@reflex/protocol"
+import { assertNever, ErrorCode, ProtocolError, type NodeId } from "@reflex/protocol"
 import {
+  createRouteRegistry,
+  type RouteLease,
+  type BackgroundReporter,
   type ActionOutcome,
   type ScenarioName,
   type AppHost,
@@ -38,12 +41,11 @@ export const useRuntimeSession = (): AppSession => {
 const ControlsContext = React.createContext<{
   readonly host: AppHost
   readonly scenario: string
-  reset(scenario?: string): Promise<void>
+  readonly status: "starting" | "live" | "failed" | "closed"
+  reset(scenario?: string): Promise<unknown>
 } | null>(null)
 /** Session controls; raw registry access is an explicit advanced import. */
-const useBoundSession = <H extends AppHost>(
-  host: H,
-): { readonly scenario: ScenarioName<H>; reset(scenario?: ScenarioName<H>): Promise<void> } => {
+const useBoundSession = <H extends AppHost>(host: H): SessionControls<H> => {
   const controls = React.useContext(ControlsContext)
   if (controls === null) {
     throw new Error("useSession requires ReflexProvider")
@@ -53,7 +55,49 @@ const useBoundSession = <H extends AppHost>(
       `useSession is bound to app "${host.name}" but the provider owns "${controls.host.name}"`,
     )
   }
-  return { scenario: controls.scenario as ScenarioName<H>, reset: controls.reset }
+  return controls as unknown as SessionControls<H>
+}
+export interface SessionControls<H extends AppHost> {
+  readonly scenario: ScenarioName<H>
+  readonly status: "starting" | "live" | "failed" | "closed"
+  reset(scenario?: ScenarioName<H>): Promise<SessionControls<H>>
+}
+const sessionControls = <H extends AppHost>(
+  sessions: LiveSessions,
+  settled?: {
+    readonly scenario: string
+    readonly generation: string
+  },
+  defaultScenario = "default",
+): SessionControls<H> => {
+  const snapshot = sessions.getSnapshot()
+  const generation =
+    settled?.generation ??
+    (snapshot.kind === "live" ? snapshot.session.runtime.sessionId : snapshot)
+  const scenarioName = settled?.scenario ?? sessions.scenario ?? defaultScenario
+  return {
+    scenario: scenarioName as ScenarioName<H>,
+    status: settled ? "live" : snapshot.kind,
+    reset: async (scenario) => {
+      const current = sessions.getSnapshot()
+      const active = current.kind === "live" ? current.session.runtime.sessionId : current
+      if (active !== generation) {
+        throw new ProtocolError(
+          ErrorCode.StaleSession,
+          "SessionChanged: reacquire controls after reset",
+        )
+      }
+      const nextScenario = scenario ?? scenarioName ?? undefined
+      const result = await sessions.reset(nextScenario)
+      if (result.kind === "failed") {
+        throw result.cause
+      }
+      return sessionControls<H>(sessions, {
+        scenario: nextScenario ?? "default",
+        generation: result.session.runtime.sessionId,
+      })
+    },
+  }
 }
 export const useRuntime = (): Runtime => useRuntimeSession().runtime
 
@@ -73,58 +117,65 @@ export const ReflexProvider = <H extends AppHost>({
   scenario,
   bridge,
   fallback = null,
+  onBackgroundError = reportFailure,
   children,
 }: {
   readonly host: H
   readonly scenario?: NoInfer<ScenarioName<H>>
   readonly bridge?: Bridge | undefined
   readonly fallback?: React.ReactNode
-  readonly children: React.ReactNode
+  readonly onBackgroundError?: BackgroundReporter
+  readonly children?: React.ReactNode
 }) => {
   const [sessions] = React.useState(
-    () => new LiveSessions({ timers: systemTimers, onBackgroundError: reportFailure }),
+    () => new LiveSessions({ timers: systemTimers, onBackgroundError }),
   )
   const lifecycle = React.useSyncExternalStore(sessions.subscribe, sessions.getSnapshot)
-  React.useEffect(() => sessions.open(host, scenario), [sessions, host, scenario])
+  const ownedHost = React.useMemo(() => ownHost(host), [host])
+  React.useEffect(() => sessions.open(ownedHost, scenario), [sessions, ownedHost, scenario])
   React.useEffect(() => {
     if (bridge === undefined) {
       return undefined
     }
-    const controller = createLiveController(sessions, reportFailure)
+    const controller = createLiveController(sessions, onBackgroundError)
     const stop = bridge(controller)
     return () => {
       stop()
-      controller.close().catch(reportFailure)
+      controller.close().catch(onBackgroundError)
     }
-  }, [sessions, bridge])
+  }, [sessions, bridge, onBackgroundError])
 
+  return (
+    <ControlsContext.Provider
+      value={{ host, ...sessionControls(sessions, undefined, scenario ?? host.defaultScenario) }}
+    >
+      <SessionGate lifecycle={lifecycle} fallback={fallback}>
+        {children}
+      </SessionGate>
+    </ControlsContext.Provider>
+  )
+}
+const SessionGate = ({
+  lifecycle,
+  fallback,
+  children,
+}: {
+  readonly lifecycle: ReturnType<LiveSessions["getSnapshot"]>
+  readonly fallback: React.ReactNode
+  readonly children: React.ReactNode
+}) => {
   switch (lifecycle.kind) {
     case "starting":
       return <>{fallback}</>
     case "failed":
       throw lifecycle.cause
     case "live":
-      // Keyed, because a replacement can arrive in the same commit as the old session
-      // ending, and screens must not keep nodes bound to a session that has gone.
       return (
         <SessionContext.Provider
           key={lifecycle.session.runtime.sessionId}
           value={lifecycle.session}
         >
-          <ControlsContext.Provider
-            value={{
-              host,
-              scenario: sessions.scenario ?? host.defaultScenario,
-              reset: async (scenario) => {
-                const result = await sessions.reset(scenario)
-                if (result.kind === "failed") {
-                  throw result.cause
-                }
-              },
-            }}
-          >
-            <OwnedNodes>{children}</OwnedNodes>
-          </ControlsContext.Provider>
+          <OwnedNodes>{children}</OwnedNodes>
         </SessionContext.Provider>
       )
     default:
@@ -282,143 +333,116 @@ export const useNodeHandle = <N,>(definition: {
 interface OwnedNode {
   dispose(): void
 }
-const disposeOwned = (node: OwnedNode | Promise<OwnedNode>): void => {
-  if (node instanceof Promise) {
-    void node.then((owned) => owned.dispose(), reportFailure)
-  } else {
-    node.dispose()
-  }
+type OwnedFactory = (params: unknown, signal: AbortSignal) => OwnedNode | Promise<OwnedNode>
+interface RouteOwnership {
+  readonly factories: Map<object, OwnedFactory>
+  readonly registry: ReturnType<typeof createRouteRegistry<OwnedNode>>
 }
-interface Ownership {
-  readonly definition: object
-  readonly node: OwnedNode | Promise<OwnedNode>
-  users: number
-  retained: boolean
-}
-const OwnershipContext = React.createContext<Map<string, Ownership> | null>(null)
-const OwnedNodes = ({ children }: { readonly children: React.ReactNode }) => {
-  const [nodes] = React.useState(() => new Map<string, Ownership>())
-  React.useEffect(
-    () => () => {
-      for (const { node } of nodes.values()) {
-        disposeOwned(node)
-      }
-      nodes.clear()
-    },
-    [nodes],
-  )
-  return <OwnershipContext.Provider value={nodes}>{children}</OwnershipContext.Provider>
-}
-
-const historyEntries = new WeakMap<Map<string, Ownership>, { keys: string[]; index: number }>()
-const retainHistoryEntry = (
-  owner: Map<string, Ownership>,
-  key: string,
-  kind: "POP" | "PUSH" | "REPLACE" | undefined,
-): void => {
-  if (kind === undefined) {
-    return
-  }
-  const history = historyEntries.get(owner) ?? { keys: [], index: -1 }
-  historyEntries.set(owner, history)
-  const existing = history.keys.indexOf(key)
-  if (existing >= 0) {
-    history.index = existing
-    return
-  }
-  const discard =
-    kind === "REPLACE"
-      ? history.keys.splice(Math.max(0, history.index))
-      : history.keys.splice(history.index + 1)
-  for (const obsolete of discard) {
-    const entry = owner.get(obsolete)
-    if (entry !== undefined && entry.users === 0) {
-      owner.delete(obsolete)
-      disposeOwned(entry.node)
+const runtimeRoutes = new WeakMap<Runtime, RouteOwnership>()
+const routesForRuntime = (runtime: Runtime): RouteOwnership => {
+  let owner = runtimeRoutes.get(runtime)
+  if (owner === undefined) {
+    const factories = new Map<object, OwnedFactory>()
+    owner = {
+      factories,
+      registry: createRouteRegistry(factories, (error) => runtime.report(error)),
     }
+    runtimeRoutes.set(runtime, owner)
   }
-  history.keys.push(key)
-  if (history.keys.length > ROUTER_RETAINED_ENTRIES_MAX) {
-    history.keys.shift()
+  return owner
+}
+const ownHost = (host: AppHost): AppHost => {
+  let routeDrain: Promise<void> = Promise.resolve()
+  return {
+    ...host,
+    start: async (...args) => {
+      await routeDrain
+      const session = await host.start(...args)
+      return {
+        ...session,
+        dispose: async () => {
+          routeDrain = releaseRuntimeRoutes(session.runtime)
+          await routeDrain
+          await session.dispose()
+        },
+      }
+    },
   }
-  history.index = history.keys.length - 1
+}
+const releaseRuntimeRoutes = async (runtime: Runtime) => {
+  const owner = runtimeRoutes.get(runtime)
+  runtimeRoutes.delete(runtime)
+  await owner?.registry.dispose()
+  owner?.factories.clear()
+}
+const OwnershipContext = React.createContext<RouteOwnership | null>(null)
+const OwnedNodes = ({ children }: { readonly children: React.ReactNode }) => {
+  const { runtime } = useRuntimeSession()
+  return (
+    <OwnershipContext.Provider value={routesForRuntime(runtime)}>
+      {children}
+    </OwnershipContext.Provider>
+  )
 }
 
-/** Mount after commit; history entries are retained until the session ends. */
+/** Both status and Suspense consumers acquire the same session-owned lease. */
+export const useRouteLease = <N extends OwnedNode>(
+  definition: {
+    readonly identity?: object
+    mount(runtime: Runtime, signal?: AbortSignal): N | Promise<N>
+  },
+  options: {
+    readonly key: string
+    readonly lifetime?: "component" | "history-entry"
+    readonly navigationType?: "POP" | "PUSH" | "REPLACE"
+    readonly params?: unknown
+    readonly enabled?: boolean
+  },
+): RouteLease<N> | null => {
+  const { runtime } = useRuntimeSession()
+  const owner = React.useContext(OwnershipContext)
+  if (owner === null) {
+    throw new Error("Route hooks require ReflexProvider")
+  }
+  const identity = definition.identity ?? definition
+  owner.factories.set(identity, (_, signal) => definition.mount(runtime, signal))
+  const lease =
+    options.enabled === false
+      ? null
+      : (owner.registry.acquire(identity, options.key, options.params ?? {}) as RouteLease<N>)
+  React.useEffect(() => {
+    if (lease === null) {
+      return undefined
+    }
+    const release = lease.retain()
+    if (options.lifetime === "history-entry") {
+      owner.registry.visit(options.key, options.navigationType ?? "POP")
+    }
+    return release
+  }, [owner, lease, options.key, options.lifetime, options.navigationType])
+  return lease
+}
+
 export const useMountedNode = <N extends OwnedNode>(
-  definition: { readonly identity?: object; mount(runtime: Runtime): N | Promise<N> },
+  definition: {
+    readonly identity?: object
+    mount(runtime: Runtime, signal?: AbortSignal): N | Promise<N>
+  },
   options: {
     readonly key: string
     readonly lifetime?: "component" | "history-entry"
     readonly navigationType?: "POP" | "PUSH" | "REPLACE"
   },
 ): N | null => {
-  const { runtime } = useRuntimeSession()
-  const identity = definition.identity ?? definition
-  const owner = React.useContext(OwnershipContext)
-  const { key, lifetime = "component", navigationType } = options
-  const [mounted, setMounted] = React.useState<{ key: string; definition: object; node: N } | null>(
-    null,
-  )
-  const [failure, setFailure] = React.useState<{ error: unknown } | null>(null)
-  if (failure !== null) {
-    throw failure.error
+  const lease = useRouteLease(definition, options)
+  if (lease === null) {
+    throw new Error("Expected an enabled route lease")
   }
-  React.useEffect(() => {
-    if (owner === null) {
-      throw new Error("useMountedNode requires ReflexProvider")
-    }
-    retainHistoryEntry(owner, key, navigationType)
-    let entry = owner.get(key)
-    if (entry !== undefined && entry.definition !== identity) {
-      throw new Error(`History entry "${key}" already owns another definition`)
-    }
-    if (entry === undefined) {
-      if (lifetime === "history-entry") {
-        for (const [oldKey, old] of owner) {
-          if (owner.size < ROUTER_RETAINED_ENTRIES_MAX) {
-            break
-          }
-          if (old.users === 0) {
-            owner.delete(oldKey)
-            disposeOwned(old.node)
-          }
-        }
-      }
-      entry = {
-        definition: identity,
-        node: definition.mount(runtime),
-        users: 0,
-        retained: lifetime === "history-entry",
-      }
-      owner.set(key, entry)
-    }
-    entry.users++
-    entry.retained ||= lifetime === "history-entry"
-    const owned = entry
-    let active = true
-    Promise.resolve(entry.node).then(
-      (node) => {
-        if (active) {
-          setMounted({ key, definition: identity, node: node as N })
-        }
-      },
-      (error: unknown) => {
-        if (active) {
-          setFailure({ error })
-        }
-      },
-    )
-    return () => {
-      active = false
-      owned.users--
-      if (!owned.retained && owned.users === 0 && owner.get(key) === owned) {
-        owner.delete(key)
-        disposeOwned(owned.node)
-      }
-    }
-  }, [runtime, owner, definition, identity, key, lifetime, navigationType])
-  return mounted?.key === key && mounted.definition === identity ? mounted.node : null
+  const snapshot = React.useSyncExternalStore(lease.subscribe, lease.getSnapshot)
+  if (snapshot.status === "error") {
+    throw snapshot.error
+  }
+  return snapshot.status === "ready" ? snapshot.value : null
 }
 
 export type ActionViews<A> = {
@@ -523,7 +547,7 @@ export type ScreenView<D> = D extends import("@reflex/runtime/internal").Consume
   : never
 
 /** Bind session controls and ambient definitions to one provider identity. */
-export const createReflex = <H extends AppHost>(app: H) => ({
+export const createLegacyReflex = <H extends AppHost>(app: H) => ({
   // biome-ignore lint/correctness/noComponentHookFactories: This explicit app binding factory is called once at module scope.
   Provider: (props: Omit<React.ComponentProps<typeof ReflexProvider<H>>, "host">) => (
     <ReflexProvider {...props} host={app} />
@@ -538,49 +562,24 @@ export const createReflex = <H extends AppHost>(app: H) => ({
   },
 })
 
-const suspenseRoutes = new WeakMap<
-  Runtime,
-  Map<
-    string,
-    {
-      readonly definition: object
-      readonly promise: Promise<import("@reflex/runtime/internal").OwnedRoute>
-    }
-  >
->()
-/** A Suspense resource belongs to its session even when React abandons the render. */
+/** Legacy adapter entry retained until Expo migrates. */
 export const useSuspenseRoute = <S, A extends ViewActions>(
-  definition: {
-    resolve(runtime: Runtime, id?: NodeId): NodeHandle<S, A> | undefined
-  },
+  definition: { resolve(runtime: Runtime, id?: NodeId): NodeHandle<S, A> | undefined },
   params: unknown,
   key: string,
 ): NodeHandle<S, A> => {
   const { runtime } = useRuntimeSession()
-  let entries = suspenseRoutes.get(runtime)
-  if (entries === undefined) {
-    entries = new Map()
-    suspenseRoutes.set(runtime, entries)
+  const lease = useRouteLease(
+    {
+      identity: definition,
+      mount: (_, signal) => mountSessionRoute(runtime, definition, params, signal),
+    },
+    { key, lifetime: "history-entry" },
+  )
+  if (lease === null) {
+    throw new Error("Expected an enabled route lease")
   }
-  let resource = entries.get(key)
-  if (resource !== undefined && resource.definition !== definition) {
-    throw new Error(`History entry "${key}" already owns another definition`)
-  }
-  if (resource === undefined) {
-    if (entries.size >= ROUTER_RETAINED_ENTRIES_MAX) {
-      const first = entries.entries().next().value
-      if (first !== undefined) {
-        entries.delete(first[0])
-        void first[1].promise.then((node) => node.dispose(), reportFailure)
-      }
-    }
-    resource = {
-      definition,
-      promise: Promise.resolve(mountSessionRoute(runtime, definition, params)),
-    }
-    entries.set(key, resource)
-  }
-  const owned = React.use(resource.promise)
+  const owned = React.use(lease.ready)
   const node = definition.resolve(runtime, owned.id)
   if (node === undefined) {
     throw new Error("The mounted Suspense route did not resolve")

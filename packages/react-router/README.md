@@ -1,25 +1,27 @@
 # @reflex/react-router
 
-`createReflexRouter(app, registration)` binds one app to React Router 8.5.1. Registration
-covers every screen and maps decoded schema field names to URL names. Param codecs must
-encode strings; use `Schema.NumberFromString` for numeric domain values. Mapping targets
-must be unique. Route params are decoded before initial state is constructed.
+`createReflexRouter(app, registration)` binds an app to React Router 8.5.1. Register
+all screen names with literal paths, for example `{ List: "/", Detail: "/detail/:id" }`.
+Params default to their schema names; `{ pathname: "/detail/:id", params: { productId:
+"id" } }` renames one. Encoded params must be strings. Placeholder coverage, optional
+fields, repetitions, excluded grammar and duplicate targets are checked statically.
+Bracket placeholders are normalized to React Router's colon grammar.
 
-```tsx partial: app and DetailScreen are imported from application modules
-const { Provider, useScreen, useScreenSuspense, useSession } = createReflexRouter(app, {
-  List: "/",
-  Detail: { pathname: "/detail/:id", params: { productId: "id" } },
-})
-const view = useScreen(DetailScreen)
-```
+Destructure `Provider`, `useScreen`, `useScreenStatus`, `useService`, `Link`, `href`
+and `useSession`. `Link` takes a screen contract and correlated encoded params, plus
+host link props. `href(Contract, params)` uses the same URL encoding and mapping.
 
-Place React Router beneath the bound `Provider`. Ordinary mounting happens after commit;
-`useScreenSuspense` reads a session-owned resource during render. Effect routes use the
-session's service layer. Store routes use that session's scenario store override.
-Focus follows the leaf match, and history ownership uses `location.key`. Entries survive
-back/forward within a 64-entry budget. New pushes dispose unreachable forward entries;
-evicted older entries mount afresh if visited again. No app cache or entry key is needed.
+`routes({ List: { Component: ListView }, Detail: { Component: DetailView, loader } })`
+returns `RouteObject[]`. Each route requires Component, element or lazy, and accepts
+host options except the fields Reflex owns (path/index/children/id and rendering
+sources). Both host lazy forms are supported. Every screen has a Suspense boundary
+and an error element. Screen build retry goes through the shared registry.
 
-The adapter imports no Effect, Expo, React Native, or private router modules. It follows
-an existing router; core-owned React Router projection remains deferred (ADR 0018).
-Use granular `@reflex/react` hooks for independently owned mounts.
+Put the router beneath the bound Provider. The host owns navigation; focus follows
+its matched entry. History uses `location.key`, preserving separate same-URL entries
+and back/forward state within a bounded budget. Effect screens mount with that
+session's services; store screens use its scenario overrides. Reset replaces nodes
+while retaining the current URL. See apps/web for the exact compiled spec example.
+
+This adapter imports no Effect, Expo, React Native or private router modules.
+Core-owned React Router projection remains deferred (ADR 0018).

@@ -2539,3 +2539,22 @@ use `projectError`; both the declaration and published JSON are checked. Explici
 projections are checked at app composition. Actual state is checked at mount, so app
 composition does not instantiate stores. Advanced owned store handles use the new
 outcome vocabulary; old hosts and journeys retain their current outcomes until B.
+
+B1 adds the app-bound React and React Router bindings while retaining the round-3
+exports for Expo. New bound action views use the target outcomes; legacy node views
+retain their earlier outcomes. The host-neutral development bridge entry is inert;
+Vite selects the existing Vite implementation through an alias, so the Provider owns
+its lifecycle without pulling a dialler into other hosts or production bundles.
+
+TypeScript diagnostics also carry a fixed `Reflex type error` property alongside the
+readable mapped message. Legacy app names can be widened to string, and a template
+index signature alone would otherwise permit invalid contracts without an error.
+Authored constructor names are restored from their declared contract name after
+implementation, preserving unchanged legacy adapters in minified bundles.
+
+B1 acceptance remains partial: status-only acquisition still uses render preparation,
+new views retain legacy local action-failure reporting, and the advanced routeCodec
+escape hatch remains to implement. Mobile and Expo files are unchanged. Their live and
+services journeys still assume a fixture-enabled production/default app, while A1's
+production app is offline and its test scenarios are separate. See ADR 0026 and
+performance/userland-api-b1.md for commands, measured gates and the exact failures.

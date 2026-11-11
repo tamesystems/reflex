@@ -1,11 +1,24 @@
 {
   "extends": "./examples.json",
   "compilerOptions": {
-    "paths": {}
+    "paths": {
+      "react": ["../../../apps/mobile/node_modules/@types/react/index.d.ts"],
+      "react/jsx-runtime": ["../../../apps/mobile/node_modules/@types/react/jsx-runtime.d.ts"],
+      "react-dom/*": ["../../../apps/web/node_modules/@types/react-dom/*"],
+      "react-native": ["../../../apps/mobile/node_modules/react-native/types_generated/index.d.ts"],
+      "react-router": ["../../../apps/web/node_modules/react-router/dist/production/index.d.ts"],
+      "@reflex/react": ["../../../packages/react/src/index.ts"],
+      "@reflex/react/advanced": ["../../../packages/react/src/advanced.ts"],
+      "@reflex/react-router": ["../../../packages/react-router/src/index.ts"]
+    }
   },
   "include": [
     "examples/examples/inventory/src/**/*.ts",
     "examples/examples/plain/src/**/*.ts",
-    "examples/examples/live-counter/src/**/*.ts"
+    "examples/examples/live-counter/src/**/*.ts",
+    "examples/apps/web/src/**/*.ts",
+    "examples/apps/web/src/**/*.tsx",
+    "../../../apps/web/src/api.types.ts",
+    "../../../apps/web/src/bindings.types.tsx"
   ]
 }

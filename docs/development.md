@@ -362,3 +362,17 @@ The real-package harness now includes the exact plain and live-counter examples.
 Plain's `authoredApp` uses an ambient service; its legacy default keeps the current
 mobile and conformance screen behavior until host migration B. No mobile adapter
 change is needed in A2. Legacy store overloads remain in use by other consumers.
+
+### React host API migration (B1)
+
+Use app-bound `useScreen` for Suspense and `useScreenStatus` for pending/error/retry.
+`from(Definition)` captures a registered implementation for narrow selector/action
+hooks. React Router's binding adds contract `Link`/`href` and `routes(views)`. The
+Provider owns the bridge; Vite aliases `@reflex/live/dev` to `@reflex/live/vite`, keeping
+the default host-neutral entry inert. See ADR 0026 and the package READMEs.
+
+The real-package harness includes the exact web examples and their negative cases.
+Run `REFLEX_RECORD_TYPE_PERF=1 bun docs/design/prototypes/check.ts --real --performance`
+for measured real-package screen/hook gates. Its fast `--real` mode remains in check.
+Root type diagnostics and incomplete mobile live/services acceptance are recorded in
+[the B1 report](performance/userland-api-b1.md). Mobile and Expo have not migrated.

@@ -69,6 +69,7 @@ packages/
               SessionController that starts, resets and closes sessions (controller.ts),
               and restrictController, which holds any controller to a policy.
               store-node.ts defines typed store nodes; store-app.ts owns their app lifetime.
+              route-registry.ts owns bounded host-route leases, build slots and deadlines.
               store-author-app.ts normalizes author arrays and definition-keyed overrides;
               advanced.ts exposes owned store runtimes and typed handles.
               node-handle.ts is the shared consumer contract. The store adapter wraps existing stores with public JSON projections, Standard Schema
@@ -92,11 +93,13 @@ packages/
   live/       Framework-free bridge.ts, live-sessions.ts, live-controller.ts,
               session-owner.ts, node-source.ts and ui-actions.ts. session.ts excludes
               the bridge for UI bundles. See packages/live/README.md.
-  react/      React-only provider and hooks (react.tsx), generic route binding,
+  react/      React-only legacy provider/hooks (react.tsx), app-bound host-neutral hooks
+              (binding.tsx, binding-types.ts), generic route binding,
               app-bound factories and advanced session/route seams. See packages/react/README.md.
   navigation/ Router-neutral projection rules/controller and Navigation core port.
               No framework, router or Effect. See packages/navigation/README.md.
-  react-router/ Existing React Router 8 route focus, via @reflex/react.
+  react-router/ React Router 8 registration, typed links, route objects and per-screen
+              boundaries, via the host-neutral @reflex/react registry.
               See packages/react-router/README.md.
   expo/       Expo Router projection adapter, router-actions.ts,
               app-bound hooks and symbol-hidden URL bindings.
@@ -142,7 +145,9 @@ runtime + live ◄── examples/live-counter
 - `live` imports no React, React Native, Expo, Effect or Node APIs; it needs a global WebSocket.
 - `live` reaches RPC only through the platform-free `@reflex/rpc/connection` entry.
 - `react` depends on React, with no React Native or Expo imports. Its root and advanced entries remain Effect-free.
-- UI bindings import `@reflex/live/session`, whose exports exclude the bridge. Apps load
+- UI bindings import `@reflex/live/session`, whose exports exclude the bridge. The React
+  Provider also imports the inert `@reflex/live/dev` host seam; Vite aliases it to
+  `@reflex/live/vite`, whose development branch is erased in production. Expo apps load
   `@reflex/live` and read the bridge setting only behind `__DEV__` (Expo) or
   `import.meta.env.DEV` (Vite) in UI builds.
 - `navigation` imports only protocol/runtime; no framework, router, Effect or platform.

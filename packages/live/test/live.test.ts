@@ -247,3 +247,24 @@ test("a controller closed while a start is pending takes no subscriber", async (
   await startNext()
   expect(await subscribing).toMatchObject({ code: ErrorCode.SessionClosed })
 })
+
+test("UI resets share an ordered queue and retain their own generation", async () => {
+  const { host, startNext } = gatedHost()
+  const sessions = new LiveSessions({ timers: systemTimers, onBackgroundError: () => undefined })
+  cleanups.push(sessions.open(host, undefined))
+  await startNext()
+  await sessions.settled()
+  const toB = sessions.reset("b")
+  const toC = sessions.reset("c")
+  await startNext()
+  const b = await toB
+  expect(b.kind).toBe("live")
+  await startNext()
+  const c = await toC
+  expect(c.kind).toBe("live")
+  if (b.kind === "live" && c.kind === "live") {
+    expect(b.session.runtime.sessionId).not.toBe(c.session.runtime.sessionId)
+    expect(b.session.runtime.closed).toBe(true)
+    expect(c.session.runtime.closed).toBe(false)
+  }
+})

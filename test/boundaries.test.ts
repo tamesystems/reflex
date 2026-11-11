@@ -78,6 +78,7 @@ test("React bindings have no native or Expo dependency", () => {
         "@reflex/protocol",
         "@reflex/runtime",
         "@reflex/live/session",
+        "@reflex/live/dev",
         "@reflex/effect",
         "react",
       ),
@@ -165,7 +166,7 @@ test("framework-free consumer depends only on the runtime and live serving", () 
 
 test("generic React entry bundles for the browser without Expo, Effect or the bridge", async () => {
   const build = await Bun.build({
-    entrypoints: [join(root, "packages/react/src/react.tsx")],
+    entrypoints: [join(root, "packages/react/src/index.ts")],
     target: "browser",
     external: ["react", "react/jsx-runtime"],
     plugins: [

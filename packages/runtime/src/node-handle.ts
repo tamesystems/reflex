@@ -104,6 +104,7 @@ export const bindActions = <A>(
 export interface ConsumerDefinition<S = unknown, A = unknown> {
   readonly name: string
   readonly "~reflex": {
+    readonly contract?: object
     decodeParams?(raw: unknown): unknown
     input(action: string, args: readonly unknown[]): import("@reflex/protocol").Json | undefined
     state(raw: import("@reflex/protocol").Json): S

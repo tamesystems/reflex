@@ -129,3 +129,6 @@ export const LOCAL_SHUTDOWN_RECEIPT_TIMEOUT_MS = 5_000
 
 /** Existing routers retain at most this many inactive history entries per session. */
 export const ROUTER_RETAINED_ENTRIES_MAX = 64
+
+/** Maximum time a host route may spend preparing its node. */
+export const ROUTE_BUILD_TIMEOUT_MS = 30_000

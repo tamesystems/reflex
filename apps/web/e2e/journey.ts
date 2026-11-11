@@ -70,8 +70,17 @@ const history = async (page: Page) => {
   const first = await focus("Detail")
   await reflex("do", "Increment")
   await count(page, 1)
+  await page.getByRole("heading", { name: "Detail one", exact: true }).waitFor()
   // Same URL, different history entry; each owns a distinct node and state.
-  await page.getByRole("link", { name: "Open detail", exact: true }).click()
+  await page.evaluate(() => {
+    const current = window.history.state as { idx: number }
+    window.history.pushState(
+      { ...current, idx: current.idx + 1, key: "same-url-entry" },
+      "",
+      window.location.href,
+    )
+    window.dispatchEvent(new PopStateEvent("popstate"))
+  })
   await count(page, 0)
   const second = await focus("Detail")
   assert.notEqual(first.id, second.id)
@@ -109,6 +118,33 @@ const journey = async (page: Page) => {
   assert.notEqual((await focus("Detail")).id, previous.id)
   console.log("ok   reset replaces session and nodes at the current route")
 }
+const bindings = async (page: Page) => {
+  await page.goto(`http://127.0.0.1:${process.env.PORT}/e2e/bindings.html`)
+  await page.getByText("Startup reached boundary", { exact: true }).waitFor()
+  await page.getByText("Build failed once", { exact: true }).waitFor()
+  await page.getByRole("button", { name: "Retry", exact: true }).click()
+  await page.getByRole("heading", { name: "Probe one", exact: true }).waitFor()
+  await page.getByText("Builds: 2; status: ready; shared: yes", { exact: true }).waitFor()
+  const selected = page.getByText(/^Selected:/)
+  const before = await selected.textContent()
+  await page.getByRole("button", { name: "Change label", exact: true }).click()
+  await page.getByText("Count: 0; label: changed", { exact: true }).waitFor()
+  assert.equal(await selected.textContent(), before)
+  await page.getByRole("button", { name: "Read session service", exact: true }).click()
+  await page.getByText("Count: 7; label: changed", { exact: true }).waitFor()
+  await page.getByRole("button", { name: "Metrics: 0", exact: true }).click()
+  await page.getByRole("button", { name: "Metrics: 1", exact: true }).waitFor()
+  await page.getByRole("button", { name: "Reset probe", exact: true }).click()
+  await page.getByText("Builds: 3; status: ready; shared: yes", { exact: true }).waitFor()
+  await page.getByRole("button", { name: "Use stale controls", exact: true }).click()
+  await page.getByText(/SessionChanged: reacquire controls after reset/).waitFor()
+  await page.getByRole("button", { name: "Unmount host", exact: true }).click()
+  await page.getByRole("button", { name: "Read lifecycle", exact: true }).click()
+  await page.getByText("Opened: 2; closed: 2", { exact: true }).waitFor()
+  console.log(
+    "ok   shared registry retry, session services, granular selector, reset controls, bridge lifecycle and startup boundary",
+  )
+}
 const deadline = setTimeout(() => {
   console.error("Journey timed out")
   process.exit(1)
@@ -118,9 +154,20 @@ const errors: string[] = []
 try {
   const page = await browser.newPage()
   page.setDefaultTimeout(10_000)
-  page.on("pageerror", (error) => errors.push(error.message))
+  page.on("pageerror", (error) => {
+    errors.push(error.message)
+    console.error(error.message)
+  })
+  page.on("console", (message) => {
+    if (message.type() === "error") {
+      console.error(message.text())
+    }
+  })
   await journey(page)
   assert.deepEqual(errors, [])
+  const probes = await browser.newPage()
+  probes.setDefaultTimeout(10_000)
+  await bindings(probes)
 } finally {
   clearTimeout(deadline)
   await browser.close()

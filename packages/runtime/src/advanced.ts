@@ -157,3 +157,5 @@ export function mountOwned<D extends Definition>(
     },
   }
 }
+
+export { createRouteRegistry } from "./route-registry.ts"

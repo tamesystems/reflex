@@ -31,6 +31,7 @@ const implement = (
   role: "screen" | "service" | "fixture",
   spec: Implementation,
 ) => {
+  Object.defineProperty(contract, "name", { value: authorName(contract) })
   const capability = defineCapability({
     name: authorName(contract),
     state: contract.state,
@@ -63,6 +64,7 @@ const implement = (
         }),
   })
   return Object.assign(capability, {
+    "~reflex": { ...capability["~reflex"], contract },
     [SCREEN_CONTRACT]: contract[SCREEN_CONTRACT],
     [AUTHOR]: { capability, contract, role },
   })

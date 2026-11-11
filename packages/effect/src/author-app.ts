@@ -8,7 +8,13 @@ import { fixtureLayer, bindFixtureHandlers } from "./author-fixtures.ts"
 import type * as Contract from "./author-contracts.ts"
 import type * as M from "./author-model.ts"
 import type { Erased } from "./erased.ts"
-import { APP_HOST_ADAPTER, type AppHost, type ConsumerDefinition } from "@reflex/runtime/internal"
+import {
+  APP_HOST_ADAPTER,
+  DEFINITION_IDENTITY,
+  definitionIdentity,
+  type AppHost,
+  type ConsumerDefinition,
+} from "@reflex/runtime/internal"
 
 const HOST = APP_HOST_ADAPTER
 type DefMap<D> = { readonly [P in Extract<D, { name: string }> as P["name"]]: P }
@@ -30,6 +36,7 @@ export const legacyApp = <N extends string, D, V, S extends M.ScenarioMap, K ext
 } => (app as Erased)[HOST]
 
 interface Spec {
+  readonly identity?: object
   readonly name: string
   readonly navigation?: Erased
   readonly screens?: readonly AuthorDefinition[]
@@ -65,6 +72,19 @@ const validateDefinitions = (definitions: readonly AuthorDefinition[]) => {
       throw new Error(`${definition.name} is declared more than once`)
     }
     names.add(definition.name)
+  }
+}
+
+const validateDefault = (
+  scenarios: Record<string, Scenario>,
+  defaultScenario: string,
+  explicit: string | undefined,
+) => {
+  if (!Object.hasOwn(scenarios, defaultScenario)) {
+    throw new Error(`withScenarios defaultScenario must exist: ${defaultScenario}`)
+  }
+  if (Object.keys(scenarios).length > 1 && explicit === undefined) {
+    throw new Error("Apps with multiple scenarios require defaultScenario")
   }
 }
 
@@ -113,12 +133,7 @@ const buildApp = (spec: Spec): Erased => {
     }),
   )
   const defaultScenario = spec.defaultScenario ?? Object.keys(scenarios)[0] ?? "default"
-  if (!Object.hasOwn(scenarios, defaultScenario)) {
-    throw new Error(`withScenarios defaultScenario must exist: ${defaultScenario}`)
-  }
-  if (Object.keys(scenarios).length > 1 && spec.defaultScenario === undefined) {
-    throw new Error("Apps with multiple scenarios require defaultScenario")
-  }
+  validateDefault(scenarios, defaultScenario, spec.defaultScenario)
   const host = legacyDefineApp({
     name: spec.name,
     root: root as Erased,
@@ -130,6 +145,7 @@ const buildApp = (spec: Spec): Erased => {
       ...Object.values(normalized).flatMap((s) => s.fixtures),
     ]) as unknown as Record<string, ConsumerDefinition>,
   })
+  Object.assign(host, { [DEFINITION_IDENTITY]: spec.identity ?? definitionIdentity(host) })
   return {
     nodes: host.nodes,
     scenarioNames: host.scenarioNames,
@@ -150,6 +166,7 @@ const buildApp = (spec: Spec): Erased => {
       }
       return buildApp({
         ...spec,
+        identity: definitionIdentity(host),
         scenarios: { ...normalized, ...extra },
         defaultScenario: options?.defaultScenario ?? defaultScenario,
         fixtures: options?.fixtures ?? spec.fixtures ?? [],

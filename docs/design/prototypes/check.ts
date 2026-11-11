@@ -59,12 +59,15 @@ for (const file of authored) {
 if (blocks.length !== authored.length) {
   throw new Error("Spec has an unextracted example")
 }
-if (process.argv.includes("--real")) {
+const real = process.argv.includes("--real")
+if (real) {
   const result = tsc(join(home, "real.json"))
   console.log(
-    `Real inventory, plain and live-counter author examples: passed (${result.instantiations} instantiations)`,
+    `Real inventory, plain, live-counter and web examples: passed (${result.instantiations} instantiations)`,
   )
-  process.exit(0)
+  if (!process.argv.includes("--performance")) {
+    process.exit(0)
+  }
 }
 function checkPublicExamples() {
   const config = ts.readConfigFile(join(home, "examples.json"), ts.sys.readFile)
@@ -112,73 +115,80 @@ function checkPublicExamples() {
     }
   }
 }
-checkPublicExamples()
-const checker = tsc(join(home, "checker.json"))
-const examples = tsc(join(home, "examples.json"))
-// Check our declaration bodies as well as calls; upstream .d.ts errors are excluded
-// by path, never target errors. The normal example project uses skipLibCheck like repo.
-const declarations = tsc(join(home, "examples.json"), null, ["--skipLibCheck", "false"])
-if (/^docs\/design\/prototypes\/.*error TS/m.test(declarations.output)) {
-  throw new Error(declarations.output)
-}
-const negative = tsc(join(home, "negative.json"), true)
-const diagnostics = [
-  ...negative.output.matchAll(
-    /^(.+?)\((\d+),(\d+)\): error (TS\d+): ([\s\S]*?)(?=^.+?\(\d+,\d+\): error TS|^Files:|$(?![\s\S]))/gm,
-  ),
-].map((m) => ({
-  file: resolve(root, m[1] ?? ""),
-  line: Number(m[2]),
-  column: Number(m[3]),
-  text: m[0],
-  used: false,
-}))
-const cases = files(join(home, "negative")).flatMap((file) =>
-  readFileSync(file, "utf8")
-    .split("\n")
-    .flatMap((line, i) => {
-      const m = /@case ([\w-]+) \| (.+)/.exec(line)
-      return m ? [{ id: m[1], marker: m[2] ?? "", file, line: i + 2 }] : []
-    }),
-)
-for (const c of cases) {
-  const matches = diagnostics.filter((d) => d.file === c.file && d.line === c.line)
-  const precise = matches.some((d) => {
-    const custom = [...d.text.matchAll(/Msg<([^>]+)>/g)].flatMap((m) =>
-      [...(m[1] ?? "").matchAll(/"([^"]+)"/g)].map((v) => v[1]),
-    )
-    const sentences = d.text.split("\n").map((line) => line.replace(/^.*error TS\d+: /, "").trim())
-    return custom.includes(c.marker) || (c.marker.endsWith(".") && sentences.includes(c.marker))
-  })
-  if (!precise) {
-    throw new Error(
-      `${c.id}: missing '${c.marker}' at ${relative(root, c.file)}:${c.line}\n${matches.map((d) => d.text).join("\n")}`,
-    )
+let checker = { instantiations: 0 }
+let examples = { instantiations: 0 }
+let negative = { instantiations: 0, output: "" }
+let cases: { id: string | undefined; marker: string; file: string; line: number }[] = []
+if (!real) {
+  checkPublicExamples()
+  checker = tsc(join(home, "checker.json"))
+  examples = tsc(join(home, "examples.json"))
+  // Check our declaration bodies as well as calls; upstream .d.ts errors are excluded
+  // by path, never target errors. The normal example project uses skipLibCheck like repo.
+  const declarations = tsc(join(home, "examples.json"), null, ["--skipLibCheck", "false"])
+  if (/^docs\/design\/prototypes\/.*error TS/m.test(declarations.output)) {
+    throw new Error(declarations.output)
   }
-  for (const d of matches) {
-    d.used = true
-  }
-}
-if (diagnostics.some((d) => !d.used)) {
-  throw new Error(
-    `Unexpected diagnostics:\n${diagnostics
-      .filter((d) => !d.used)
-      .map((d) => d.text)
-      .join("\n")}`,
+  negative = tsc(join(home, "negative.json"), true)
+  const diagnostics = [
+    ...negative.output.matchAll(
+      /^(.+?)\((\d+),(\d+)\): error (TS\d+): ([\s\S]*?)(?=^.+?\(\d+,\d+\): error TS|^Files:|$(?![\s\S]))/gm,
+    ),
+  ].map((m) => ({
+    file: resolve(root, m[1] ?? ""),
+    line: Number(m[2]),
+    column: Number(m[3]),
+    text: m[0],
+    used: false,
+  }))
+  cases = files(join(home, "negative")).flatMap((file) =>
+    readFileSync(file, "utf8")
+      .split("\n")
+      .flatMap((line, i) => {
+        const m = /@case ([\w-]+) \| (.+)/.exec(line)
+        return m ? [{ id: m[1], marker: m[2] ?? "", file, line: i + 2 }] : []
+      }),
   )
-}
-// Marker locations are asserted independently of the table. Keep the table tied to it.
-for (const c of cases) {
-  const row = spec.split("\n").find((line) => new RegExp(`\\|\\s+${c.id}\\s+\\|`).test(line))
-  const location = `${relative(home, c.file).replaceAll("\\", "/")}#L${c.line}`
-  if (!row?.includes(`\`${c.marker.replaceAll("|", "\\|")}\``) || !row.includes(location)) {
-    throw new Error(`Misuse table drift for ${c.id}: expected marker and ${location}`)
+  for (const c of cases) {
+    const matches = diagnostics.filter((d) => d.file === c.file && d.line === c.line)
+    const precise = matches.some((d) => {
+      const custom = [...d.text.matchAll(/Msg<([^>]+)>/g)].flatMap((m) =>
+        [...(m[1] ?? "").matchAll(/"([^"]+)"/g)].map((v) => v[1]),
+      )
+      const sentences = d.text
+        .split("\n")
+        .map((line) => line.replace(/^.*error TS\d+: /, "").trim())
+      return custom.includes(c.marker) || (c.marker.endsWith(".") && sentences.includes(c.marker))
+    })
+    if (!precise) {
+      throw new Error(
+        `${c.id}: missing '${c.marker}' at ${relative(root, c.file)}:${c.line}\n${matches.map((d) => d.text).join("\n")}`,
+      )
+    }
+    for (const d of matches) {
+      d.used = true
+    }
+  }
+  if (diagnostics.some((d) => !d.used)) {
+    throw new Error(
+      `Unexpected diagnostics:\n${diagnostics
+        .filter((d) => !d.used)
+        .map((d) => d.text)
+        .join("\n")}`,
+    )
+  }
+  // Marker locations are asserted independently of the table. Keep the table tied to it.
+  for (const c of cases) {
+    const row = spec.split("\n").find((line) => new RegExp(`\\|\\s+${c.id}\\s+\\|`).test(line))
+    const location = `${relative(home, c.file).replaceAll("\\", "/")}#L${c.line}`
+    if (!row?.includes(`\`${c.marker.replaceAll("|", "\\|")}\``) || !row.includes(location)) {
+      throw new Error(`Misuse table drift for ${c.id}: expected marker and ${location}`)
+    }
+  }
+  if (new Set(cases.map((c) => c.id)).size !== cases.length) {
+    throw new Error("Duplicate negative case ID")
   }
 }
-if (new Set(cases.map((c) => c.id)).size !== cases.length) {
-  throw new Error("Duplicate negative case ID")
-}
-
 const generated = join(home, ".generated")
 mkdirSync(generated, { recursive: true })
 const measurements: {
@@ -209,7 +219,10 @@ for (const n of [0, 100, 200, 400]) {
     writeFileSync(join(generated, "scale.ts"), source)
     writeFileSync(
       config,
-      JSON.stringify({ extends: "../examples.json", include: ["../api/**/*.d.ts", "./scale.ts"] }),
+      JSON.stringify({
+        extends: real ? "../real.json" : "../examples.json",
+        include: real ? ["./scale.ts"] : ["../api/**/*.d.ts", "./scale.ts"],
+      }),
     )
     const measurement = tsc(config)
     measurements.push({
@@ -257,9 +270,16 @@ const repeated = measurements
 // contracts, codecs, guards, params, navigation, routes and narrowed feature hooks.
 const maxSlope = Math.max(...slopes.filter((s) => s.hooks === 1).map((s) => s.msPerScreen))
 const results = {
+  mode: real ? "real-packages" : "reference-declarations",
   typescript: ts.version,
   authoredFiles: authored.length,
-  negativeCases: cases.length,
+  negativeCases: real
+    ? ["apps/web/src/api.types.ts", "apps/web/src/bindings.types.tsx"].reduce(
+        (count, file) =>
+          count + [...readFileSync(join(root, file), "utf8").matchAll(/@ts-expect-error/g)].length,
+        0,
+      )
+    : cases.length,
   compiledFiles: authored.filter((file) => !file.endsWith(".json")).length,
   jsonFiles: authored.filter((file) => file.endsWith(".json")).length,
   checker: checker.instantiations,
@@ -271,7 +291,10 @@ const results = {
   maxSlope,
 }
 if (process.env.REFLEX_RECORD_TYPE_PERF === "1") {
-  writeFileSync(join(home, "results.json"), `${JSON.stringify(results, null, 2)}\n`)
+  writeFileSync(
+    join(home, real ? "real-results.json" : "results.json"),
+    `${JSON.stringify(results, null, 2)}\n`,
+  )
 }
 console.log(JSON.stringify(results, null, 2))
 
