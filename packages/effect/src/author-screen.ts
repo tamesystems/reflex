@@ -1,3 +1,4 @@
+import type { ConsumerDefinition } from "@reflex/runtime/internal"
 import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
 import * as Schema from "effect/Schema"
@@ -12,7 +13,7 @@ export const AUTHOR = Symbol("reflex/author-definition")
 /** Class names are JavaScript implementation details; the contract declares its name. */
 export const authorName = (contract: Erased): string =>
   contract[SCREEN_CONTRACT]?.key ?? contract.name
-export interface AuthorDefinition {
+export interface AuthorDefinition extends ConsumerDefinition {
   readonly name: string
   readonly [AUTHOR]: {
     readonly capability: Erased

@@ -2508,6 +2508,17 @@ export const Metrics = defineService({
 
 ## Implementation deviations
 
+C (`@reflex/test`): store journey `open` takes the validator's encoded input params;
+Standard Schema offers no inverse for one-way transforms, so arbitrary decoded params
+cannot be validated/re-encoded safely. Effect routes retain decoded params and encode
+through their codec. The test package accepts Duration.Input structurally, preserving its
+Effect-free dependency boundary. It retains ExploreResult summaries and the legacy
+AppHost/action-map APIs while adding the compiled API. The raw seam is also available as
+session.raw. `app.open` is an additive control-only protocol method for the requested
+host/store route operation. Fingerprints use available public declaration schemas;
+store projections have no public state/error schema, so projected errors are marked
+opaque. See ADR 0028.
+
 A1 retains legacy overloads and adds `legacyApp` under `@reflex/effect/internal` while
 old consumers migrate. Inventory's `scenarios.ts` exports the authored value as
 `authoredApp` and adapts its default export to the existing journey API. Feature and

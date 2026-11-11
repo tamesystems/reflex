@@ -429,6 +429,28 @@ const checkInitialState = <S>(
   }
 }
 
+const hasStoreParams = (params: { readonly jsonSchema: JsonSchema } | undefined) =>
+  params !== undefined &&
+  (params.jsonSchema.type !== "object" ||
+    Object.keys(params.jsonSchema.properties ?? {}).length > 0)
+const storeParamsSchema = (params: { readonly jsonSchema: JsonSchema } | undefined): JsonSchema =>
+  params?.jsonSchema ?? { type: "object", properties: {}, required: [] }
+const actionDescriptors = <S>(actions: Readonly<Record<string, AnyStoreAction<S>>>) =>
+  Object.fromEntries(
+    Object.entries(actions).map(([name, action]) => [
+      name,
+      {
+        input: action.input?.jsonSchema ?? {},
+        error:
+          action.error === undefined
+            ? {}
+            : action.projectError === undefined
+              ? standardInput(action.error).jsonSchema
+              : { projected: true },
+      },
+    ]),
+  )
+
 /** Capture a store's projection and exact action map once, creating a fresh store per mount. */
 export const defineStoreNode = <
   // biome-ignore lint/suspicious/noExplicitAny: factory variance only; handler inputs are checked separately.
@@ -469,10 +491,7 @@ export const defineStoreNode = <
   }
   return {
     [STORE_AUTHOR]: {
-      hasParams:
-        params !== undefined &&
-        (params.jsonSchema.type !== "object" ||
-          Object.keys(params.jsonSchema.properties ?? {}).length > 0),
+      hasParams: hasStoreParams(params),
       state: undefined as P,
       params: undefined as DecodedStoreInput<Params>,
       encodedParams: undefined as EncodedStoreInput<Params>,
@@ -486,7 +505,8 @@ export const defineStoreNode = <
     },
     [DEFINITION_IDENTITY]: identity,
     "~reflex": {
-      paramsSchema: () => params?.jsonSchema ?? { type: "object", properties: {}, required: [] },
+      descriptor: () => ({ params: params?.jsonSchema ?? {}, actions: actionDescriptors(actions) }),
+      paramsSchema: () => storeParamsSchema(params),
       decodeParams: (raw: unknown) => params?.decode(raw) ?? {},
       input: (_name: string, args: readonly unknown[]) => args[0] as Json | undefined,
       state: (raw: Json): DeepReadonly<P> => raw as DeepReadonly<P>,

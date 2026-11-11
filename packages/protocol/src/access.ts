@@ -38,6 +38,7 @@ const OBSERVING: ReadonlySet<Method> = new Set([
 
 /** Refused for anything less than control, whatever actions are named. */
 const CONTROLLING: ReadonlySet<Method> = new Set([
+  "app.open",
   "app.reset",
   "app.advanceTime",
   "session.shutdown",

@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
-import { INVENTORY_HTTP_BODY_BYTES_MAX } from "../src/limits.ts"
-import { startInventoryServer } from "../server.ts"
-import { QUANTITY_MAX } from "../src/domain.ts"
+import { INVENTORY_HTTP_BODY_BYTES_MAX } from "../examples/inventory/src/limits.ts"
+import { startInventoryServer } from "../examples/inventory/server.ts"
+import { QUANTITY_MAX } from "../examples/inventory/src/domain.ts"
 
 // HTTP server tests are transport tests, not guarded behavior journeys.
 test("local API validates requests, persists, fails one save, and resets", async () => {

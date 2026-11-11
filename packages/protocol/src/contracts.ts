@@ -158,6 +158,7 @@ export interface ScenarioDescriptor {
 }
 
 export interface DescribeResult {
+  readonly descriptorFingerprint?: string
   readonly protocolVersion: string
   readonly app: string
   readonly sessionId: string
@@ -220,6 +221,10 @@ type Empty = Record<string, never>
 
 export interface Methods {
   readonly "app.describe": { readonly params: Empty; readonly result: DescribeResult }
+  readonly "app.open": {
+    readonly params: { readonly name: string; readonly params: Json }
+    readonly result: NodeSnapshot
+  }
   readonly "app.inspect": { readonly params: InspectParams; readonly result: InspectResult }
   readonly "app.dispatch": { readonly params: DispatchParams; readonly result: OperationInfo }
   readonly "app.operation": {

@@ -136,12 +136,12 @@ const Errors = defineCapability({
 export const declaredErrors = async (
   node: import("@reflex/test").JourneyNode<typeof Errors, unknown>,
 ) => {
-  const { error } = await node.expectFailure.Fail()
-  if (error.tag === "A") {
-    const value: string = error.data.a
+  const { error } = await node.actions.Fail.expectError()
+  if (error._tag === "A") {
+    const value: string = error.a
     void value
     // @ts-expect-error Checking the declared tag narrows its data.
-    error.data.b
+    error.b
   }
   const completed: "completed" = (await node.actions.Fail()).status
   void completed

@@ -5,7 +5,14 @@ import {
   type NodeId,
   ProtocolError,
 } from "@reflex/protocol"
-import type { AppHost, ConsumerDefinition, ScenarioName } from "@reflex/runtime/internal"
+import {
+  APP_HOST_ADAPTER,
+  type AppHost,
+  type ConsumerDefinition,
+  type ScenarioName,
+} from "@reflex/runtime/internal"
+import type { JourneyApp, JourneyClientFor, Scenarios } from "./app-types.ts"
+import { bindAppJourney, type AuthorApp, type AnySession } from "./app-journey.ts"
 import type { InferState } from "./journey-client.ts"
 import { createTestApp, type TestApp } from "./test-app.ts"
 
@@ -41,6 +48,7 @@ interface WalkOptions {
   readonly scenario?: string
   readonly runCount?: number
   readonly stepCount?: number
+  readonly steps?: number
   readonly seed?: number
   /**
    * Real values for actions whose schema cannot know them, such as an id that
@@ -49,6 +57,7 @@ interface WalkOptions {
   readonly knownInputs?: ReadonlyArray<NodeInputs>
   /** Return a message when the app is in a state that must never happen. */
   readonly invariant?: (snapshot: InspectResult) => string | undefined
+  readonly journeyInvariant?: (session: TestApp) => Promise<void>
 }
 
 export interface ExploreFailure {
@@ -89,59 +98,33 @@ export type ExplorationInputs<H> = {
     >
   }
 }
-export type ExploreOptions<H> = Omit<WalkOptions, "scenario" | "knownInputs"> & {
-  readonly scenario?: ScenarioName<H>
+export type ExploreOptions<H, K extends ScenarioName<H> = ScenarioName<H>> = Omit<
+  WalkOptions,
+  "scenario" | "knownInputs" | "invariant" | "journeyInvariant"
+> & {
+  readonly scenario?: K
+  readonly invariant?: H extends JourneyApp & { readonly services: unknown }
+    ? (session: JourneyClientFor<H, Extract<K, Scenarios<H>>>) => Promise<void>
+    : (snapshot: InspectResult) => string | undefined
+  readonly inputs?: ExplorationInputs<H>
   readonly knownInputs?: ExplorationInputs<H>
   readonly invariants?: ExplorationInvariants<H>
 }
-export const explore = async <H extends AppHost>(
-  host: H,
-  input: ExploreOptions<NoInfer<H>> = {},
+export const explore = async <
+  H extends AppHost | JourneyApp,
+  K extends ScenarioName<H> = H extends { defaultScenario: infer D }
+    ? Extract<D, ScenarioName<H>>
+    : ScenarioName<H>,
+>(
+  app: H,
+  input: ExploreOptions<NoInfer<H>, K> = {},
 ): Promise<ExploreResult> => {
-  const options: WalkOptions = {
-    ...input,
-    knownInputs: Object.entries(input.knownInputs ?? {}).map(([key, inputs]) => {
-      const nodes = ("nodes" in host ? host.nodes : {}) as Record<string, ConsumerDefinition>
-      const definition = nodes[key]
-      if (definition === undefined) {
-        throw new Error(`Unknown exploration node "${key}"`)
-      }
-      return {
-        node: definition.name,
-        inputs: Object.fromEntries(
-          Object.entries(inputs as Record<string, readonly unknown[]>).map(([action, values]) => [
-            action,
-            values.map((value) => {
-              const encoded = definition["~reflex"].input(action, [value])
-              return encoded === undefined ? {} : encoded
-            }),
-          ]),
-        ),
-      }
-    }),
-    invariant: (snapshot) => {
-      const failure = input.invariant?.(snapshot)
-      if (failure !== undefined || snapshot.node === null) {
-        return failure
-      }
-      const nodes = ("nodes" in host ? host.nodes : {}) as Record<string, ConsumerDefinition>
-      const entry = Object.entries(nodes).find(
-        ([, definition]) => definition.name === snapshot.node?.name,
-      )
-      if (entry === undefined) {
-        return undefined
-      }
-      const [key, definition] = entry
-      const check = (
-        input.invariants as Record<string, (state: unknown) => string | undefined> | undefined
-      )?.[key]
-      return check?.(definition["~reflex"].state(snapshot.node.state))
-    },
-  }
+  const host = (APP_HOST_ADAPTER in app ? app[APP_HOST_ADAPTER] : app) as AppHost
+  const options = walkOptions(app, host, input)
   const runCount = requireCount("runCount", options.runCount ?? RUN_COUNT_DEFAULT, RUN_COUNT_MAX)
   const stepCount = requireCount(
     "stepCount",
-    options.stepCount ?? STEP_COUNT_DEFAULT,
+    options.steps ?? options.stepCount ?? STEP_COUNT_DEFAULT,
     STEP_COUNT_MAX,
   )
   const firstSeed = requireSeed(options.seed ?? SEED_DEFAULT, runCount)
@@ -166,6 +149,75 @@ export const explore = async <H extends AppHost>(
     }
   }
   return { runCount, actionsDispatched, actionsCovered: [...covered].sort() }
+}
+
+const walkOptions = <H extends AppHost | JourneyApp, K extends ScenarioName<H>>(
+  app: H,
+  host: AppHost,
+  input: ExploreOptions<NoInfer<H>, K>,
+): WalkOptions => {
+  const options: WalkOptions = {
+    ...input,
+    knownInputs: Object.entries(input.inputs ?? input.knownInputs ?? {}).map(([key, inputs]) => {
+      const nodes = ("nodes" in app ? app.nodes : {}) as Record<string, ConsumerDefinition>
+      const definition = nodes[key]
+      if (definition === undefined) {
+        throw new Error(`Unknown exploration node "${key}"`)
+      }
+      return {
+        node: definition.name,
+        inputs: Object.fromEntries(
+          Object.entries(inputs as Record<string, readonly unknown[]>).map(([action, values]) => [
+            action,
+            values.map((value) => {
+              const encoded = definition["~reflex"].input(action, [value])
+              return encoded === undefined ? {} : encoded
+            }),
+          ]),
+        ),
+      }
+    }),
+    journeyInvariant: async (session) => {
+      if ("services" in app && input.invariant !== undefined) {
+        const journey = bindAppJourney(
+          app as AuthorApp,
+          session as unknown as AnySession,
+          input.scenario ?? host.defaultScenario,
+        )
+        await (input.invariant as (session: unknown) => Promise<void>)(journey)
+      }
+    },
+    invariant: (snapshot) => {
+      const failure =
+        "services" in app
+          ? undefined
+          : (input.invariant as ((snapshot: InspectResult) => string | undefined) | undefined)?.(
+              snapshot,
+            )
+      if (failure !== undefined) {
+        return failure
+      }
+      const definitions = ("nodes" in app ? app.nodes : {}) as Record<string, ConsumerDefinition>
+      for (const node of snapshot.tree ?? (snapshot.node === null ? [] : [snapshot.node])) {
+        const entry = Object.entries(definitions).find(
+          ([, definition]) => definition.name === node.name,
+        )
+        if (entry === undefined) {
+          continue
+        }
+        const [key, definition] = entry
+        const check = (
+          input.invariants as Record<string, (state: unknown) => string | undefined> | undefined
+        )?.[key]
+        const message = check?.(definition["~reflex"].state(node.state))
+        if (message !== undefined) {
+          return message
+        }
+      }
+      return undefined
+    },
+  }
+  return options
 }
 
 const requireCount = (name: string, value: number, maximum: number): number => {
@@ -237,6 +289,14 @@ const chooseInput = async (
   const knownInput = known?.[knownIndex]
   if (knownInput !== undefined) {
     return knownInput
+  }
+  const schema = node?.actions[choice.action]?.inputSchema
+  if (
+    schema?.type === "object" &&
+    schema.additionalProperties === false &&
+    Object.keys(schema.properties ?? {}).length === 0
+  ) {
+    return {}
   }
   const { input } = await app.client.request("app.sample", { ...choice, seed: sampleSeed })
   return input
@@ -314,13 +374,26 @@ const perform = async (
     }
     throw error
   }
-  return options.invariant?.(await client.request("app.inspect", {}))
+  return checkInvariants(app, options)
 }
 
 /** Starting can crash too, in work no step set off, and with no step to blame. */
 const initialProblem = async (app: TestApp, options: WalkOptions): Promise<string | undefined> => {
   const [defect] = app.takeDefects()
-  return defect ?? options.invariant?.(await app.client.request("app.inspect", {}))
+  return defect ?? checkInvariants(app, options)
+}
+
+const checkInvariants = async (app: TestApp, options: WalkOptions): Promise<string | undefined> => {
+  const message = options.invariant?.(await app.client.request("app.inspect", { tree: true }))
+  if (message !== undefined) {
+    return message
+  }
+  try {
+    await options.journeyInvariant?.(app)
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error)
+  }
+  return undefined
 }
 
 const refusalMessage = (error: ProtocolError, step: ExploreStep, mode: PerformMode) => {

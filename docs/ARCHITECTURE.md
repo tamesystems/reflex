@@ -86,7 +86,8 @@ packages/
               navigation.ts (defineNavigation: the stack, a scope per screen),
               app.ts (legacy AppHost lifecycle), author-*.ts (Screen, services, fixtures,
               action commands and ordered scenario composition), json-codec.ts, redaction.ts.
-  test/       createTestApp journeys and explore random walks, through the real protocol.
+  test/       App/scenario-typed createTestApp/connectJourney clients, raw protocol tests
+              and explore random walks, through the real protocol.
   cli/        The reflex command. cli.ts parses; commands.ts does; session.ts runs and
               finds daemons; bridge-server.ts accepts apps; mcp.ts serves MCP tools.
               See packages/cli/README.md.
@@ -293,6 +294,18 @@ again, which is how to recover.
 On a device the same request goes through `LiveSessions.reset`, and the screen shows the
 new session. Live starts use the runtime's default start budget (30 s), not
 `REFLEX_START_TIMEOUT_MS`, which configures only headless sessions.
+
+### 4.8 Opening a host-owned screen from a journey
+
+`session.open(Contract, params)` resolves the registered definition, then sends `app.open`.
+Both controllers validate params through that definition and mount through the same
+scenario-local route factory used by the UI binding. The runtime sets focus; the journey
+binds the exact returned node id. Existing node, name, JSON and control-work limits apply.
+An aborted or closed session disposes a route that finishes mounting late.
+
+App-typed journeys are described in ADR 0028. The descriptor fingerprint in describe/reset
+covers registered screen/service schemas and actions and excludes scenarios and fixtures.
+RPC owns target endpoint naming and Windows secret checks, shared by CLI and connectJourney.
 
 ## 5. State and storage
 

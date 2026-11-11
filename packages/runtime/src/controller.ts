@@ -1,3 +1,4 @@
+import { openSessionRoute } from "./open-route.ts"
 import {
   type AccessPolicy,
   assert,
@@ -44,6 +45,7 @@ export type ScenarioName<H> = H extends { readonly scenarioNames: ReadonlyArray<
 
 /** Something that can start sessions: the seam between protocol and app. */
 export interface AppHost {
+  readonly descriptorFingerprint?: string
   readonly name: string
   readonly scenarios: ReadonlyArray<ScenarioDescriptor>
   readonly defaultScenario: string
@@ -145,6 +147,11 @@ class SessionController implements Controller {
 
   private readonly handlers: Handlers = {
     "app.describe": () => this.describe(),
+    "app.open": ({ name, params }, signal) =>
+      this.withinControlDeadline(
+        (controlSignal) => openSessionRoute(this.host, this.session(), name, params, controlSignal),
+        signal,
+      ),
     "app.inspect": (params) => this.session().runtime.inspect(params),
     "app.dispatch": (params, signal) =>
       this.session().runtime.dispatch(params, signal === undefined ? {} : { signal }),
@@ -228,6 +235,9 @@ class SessionController implements Controller {
     return {
       protocolVersion: PROTOCOL_VERSION,
       app: this.host.name,
+      ...(this.host.descriptorFingerprint === undefined
+        ? {}
+        : { descriptorFingerprint: this.host.descriptorFingerprint }),
       sessionId: runtime.sessionId,
       scenario: this.scenario,
       scenarios: this.host.scenarios,

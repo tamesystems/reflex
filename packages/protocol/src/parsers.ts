@@ -400,6 +400,7 @@ const operationParams = object({ operationId })
 /** One parser per method: adding a method without one is a compile error. */
 export const paramParsers: { readonly [M in Method]: Parser<Methods[M]["params"]> } = {
   "app.describe": noParams,
+  "app.open": object({ name: waitName, params: json }),
   "app.inspect": inspectParams,
   "app.dispatch": dispatchParams,
   "app.operation": operationParams,
@@ -518,7 +519,7 @@ const describeResult: Parser<DescribeResult> = object(
     scenarios: array(scenarioDescriptor),
     capabilities: object({ virtualTime: boolean }),
   },
-  { access: accessPolicyResult },
+  { access: accessPolicyResult, descriptorFingerprint: string },
 )
 
 const subscribeResult: Parser<SubscribeResult> = object({
@@ -532,6 +533,7 @@ const acknowledged = object({ ok: exactly(true) })
 /** One parser per method, for clients: a server is a boundary too. */
 export const resultParsers: { readonly [M in Method]: Parser<Methods[M]["result"]> } = {
   "app.describe": describeResult,
+  "app.open": nodeSnapshot,
   "app.inspect": inspectResult,
   "app.dispatch": operationInfo,
   "app.operation": operationInfo,

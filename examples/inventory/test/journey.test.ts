@@ -1,47 +1,40 @@
-import { afterEach, expect, test } from "bun:test"
-import { createTestAppPool, includes } from "@reflex/test"
-import app from "../src/scenarios.ts"
-import { InventoryList } from "../src/features/inventory-list.ts"
-import { InventoryDetail } from "../src/features/inventory-detail.ts"
+import { expect, test } from "bun:test"
+import { connectJourney, createTestApp, includes } from "@reflex/test"
+import { authoredApp as app } from "../src/scenarios.ts"
+import { InventoryList, InventoryDetail } from "../src/screens.ts"
 import { InventoryFixture } from "../src/fixtures.ts"
 import { servicesJourney } from "../journeys/services.ts"
 
-const pool = createTestAppPool()
-afterEach(pool.disposeAll)
-
-test("a user edits and saves a product, then sees the updated list", async () => {
-  const session = await pool.open(app)
-  const list = await session.focused(InventoryList, { _tag: "ready" })
-  await list.actions.OpenProduct({ productId: "product-123" })
-  const detail = await session.focused(InventoryDetail, { _tag: "editing" })
-  await detail.actions.SetQuantity({ quantity: 12 })
-  expect((await detail.state()).quantity).toBe(12)
-  await detail.actions.Save()
-  await session.back()
-  await session.focused(InventoryList, { products: includes({ id: "product-123", quantity: 12 }) })
-})
-
-test("a server failure leaves the user's edits available for retry", async () => {
-  const session = await pool.open(app)
-  const list = await session.focused(InventoryList, { _tag: "ready" })
-  await list.actions.OpenProduct({ productId: "product-123" })
-  const detail = await session.focused(InventoryDetail, { _tag: "editing" })
-  await detail.actions.SetQuantity({ quantity: 19 })
-  const fixture = await session.node(InventoryFixture)
-  await fixture.actions.FailNextSave()
-  expect(await detail.expectFailure.Save()).toMatchObject({
-    status: "domain-error",
-    error: { tag: "ApiError" },
-  })
-  expect((await detail.state()).error).toBe("Server error")
-  await detail.actions.Save()
-  expect((await detail.state()).error).toBeNull()
-})
-
-test("the same behavior story runs with fixture layers and real services", async () => {
-  const session = await pool.open(app)
+test("one story through headless services", async () => {
+  await using session = await createTestApp(app, { scenario: "inventory-with-products" })
   const fixture = await session.node(InventoryFixture)
   await servicesJourney(session, async () => {
-    await fixture.actions.FailNextSave()
+    await fixture.actions.FailNextSave.expectCompleted()
+  })
+})
+
+test("slow save times out without losing edits", async () => {
+  await using session = await createTestApp(app, { scenario: "slow-network" })
+  const list = await session.focused(InventoryList, { _tag: "ready" })
+  await list.actions.OpenProduct.expectCompleted({ productId: "product-123" })
+  const detail = await session.focused(InventoryDetail, { _tag: "editing" })
+  await detail.actions.SetQuantity.expectCompleted({ quantity: 12 })
+  const saving = await detail.actions.Save.start()
+  await session.focused(InventoryDetail, { _tag: "saving" })
+  await session.advanceTime("5 seconds")
+  expect(await saving.expectError()).toMatchObject({ status: "error" })
+  await session.focused(InventoryDetail, { _tag: "editing", quantity: 12, error: "Save timed out" })
+  await session.back()
+  await session.focused(InventoryList, { products: includes({ id: "product-123", quantity: 5 }) })
+})
+
+test.skipIf(process.env.REFLEX_LIVE !== "1")("the same story through the device", async () => {
+  await using session = await connectJourney(app, {
+    target: "device",
+    scenario: "inventory-with-products",
+  })
+  const fixture = await session.node(InventoryFixture)
+  await servicesJourney(session, async () => {
+    await fixture.actions.FailNextSave.expectCompleted()
   })
 })

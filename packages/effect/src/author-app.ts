@@ -12,6 +12,7 @@ import {
   APP_HOST_ADAPTER,
   DEFINITION_IDENTITY,
   definitionIdentity,
+  descriptorFingerprint,
   type AppHost,
   type ConsumerDefinition,
 } from "@reflex/runtime/internal"
@@ -88,6 +89,17 @@ const validateDefault = (
   }
 }
 
+const identifyHost = (
+  host: AppHost,
+  spec: Spec,
+  screens: readonly AuthorDefinition[],
+  services: readonly AuthorDefinition[],
+) => {
+  Object.assign(host, {
+    [DEFINITION_IDENTITY]: spec.identity ?? definitionIdentity(host),
+    descriptorFingerprint: descriptorFingerprint(spec.name, screens, services),
+  })
+}
 const buildApp = (spec: Spec): Erased => {
   const scenarios = spec.scenarios ?? { default: {} }
   const nav = spec.navigation?.[NAVIGATION]
@@ -145,7 +157,7 @@ const buildApp = (spec: Spec): Erased => {
       ...Object.values(normalized).flatMap((s) => s.fixtures),
     ]) as unknown as Record<string, ConsumerDefinition>,
   })
-  Object.assign(host, { [DEFINITION_IDENTITY]: spec.identity ?? definitionIdentity(host) })
+  identifyHost(host, spec, screens, services)
   return {
     nodes: host.nodes,
     scenarioNames: host.scenarioNames,

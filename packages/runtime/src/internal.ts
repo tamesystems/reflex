@@ -22,3 +22,7 @@ export { DEFINITION_IDENTITY, definitionIdentity, APP_HOST_ADAPTER } from "./def
 export { publishJson } from "./publication.ts"
 
 export { createRouteRegistry, type RouteLease, type RouteSnapshot } from "./route-registry.ts"
+
+export { descriptorFingerprint } from "./descriptor.ts"
+
+export { openSessionRoute } from "./open-route.ts"

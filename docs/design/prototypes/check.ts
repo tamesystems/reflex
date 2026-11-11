@@ -61,9 +61,35 @@ if (blocks.length !== authored.length) {
 }
 const real = process.argv.includes("--real")
 if (real) {
+  // The plumbing file also exercises live APIs outside this implementation step.
+  // Compile its exact test functions against real packages without substituting declarations.
+  const plumbing = ts.createSourceFile(
+    "plumbing.ts",
+    readFileSync(join(home, "examples/plumbing.ts"), "utf8"),
+    ts.ScriptTarget.Latest,
+    true,
+  )
+  const testFunctions = plumbing.statements.filter(
+    (node): node is ts.FunctionDeclaration =>
+      ts.isFunctionDeclaration(node) &&
+      ["remoteJourney", "pooledJourney"].includes(node.name?.text ?? ""),
+  )
+  if (testFunctions.length !== 2) {
+    throw new Error("Missing compiled test plumbing examples")
+  }
+  mkdirSync(join(home, ".generated"), { recursive: true })
+  writeFileSync(
+    join(home, ".generated/test-plumbing.ts"),
+    [
+      'import { createTestAppPool } from "@reflex/test"',
+      'import { createJourneyClient, type JourneyTransport } from "@reflex/test/advanced"',
+      'import app from "../examples/examples/plain/src/app.ts"',
+      ...testFunctions.map((node) => node.getText(plumbing)),
+    ].join("\n"),
+  )
   const result = tsc(join(home, "real.json"))
   console.log(
-    `Real inventory, plain, live-counter, web and mobile examples: passed (${result.instantiations} instantiations)`,
+    `Real author, host and test examples: passed (${result.instantiations} instantiations)`,
   )
   if (!process.argv.includes("--performance")) {
     process.exit(0)

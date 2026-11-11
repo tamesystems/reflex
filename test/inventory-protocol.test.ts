@@ -331,7 +331,8 @@ test("a route without params refuses junk from a deep link", async () => {
 
 test("the shared real-services behavior journey passes with guarded headless fixtures", async () => {
   const { servicesJourney } = await import("../examples/inventory/journeys/services.ts")
-  const session = await pool.open(app)
+  const { authoredApp } = await import("../examples/inventory/src/scenarios.ts")
+  const session = await pool.open(authoredApp)
   await servicesJourney(session, async () => {
     await session.raw.dispatchRaw("FailNextSave")
   })

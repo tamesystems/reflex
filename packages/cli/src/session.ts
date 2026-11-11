@@ -4,7 +4,6 @@ import {
   closeSync,
   existsSync,
   openSync,
-  readFileSync,
   writeFileSync,
   readSync,
   rmSync,
@@ -28,6 +27,7 @@ import { formatBridgeSetting } from "@reflex/protocol"
 import {
   type Client,
   connectSocket,
+  readTargetSecret,
   createBridgeController,
   serveSocket,
   serveStdio,
@@ -374,7 +374,7 @@ const parseHost = (value: unknown, module: string): AppHost => {
   if (!parsed.some((scenario) => scenario.name === defaultScenario)) {
     throw new Error(`${module} has no scenario "${defaultScenario}"`)
   }
-  return { name, scenarios: parsed, defaultScenario, start: start.bind(value) }
+  return { ...value, name, scenarios: parsed, defaultScenario, start: start.bind(value) }
 }
 
 const serveUntilShutdown = async (config: Config, controller: Controller): Promise<void> => {
@@ -583,15 +583,5 @@ const awaitRelease = async (config: Config, clock: Clock): Promise<void> => {
   }
 }
 
-const readLocalSecret = (config: Config): string | undefined => {
-  if (process.platform !== "win32") {
-    return undefined
-  }
-  checkSecretAcl(config.directory)
-  checkSecretAcl(config.authPath)
-  const secret = readFileSync(config.authPath, "utf8")
-  if (!/^[a-f0-9]{64}$/.test(secret)) {
-    throw new Error("Invalid local session secret")
-  }
-  return secret
-}
+const readLocalSecret = (config: Config): string | undefined =>
+  readTargetSecret(config.directory, config.target)

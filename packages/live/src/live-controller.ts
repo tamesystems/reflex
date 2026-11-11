@@ -1,3 +1,4 @@
+import { openSessionRoute } from "@reflex/runtime/internal"
 import {
   assert,
   type DescribeResult,
@@ -68,6 +69,14 @@ class LiveController implements Controller {
 
   private readonly handlers: Handlers = {
     "app.describe": async () => this.describe(await this.session()),
+    "app.open": async ({ name, params }, signal) => {
+      const session = await this.session()
+      const host = defined(this.sessions.host ?? undefined, "a live session has a host")
+      return this.withinControlDeadline(
+        (controlSignal) => openSessionRoute(host, session, name, params, controlSignal),
+        signal,
+      )
+    },
     "app.inspect": async (params) => (await this.session()).runtime.inspect(params),
     "app.dispatch": async (params, signal) =>
       (await this.session()).runtime.dispatch(params, signal === undefined ? {} : { signal }),
@@ -174,6 +183,9 @@ class LiveController implements Controller {
     return {
       protocolVersion: PROTOCOL_VERSION,
       app: host.name,
+      ...(host.descriptorFingerprint === undefined
+        ? {}
+        : { descriptorFingerprint: host.descriptorFingerprint }),
       sessionId: session.runtime.sessionId,
       scenario: defined(this.sessions.scenario ?? undefined, "a live session has a scenario"),
       scenarios: host.scenarios,

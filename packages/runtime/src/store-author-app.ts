@@ -1,3 +1,5 @@
+import { descriptorFingerprint } from "./descriptor.ts"
+import type { ConsumerDefinition } from "./node-handle.ts"
 import { DEFINITION_IDENTITY, definitionIdentity } from "./definition-identity.ts"
 import { STORE_AUTHOR, type JsonShape } from "./store-node.ts"
 import {
@@ -61,6 +63,7 @@ export type AuthorStoreApp<
   >,
   "withScenarios"
 > & {
+  readonly services: V[number]
   withScenarios<const E extends Record<string, Scenario<D[number] | V[number]>>>(
     extra: E,
     options?: { readonly defaultScenario?: keyof (S & E) & string },
@@ -150,6 +153,12 @@ function authorApp(spec: AuthorSpec): unknown {
     ...(spec.defaultScenario === undefined ? {} : { defaultScenario: spec.defaultScenario }),
   })
   return Object.assign(app, {
+    services,
+    descriptorFingerprint: descriptorFingerprint(
+      spec.name,
+      screens as unknown as ConsumerDefinition[],
+      services as unknown as ConsumerDefinition[],
+    ),
     withScenarios: (
       extra: Record<string, Scenario<AuthorStore>>,
       options?: { defaultScenario?: string },

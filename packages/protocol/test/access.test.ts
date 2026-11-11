@@ -40,7 +40,12 @@ const OBSERVING: ReadonlyArray<Method> = [
   "app.subscribe",
   "app.unsubscribe",
 ]
-const CONTROLLING: ReadonlyArray<Method> = ["app.reset", "app.advanceTime", "session.shutdown"]
+const CONTROLLING: ReadonlyArray<Method> = [
+  "app.open",
+  "app.reset",
+  "app.advanceTime",
+  "session.shutdown",
+]
 
 test("observing is open to every policy", () => {
   for (const policy of [control, observe, onlyAdd]) {

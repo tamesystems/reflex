@@ -6,7 +6,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./connection": "./src/server.ts"
+    "./connection": "./src/server.ts",
+    "./windows-security": "./src/windows-security.ts"
   },
   "dependencies": {
     "@reflex/protocol": "workspace:*",

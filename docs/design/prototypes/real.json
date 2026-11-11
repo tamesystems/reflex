@@ -28,7 +28,9 @@
       "@reflex/runtime/internal": ["../../../packages/runtime/src/internal.ts"],
       "@reflex/effect/internal": ["../../../packages/effect/src/internal.ts"],
       "@reflex/effect/advanced": ["../../../packages/effect/src/advanced.ts"],
-      "@reflex/live/dev": ["../../../packages/live/src/dev.ts"]
+      "@reflex/live/dev": ["../../../packages/live/src/dev.ts"],
+      "@reflex/test": ["../../../packages/test/src/index.ts"],
+      "@reflex/test/advanced": ["../../../packages/test/src/advanced.ts"]
     }
   },
   "include": [
@@ -43,6 +45,12 @@
     "examples/apps/mobile/**/*.tsx",
     "../../../apps/mobile/src/api.types.ts",
     "../../../apps/mobile/src/expo.types.tsx",
-    "examples/apps/mobile/**/*.js"
+    "examples/apps/mobile/**/*.js",
+    "examples/examples/inventory/test/**/*.ts",
+    "examples/examples/inventory/journeys/**/*.ts",
+    "../../../packages/test/test/author.types.ts",
+    "examples/reset.ts",
+    "examples/capabilities.tsx",
+    ".generated/test-plumbing.ts"
   ]
 }

@@ -57,7 +57,12 @@ test("the test kit needs no Effect and no app", () => {
 })
 
 test("the CLI needs no Effect and no app", () => {
-  const permit = allowing("@reflex/protocol", "@reflex/rpc", "@reflex/runtime")
+  const permit = allowing(
+    "@reflex/protocol",
+    "@reflex/rpc",
+    "@reflex/rpc/windows-security",
+    "@reflex/runtime",
+  )
   expect(violations("packages/cli/src", (s) => permit(s) || isNodeBuiltin(s))).toEqual([])
 })
 

@@ -105,7 +105,9 @@ export interface ConsumerDefinition<S = unknown, A = unknown> {
   readonly name: string
   readonly "~reflex": {
     readonly contract?: object
+    descriptor?(): unknown
     decodeParams?(raw: unknown): unknown
+    encodeParams?(decoded: unknown): import("@reflex/protocol").Json
     paramsSchema?(): import("@reflex/protocol").JsonSchema
     input(action: string, args: readonly unknown[]): import("@reflex/protocol").Json | undefined
     state(raw: import("@reflex/protocol").Json): S

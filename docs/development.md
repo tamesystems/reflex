@@ -419,3 +419,20 @@ plain's Effect-free Metro graph. The abandoned-status browser probe was verified
 fail with render-time acquisition restored, then pass with commit-time acquisition.
 Browser probes also cover advanced codec routing/encoding and observed versus ignored
 expected action errors; runtime tests cover ignored errors and defects.
+
+### Test API migration (C)
+
+Use `createTestApp(authoredApp)` or `pool.open(authoredApp)` for app/scenario-typed clients.
+Inventory retains its legacy default host for protocol/conformance consumers; its journeys
+import the named authored descriptor and screen contracts. The shared story requires only
+focused/back, so fixture and device-services clients both satisfy it. `connectJourney` uses
+REFLEX_DIR and the CLI's device endpoint; mobile services no longer supplies a transport.
+
+The public root exports explore with keyed inputs/invariants; its advanced entry contains
+custom request transports and standalone raw protocol sessions. Malformed input and HTTP
+transport tests belong under root test/. See the test package README and ADR 0028.
+
+The real-package harness includes the exact inventory test/story, reset and capabilities
+examples and the test functions extracted verbatim from plumbing.ts, plus packages/test/test/author.types.ts for negative inference cases. Keep the
+unchanged root instantiation budget; compare extended diagnostics before/after this step. The pre-change root recorded
+460,241 instantiations; C stays within the unchanged 459,211 plus 10% budget.

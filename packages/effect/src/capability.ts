@@ -348,10 +348,24 @@ export function defineCapability<
     state: definition.state,
     actions,
     "~reflex": {
+      descriptor: () => ({
+        state: toInputSchema(definition.state),
+        params: toInputSchema(definition.params),
+        actions: Object.fromEntries(
+          Object.entries(actions).map(([name, action]) => [
+            name,
+            { input: toInputSchema(action.input), error: toInputSchema(action.error) },
+          ]),
+        ),
+      }),
       paramsSchema: () =>
         Schema.toJsonSchemaDocument(
           Schema.toCodecJson(definition.params ?? Schema.Record(Schema.String, Schema.Never)),
         ).schema as JsonSchema,
+      encodeParams: (raw) =>
+        Schema.encodeUnknownSync(
+          Schema.toCodecJson(definition.params ?? Schema.Record(Schema.String, Schema.Never)),
+        )(raw) as Json,
       decodeParams: (raw) =>
         Schema.decodeUnknownSync(
           Schema.toCodecJson(definition.params ?? Schema.Record(Schema.String, Schema.Never)),

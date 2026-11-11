@@ -1,5 +1,7 @@
 import {
   defined,
+  ErrorCode,
+  ProtocolError,
   type InspectResult,
   type Json,
   type NodeSnapshot,
@@ -36,7 +38,7 @@ export interface TestAppOptions<H = AppHost> {
   readonly timeoutMs?: number
 }
 
-export interface TestApp<H = AppHost> extends JourneyClient<DefinitionsOf<H>> {
+export interface TestApp<H = AppHost> extends JourneyClient<DefinitionsOf<H>>, AsyncDisposable {
   readonly raw: RawTestApp
   /** The most recent events, in order, up to a limit on their size. */
   readonly events: ReadonlyArray<RuntimeEvent>
@@ -55,6 +57,9 @@ export interface TestApp<H = AppHost> extends JourneyClient<DefinitionsOf<H>> {
 export interface RawTestApp {
   /** State of the focused node as of the last call. */
   readonly state: unknown
+  readonly client: Client
+  request(method: string, params: unknown): Promise<unknown>
+  readonly events: ReadonlyArray<RuntimeEvent>
   /** Assert where the journey is before continuing. */
   precondition(screen: string, match?: Json): Promise<void>
   /** Dispatch and wait for the effect and anything it started to settle. */
@@ -98,9 +103,14 @@ export const createTestAppOn = async (
   const releaseNetwork = networkGuard.acquire()
   try {
     const controller = await open()
-    const app = new Journey(controller, options.timeoutMs ?? JOURNEY_STEP_TIMEOUT_MS_DEFAULT, {
-      release: releaseNetwork,
-    })
+    const app = new Journey(
+      () => controller.close(),
+      options.timeoutMs ?? JOURNEY_STEP_TIMEOUT_MS_DEFAULT,
+      {
+        release: releaseNetwork,
+      },
+      createLoopbackClient(controller),
+    )
     await app.begin()
     return app
   } catch (error: unknown) {
@@ -207,14 +217,34 @@ class Journey implements TestApp {
   private disposed = false
 
   constructor(
-    private readonly controller: Controller,
+    private readonly close: () => Promise<void>,
     private readonly timeoutMs: number,
     private readonly network: { readonly release: () => void },
+    client: Client,
+    eventsAvailable = true,
   ) {
-    this.client = createLoopbackClient(controller)
+    this.client = client
     const journey = createJourneyClient({
+      timeoutMs,
+      start: (nodeId, action, input) =>
+        this.client.request("app.dispatch", {
+          nodeId,
+          action,
+          ...(input === undefined ? {} : { input }),
+        }),
+      complete: async (operationId) => {
+        const { operation } = await this.client.request("app.wait", { operationId, timeoutMs })
+        await this.settle()
+        await this.inspect()
+        return defined(operation, "waiting returns the operation")
+      },
+      cancel: async (operationId) => {
+        await this.client.request("app.cancel", { operationId })
+      },
       validateDefinition: (definition) => this.validateDefinition(definition),
-      subscribe: (listener) => this.client.onEvent(listener),
+      ...(eventsAvailable
+        ? { subscribe: (listener: () => void) => this.client.onEvent(listener) }
+        : {}),
       inspect: async (name, nodeId) =>
         nodeId !== undefined
           ? defined(
@@ -259,6 +289,13 @@ class Journey implements TestApp {
     }
   }
 
+  request(method: string, params: unknown): Promise<unknown> {
+    return (this.client.request as (method: string, params: unknown) => Promise<unknown>)(
+      method,
+      params,
+    )
+  }
+
   async inspect(): Promise<InspectResult> {
     const result = await this.client.request("app.inspect", {})
     this.state = result.node?.state
@@ -272,11 +309,23 @@ class Journey implements TestApp {
 
   async precondition(screen: string, match?: Json): Promise<void> {
     const { timeoutMs } = this
-    await this.client.request("app.wait", {
-      focus: screen,
-      timeoutMs,
-      ...(match === undefined ? {} : { match }),
-    })
+    try {
+      await this.client.request("app.wait", {
+        focus: screen,
+        timeoutMs,
+        ...(match === undefined ? {} : { match }),
+      })
+    } catch (error) {
+      if (error instanceof ProtocolError && error.code === ErrorCode.WaitTimeout) {
+        const last = await this.inspect()
+        throw new ProtocolError(
+          error.code,
+          `${error.message}; last state: ${JSON.stringify(last.node?.state)}`,
+          error.data,
+        )
+      }
+      throw error
+    }
     await this.inspect()
   }
 
@@ -311,6 +360,10 @@ class Journey implements TestApp {
     await this.inspect()
   }
 
+  async [Symbol.asyncDispose](): Promise<void> {
+    await this.dispose()
+  }
+
   async dispose(): Promise<void> {
     if (this.disposed) {
       return
@@ -318,7 +371,7 @@ class Journey implements TestApp {
     this.disposed = true
     this.client.close()
     try {
-      await this.controller.close()
+      await this.close()
     } finally {
       this.network.release()
     }
@@ -356,4 +409,16 @@ class Journey implements TestApp {
       this.observedCharacterCount = JSON.stringify(this.events).length
     }
   }
+}
+
+/** Internal bridge entry: remote services must retain access to the network. */
+export const createRemoteTestApp = async (
+  client: Client,
+  timeoutMs = JOURNEY_STEP_TIMEOUT_MS_DEFAULT,
+  eventsAvailable = true,
+  close: () => Promise<void> = async () => client.close(),
+): Promise<TestApp> => {
+  const app = new Journey(close, timeoutMs, { release: () => {} }, client, eventsAvailable)
+  await app.begin()
+  return app
 }

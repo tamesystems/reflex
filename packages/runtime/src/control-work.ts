@@ -16,14 +16,26 @@ import { type Timers, withDeadline } from "./timers.ts"
  */
 export const createControlWork = (timers: Timers, report: BackgroundReporter) => {
   let outstandingCount = 0
-  return async <A>(start: () => Promise<A>): Promise<A> => {
+  return async <A>(
+    start: (signal: AbortSignal) => Promise<A>,
+    signal?: AbortSignal,
+  ): Promise<A> => {
     if (outstandingCount >= OUTSTANDING_CONTROL_REQUESTS_MAX) {
       throw new ProtocolError(ErrorCode.ResourceExhausted, "Too many control requests are running")
     }
     outstandingCount++
     let overdue = false
+    const lifetime = new AbortController()
+    const abort = () => lifetime.abort()
+    if (signal?.aborted) {
+      lifetime.abort()
+    } else {
+      signal?.addEventListener("abort", abort, { once: true })
+    }
     // In an async function, so that `start` throwing is a rejection, and releases too.
-    const work = (async () => start())()
+    const work = (async () => start(lifetime.signal))().finally(() =>
+      signal?.removeEventListener("abort", abort),
+    )
     work
       .catch((error: unknown) => {
         if (overdue) {
@@ -40,6 +52,7 @@ export const createControlWork = (timers: Timers, report: BackgroundReporter) =>
       timers,
       overdue: () => {
         overdue = true
+        lifetime.abort()
         return new ProtocolError(ErrorCode.WaitTimeout, "The app did not respond in time")
       },
     })
