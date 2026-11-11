@@ -1,15 +1,15 @@
+import { APP_HOST_ADAPTER } from "@reflex/runtime/internal"
 import { afterEach, expect, test } from "bun:test"
-import { defineApp, defineCapability, defineScreen } from "@reflex/effect"
-import { mount } from "@reflex/effect/advanced"
+import { defineApp, Screen as screenContract } from "@reflex/effect"
 import { defineStoreApp, defineStoreNode } from "@reflex/runtime"
-import { createTestAppPool } from "@reflex/test"
+import { createTestApp, createTestAppPool } from "@reflex/test"
 import { createRuntime } from "@reflex/runtime/internal"
 import { createStore } from "zustand/vanilla"
-import * as Layer from "effect/Layer"
 import * as Schema from "effect/Schema"
 import { expoRoutes } from "../packages/expo/src/routes-effect.ts"
 import { ROUTE_MAPPING, SCREEN_BINDING } from "../packages/expo/src/route-token.ts"
-import inventory from "../examples/inventory/src/scenarios.ts"
+import inventoryDefinition from "../examples/inventory/src/scenarios.ts"
+const inventory = inventoryDefinition[APP_HOST_ADAPTER]
 import { InventoryList } from "../examples/inventory/src/features/inventory-list.ts"
 import { InventoryDetail } from "../examples/inventory/src/features/inventory-detail.ts"
 import { InventoryFixture } from "../examples/inventory/src/fixtures.ts"
@@ -88,28 +88,26 @@ test("journeys fail on refusal and domain errors, and handles read live state", 
   await expect(detail.state()).rejects.toThrow()
 })
 
-test("mount can focus an Effect node without a navigator; BigInt's wire state is a string", async () => {
-  const Counter = defineCapability({ name: "Big", state: Schema.BigInt, actions: () => ({}) })
-  const host = defineApp({
-    name: "effect-only",
-    nodes: { Counter },
-    defaultScenario: "default",
-    scenarios: { default: { layer: Layer.empty } },
-    root: Layer.effectDiscard(mount(Counter, 12n, { focus: true })),
+test("authored routes focus without a navigator and BigInt state is encoded as a string", async () => {
+  const Counter = screenContract.define("Big", {
+    state: Schema.BigIntFromString,
+    initial: () => 12n,
+    actions: () => ({}),
   })
-  const session = await pool.open(host)
-  const node = await session.focused(Counter)
+  const host = defineApp({ name: "effect-only", screens: [Counter] })
+  await using session = await createTestApp(host)
+  const node = await session.open(Counter)
   expect(await node.state()).toBe("12")
+  expect((await session.focused(Counter)).id).toBe(node.id)
 })
 
 test("URL codecs round trip transformed and optional fields; invalid params name the route", () => {
-  const Detail = defineScreen({
-    name: "Detail",
+  const Detail = screenContract("Detail", {
     state: Schema.Number,
-    params: Schema.Struct({
+    params: {
       id: Schema.NumberFromString.check(Schema.isFinite()),
       query: Schema.optionalKey(Schema.String),
-    }),
+    },
     initial: () => 0,
   }).implement({ actions: () => ({}) })
   const routes = expoRoutes(

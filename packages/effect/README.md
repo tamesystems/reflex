@@ -45,8 +45,9 @@ finish before navigation runs. Push/back report `completed`; navigation refusal 
 from a different navigator produce diagnostics. Navigation uses exact contract identity.
 
 Inputs, errors, params and state must encode JSON. `/advanced` exports `jsonCodec` for
-explicit custom wire representations. `InferState`, `InferActions`, `InferInput` and
-`InferError` describe encoded consumer values; handlers keep decoded values.
+explicit custom wire representations. The `InferState`, `InferActions`, `InferInput` and
+`InferError` helpers from `@reflex/runtime` describe encoded definition values; handlers
+keep decoded values.
 
 App provision order is fixtures → common `layer` → scenario `layer` → handlers. Each
 stage must satisfy its inputs from earlier stages. A layer cannot satisfy its own inputs.
@@ -60,3 +61,16 @@ The symbol-keyed session host adapter stays internal to the integration.
 State access belongs to its mounted node. Published state is detached and deeply frozen
 through the same JSON publication boundary as store nodes. See
 [ADR 0020](../../docs/decisions/0020-userland-api.md).
+
+`/advanced` also exports `mountEffect(definition)`, an Effect requiring `Scope` and the
+definition's service dependencies. It returns an owned node with `state`,
+`changes.subscribe`, `actions.Name.run` and async `dispose`. It focuses owned screens,
+uses the current app registry when present, and creates a private registry otherwise.
+Explicit disposal interrupts pending work and revokes actions; the surrounding scope
+also closes the node. Action results distinguish completion, cancellation, declared
+errors, refusals and defects.
+
+The root and advanced export names are checked against the target declarations,
+including type-only names. The internal entry is infrastructure for sibling bindings
+and adversarial tests; it is not an application author API. Remaining internal cleanup
+is tracked in ADR 0020.

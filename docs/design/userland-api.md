@@ -2526,8 +2526,8 @@ implementation and Metro to Expo's Effect-free helper. Sibling integration plumb
 internal entries; Expo's specified advanced entry exposes `routeCodec`. The E2E provider
 retains startup-failure probes and scenario selection in its separate instrumented module.
 
-Effect/store/test legacy paths remain pending D deletion; their retention is temporary,
-not an accepted final deviation. The six React/React Router/Expo root and advanced name
+Internal Effect/test legacy paths remain pending D deletion; their retention is temporary,
+not an accepted final deviation. The eight Effect/React/React Router/Expo root and advanced name
 sets are checked against the declarations by the real-package harness. The complete
 export equality gate and source budget remain pending. The command-erasure lint rule
 remains explicit follow-up work. See ADR 0020 for the design and implementation status.

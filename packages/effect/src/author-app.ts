@@ -1,12 +1,11 @@
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
-import { defineApp as legacyDefineApp } from "./app.ts"
+import { createEffectHost } from "./app.ts"
 import { mountWithAccess } from "./capability.ts"
 import { AUTHOR, type AuthorDefinition } from "./author-screen.ts"
 import { NAVIGATION } from "./author-navigation.ts"
 import { fixtureLayer, bindFixtureHandlers } from "./author-fixtures.ts"
 import type * as Contract from "./author-contracts.ts"
-import type * as M from "./author-model.ts"
 import type { Erased } from "./erased.ts"
 import {
   APP_HOST_ADAPTER,
@@ -18,24 +17,6 @@ import {
 } from "@reflex/runtime/internal"
 
 const HOST = APP_HOST_ADAPTER
-type DefMap<D> = { readonly [P in Extract<D, { name: string }> as P["name"]]: P }
-type ScenarioFixtures<S, F> =
-  | F
-  | (S[keyof S] extends infer V
-      ? V extends { fixtures: readonly (infer D)[] }
-        ? D
-        : never
-      : never)
-/** Compatibility seam for bindings and journeys that still consume AppHost. */
-export const legacyApp = <N extends string, D, V, S extends M.ScenarioMap, K extends keyof S, F, C>(
-  app: M.App<N, D, V, S, K, F, C>,
-): AppHost & {
-  readonly nodes: DefMap<D | V | ScenarioFixtures<S, F>>
-  readonly screens: DefMap<D>
-  readonly scenarioNames: readonly (keyof S & string)[]
-  readonly defaultScenario: K & string
-} => (app as Erased)[HOST]
-
 interface Spec {
   readonly identity?: object
   readonly name: string
@@ -146,7 +127,7 @@ const buildApp = (spec: Spec): Erased => {
   )
   const defaultScenario = spec.defaultScenario ?? Object.keys(scenarios)[0] ?? "default"
   validateDefault(scenarios, defaultScenario, spec.defaultScenario)
-  const host = legacyDefineApp({
+  const host = createEffectHost({
     name: spec.name,
     root: root as Erased,
     scenarios: composed,
@@ -159,6 +140,7 @@ const buildApp = (spec: Spec): Erased => {
   })
   identifyHost(host, spec, screens, services)
   return {
+    [DEFINITION_IDENTITY]: definitionIdentity(host),
     nodes: host.nodes,
     scenarioNames: host.scenarioNames,
     name: spec.name,

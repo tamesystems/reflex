@@ -1,7 +1,9 @@
+import { APP_HOST_ADAPTER } from "@reflex/runtime/internal"
 import { afterEach, expect, test } from "bun:test"
 import { ErrorCode, toNodeId } from "@reflex/protocol"
 import { createTestAppPool, type InferState } from "@reflex/test"
-import app from "../examples/inventory/src/scenarios.ts"
+import inventoryDefinition from "../examples/inventory/src/scenarios.ts"
+const app = inventoryDefinition[APP_HOST_ADAPTER]
 import { QUANTITY_MAX } from "../examples/inventory/src/domain.ts"
 
 import { InventoryFixture } from "../examples/inventory/src/fixtures.ts"

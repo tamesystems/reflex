@@ -27,11 +27,10 @@ export const testScenarios = {
     virtualTime: true,
   },
 } as const
-import { legacyApp } from "@reflex/effect/internal"
 
 export const authoredApp = app.withScenarios(testScenarios, {
   defaultScenario: "inventory-with-products",
   fixtures: [InventoryFixture],
 })
 
-export default legacyApp(authoredApp)
+export default authoredApp

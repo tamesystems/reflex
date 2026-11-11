@@ -62,6 +62,8 @@ if (blocks.length !== authored.length) {
 /** Compare symbols, including type-only and re-exported names, rather than runtime keys. */
 function checkImplementedExports() {
   const entries = [
+    ["effect", "index", "effect"],
+    ["effect", "advanced", "effect-advanced"],
     ["react", "index", "react"],
     ["react", "advanced", "react-advanced"],
     ["react-router", "index", "react-router"],

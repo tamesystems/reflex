@@ -1,9 +1,11 @@
+import { APP_HOST_ADAPTER } from "@reflex/runtime/internal"
 /**
  * Runs the real journey on a real Hermes VM, from a Metro-built bundle.
  * `run.ts` builds it; the last line printed is the verdict.
  */
 import "./shims.ts"
-import app from "@reflex/example-inventory/scenarios.ts"
+import inventoryDefinition from "@reflex/example-inventory/scenarios.ts"
+const app = inventoryDefinition[APP_HOST_ADAPTER]
 import { ProtocolError } from "@reflex/protocol"
 
 declare const print: (...args: Array<unknown>) => void

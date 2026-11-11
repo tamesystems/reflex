@@ -1,4 +1,3 @@
-import type { NavigatorRequirement } from "./navigation.ts"
 import { ErrorCode, ProtocolError, type ScenarioDescriptor } from "@reflex/protocol"
 import {
   type AppHost,
@@ -6,7 +5,6 @@ import {
   type ConsumerDefinition,
   createRuntime,
   registerRouteFactories,
-  definitionIdentity,
   DEFINITION_IDENTITY,
   type Timers,
   type SessionStartOptions,
@@ -47,110 +45,40 @@ export interface AppDefinition<Services, Root> {
   readonly timers?: Timers
 }
 
-/**
- * Compose an app from a root layer and the scenarios that can satisfy it. Each
- * session owns one long-lived runtime; disposing it closes every scope.
- */
-export interface DefinedApp<
-  Services,
-  Root,
-  S extends Record<string, Scenario<Exclude<Services, Registry>>>,
-  N extends Record<string, ConsumerDefinition>,
-  Screens extends NodeMap = Record<never, never>,
-> extends AppHost {
-  readonly [DEFINITION_IDENTITY]: object
-  readonly nodes: N
-  readonly screens: Screens
-  readonly defaultScenario: keyof S & string
-  readonly scenarioNames: ReadonlyArray<keyof S & string>
-  withScenarios<const Extra extends Record<string, Scenario<Exclude<Services, Registry>>>>(
-    scenarios: Extra,
-    options?: { readonly defaultScenario?: keyof (S & Extra) & string },
-  ): DefinedApp<Services, Root, S & Extra, N, Screens>
-}
-
-type AppRoot<Services, Root, N extends NodeMap> = Layer.Layer<Root, never, Services | Registry> & {
-  readonly nodes?: N
-  readonly navigatorKeys?: readonly string[]
-} & (Extract<Root, NavigatorRequirement<string>> extends never
-    ? unknown
-    : { readonly navigatorKeys: readonly string[] })
-type AppComposition<Services, Root, N extends NodeMap> =
-  | { readonly root: AppRoot<Services, Root, N>; readonly navigation?: never }
-  | {
-      readonly root?: never
-      readonly navigation: { readonly layer: AppRoot<Services, Root, N>; readonly nodes: N }
-    }
-
-export const defineApp = <
+/** Build the infrastructure session host after authored composition has been validated. */
+export const createEffectHost = <
   Services,
   Root,
   const S extends Record<string, Scenario<Exclude<Services, Registry>>>,
-  const N extends Record<string, ConsumerDefinition> = Record<never, never>,
-  const RN extends NodeMap = Record<never, never>,
+  const N extends NodeMap = Record<never, never>,
 >(
-  definition: Omit<AppDefinition<Services, Root>, "root" | "scenarios" | "defaultScenario"> &
-    AppComposition<Services, Root, RN> & {
-      readonly fixtures?: N
-      readonly nodes?: N
-      readonly scenarios: S
-      readonly defaultScenario: NoInfer<keyof S & string>
-    },
-): DefinedApp<Services, Root, S, N & RN, RN> => {
-  const root = definition.navigation?.layer ?? definition.root
-  if (root === undefined) {
-    throw new Error(`App "${definition.name}" needs navigation or a root layer`)
-  }
-  const keys = root.navigatorKeys ?? []
-  if (new Set(keys).size !== keys.length) {
-    throw new Error(`App "${definition.name}" has duplicate navigator keys: ${keys.join(", ")}`)
-  }
-  const maps = [
-    definition.nodes,
-    definition.fixtures,
-    definition.navigation?.nodes,
-    "nodes" in root ? root.nodes : {},
-  ] as (NodeMap | undefined)[]
-  const byName = new Map<string, ConsumerDefinition>()
-  const byContract = new Map<object, ConsumerDefinition>()
-  for (const map of maps) {
-    for (const node of Object.values(map ?? {})) {
-      const previous = byName.get(node.name) ?? byContract.get(definitionIdentity(node))
-      if (previous !== undefined && previous !== node) {
-        throw new Error(`App "${definition.name}" has conflicting definitions named "${node.name}"`)
-      }
-      byName.set(node.name, node)
-      byContract.set(definitionIdentity(node), node)
-    }
-  }
-  const nodes = Object.assign({}, ...maps) as N & RN
-  const app: DefinedApp<Services, Root, S, N & RN, RN> = {
-    [DEFINITION_IDENTITY]: {},
-    nodes,
-    screens: (definition.navigation?.nodes ?? ("nodes" in root ? root.nodes : {})) as RN,
-    name: definition.name,
-    defaultScenario: definition.defaultScenario,
-    scenarioNames: Object.keys(definition.scenarios),
-    scenarios: Object.entries(definition.scenarios).map(
-      ([name, scenario]): ScenarioDescriptor => ({
-        name,
-        ...(scenario.description === undefined ? {} : { description: scenario.description }),
-        virtualTime: scenario.virtualTime === true,
-      }),
-    ),
-    start: (name, options) => startSession({ ...definition, root }, name, options),
-    withScenarios: (scenarios, options) =>
-      Object.assign(
-        defineApp({
-          ...definition,
-          scenarios: { ...definition.scenarios, ...scenarios },
-          defaultScenario: options?.defaultScenario ?? definition.defaultScenario,
-        }),
-        { [DEFINITION_IDENTITY]: definitionIdentity(app) },
-      ) as never,
-  }
-  return app
-}
+  definition: Omit<AppDefinition<Services, Root>, "scenarios" | "defaultScenario"> & {
+    readonly nodes?: N
+    readonly scenarios: S
+    readonly defaultScenario: NoInfer<keyof S & string>
+  },
+): AppHost & {
+  readonly [DEFINITION_IDENTITY]: object
+  readonly nodes: N
+  readonly screens: NodeMap
+  readonly defaultScenario: keyof S & string
+  readonly scenarioNames: readonly (keyof S & string)[]
+} => ({
+  [DEFINITION_IDENTITY]: {},
+  nodes: definition.nodes ?? ({} as N),
+  screens: ("nodes" in definition.root ? definition.root.nodes : {}) as NodeMap,
+  name: definition.name,
+  defaultScenario: definition.defaultScenario,
+  scenarioNames: Object.keys(definition.scenarios),
+  scenarios: Object.entries(definition.scenarios).map(
+    ([name, scenario]): ScenarioDescriptor => ({
+      name,
+      ...(scenario.description === undefined ? {} : { description: scenario.description }),
+      virtualTime: scenario.virtualTime === true,
+    }),
+  ),
+  start: (name, options) => startSession(definition, name, options),
+})
 
 const startSession = async <Services, Root>(
   definition: AppDefinition<Services, Root>,

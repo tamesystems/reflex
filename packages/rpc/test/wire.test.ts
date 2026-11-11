@@ -5,9 +5,8 @@ import { mkdtempSync, rmSync, statSync } from "node:fs"
 import { connect } from "node:net"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { defineApp, defineCapability } from "@reflex/effect"
-import { mount } from "@reflex/effect/advanced"
-import { Registry } from "@reflex/effect/internal"
+import { defineApp, defineNavigation, Screen } from "@reflex/effect"
+import { APP_HOST_ADAPTER } from "@reflex/runtime/internal"
 import {
   BATCH_REQUESTS_MAX,
   CLIENT_LISTENERS_MAX,
@@ -35,10 +34,9 @@ import {
 } from "@reflex/rpc"
 import { createController } from "@reflex/runtime/internal"
 import { nextTurn, waitUntil } from "@reflex/test"
-import * as Effect from "effect/Effect"
-import * as Layer from "effect/Layer"
 import * as Schema from "effect/Schema"
-import app from "../../../examples/inventory/src/scenarios.ts"
+import inventoryDefinition from "../../../examples/inventory/src/scenarios.ts"
+const app = inventoryDefinition[APP_HOST_ADAPTER]
 
 const cleanups: Array<() => Promise<void> | void> = []
 afterEach(async () => {
@@ -364,23 +362,16 @@ test("an id that does not survive being echoed is refused", async () => {
 test("the write queue is counted in bytes, whatever the characters", async () => {
   const directory = mkdtempSync(join(tmpdir(), "reflex-"))
   const path = endpoint(directory)
-  const Wide = defineCapability({
-    name: "Wide",
+  const Wide = Screen.define("Wide", {
+    initial: () => ({ text: "語".repeat(1000) }),
     state: Schema.Struct({ text: Schema.String }),
     actions: () => ({}),
   })
+  const Nav = defineNavigation({ Wide })
   const host = defineApp({
     name: "wide",
-    defaultScenario: "default",
-    root: Layer.effectDiscard(
-      Effect.gen(function* () {
-        const node = yield* mount(Wide, { text: "語".repeat(1000) })
-        const runtime = yield* Registry
-        runtime.setFocus(node.id)
-      }),
-    ),
-    scenarios: { default: { layer: Layer.empty } },
-  })
+    navigation: Nav.implement([Wide], { initial: Wide }),
+  })[APP_HOST_ADAPTER]
   const controller = await createController(host)
   // Under the reply's bytes, but over its characters.
   const server = await serveSocket(controller, path, { writeQueueBytesMax: 2500 })
@@ -634,23 +625,16 @@ test("a reply a client would refuse is not sent, and says why", async () => {
 })
 
 const largeStateController = async () => {
-  const Large = defineCapability({
-    name: "Large",
+  const Large = Screen.define("Large", {
+    initial: () => ({ text: "x".repeat(FRAME_CHARACTERS_MAX * 0.6) }),
     state: Schema.Struct({ text: Schema.String }),
     actions: () => ({}),
   })
+  const Nav = defineNavigation({ Large })
   const host = defineApp({
     name: "large",
-    defaultScenario: "default",
-    root: Layer.effectDiscard(
-      Effect.gen(function* () {
-        const node = yield* mount(Large, { text: "x".repeat(FRAME_CHARACTERS_MAX * 0.6) })
-        const runtime = yield* Registry
-        runtime.setFocus(node.id)
-      }),
-    ),
-    scenarios: { default: { layer: Layer.empty } },
-  })
+    navigation: Nav.implement([Large], { initial: Large }),
+  })[APP_HOST_ADAPTER]
   const controller = await createController(host)
   cleanups.push(() => controller.close())
   return controller

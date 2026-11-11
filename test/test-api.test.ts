@@ -30,7 +30,7 @@ import app from "../examples/inventory/src/app.ts"
 import { authoredApp as inventory } from "../examples/inventory/src/scenarios.ts"
 import { InventoryList, InventoryDetail } from "../examples/inventory/src/screens.ts"
 import { InventoryFixture } from "../examples/inventory/src/fixtures.ts"
-import { legacyApp } from "@reflex/effect/internal"
+import { APP_HOST_ADAPTER } from "@reflex/runtime/internal"
 import { createLiveController } from "../packages/live/src/live-controller.ts"
 import { LiveSessions } from "../packages/live/src/live-sessions.ts"
 
@@ -269,7 +269,7 @@ const onTarget = async (host: AppHost, body: () => Promise<void>, live = false) 
 }
 for (const live of [false, true]) {
   test(`connectJourney matches instrumented descriptors (${live ? "live" : "session"})`, async () => {
-    const host = legacyApp(inventory)
+    const host = inventory[APP_HOST_ADAPTER]
     await onTarget(
       host,
       async () => {

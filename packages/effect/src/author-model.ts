@@ -1,3 +1,4 @@
+import { APP_HOST_ADAPTER } from "@reflex/runtime/internal"
 import type { ConsumerDefinition, ActionOutcome as LegacyOutcome } from "@reflex/runtime/internal"
 import type { Erased } from "./erased.ts"
 import type * as Effect from "effect/Effect"
@@ -353,6 +354,12 @@ export interface App<
   F = never,
   Common = never,
 > {
+  readonly [APP_HOST_ADAPTER]: import("@reflex/runtime/internal").AppHost & {
+    readonly nodes: DefinitionMap<D | V | F | ScenarioFixtureUnion<Sc>>
+    readonly screens: DefinitionMap<D>
+    readonly scenarioNames: readonly (keyof Sc & string)[]
+    readonly defaultScenario: Default & string
+  }
   readonly nodes: DefinitionMap<D | V | F | ScenarioFixtureUnion<Sc>>
   readonly name: N
   readonly screens: D

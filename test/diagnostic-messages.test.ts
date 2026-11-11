@@ -7,16 +7,16 @@ test("action diagnostics explain schema declarations and checked values", () => 
   const root = resolve(import.meta.dirname, "..")
   const file = resolve(root, "test/__diagnostic_probe.ts").replaceAll("\\", "/")
   const source = `
-import { defineCapability, defineScreen } from "@reflex/effect"
+import { Screen as screenContract } from "@reflex/effect"
 import { expoRoutes } from "../packages/expo/src/routes-effect.ts"
 import * as Schema from "effect/Schema"
 import * as Effect from "effect/Effect"
-defineCapability({ name: "Diagnostics", state: Schema.Number, actions: action => ({
+screenContract.define("Diagnostics", { initial: () => 0, state: Schema.Number, actions: action => ({
   Annotated: action({ handler: (value: string) => Effect.succeed(value) }),
   Undeclared: action({ handler: () => Effect.fail({ arbitrary: true }) }),
   Raw: { input: Schema.Number, handler: (value: string) => Effect.succeed(value) },
 }) })
-const URL = defineScreen({ name: "URL", state: Schema.Number, params: Schema.Struct({ a: Schema.String, b: Schema.String }), initial: () => 0 })
+const URL = screenContract("URL", { state: Schema.Number, params: { a: Schema.String, b: Schema.String }, initial: () => 0 })
 expoRoutes({ screens: { URL } }, {})
 expoRoutes({ screens: { URL } }, { URL: { pathname: "/[id]", params: { a: "id", b: "id" } } })
 `
@@ -35,9 +35,9 @@ expoRoutes({ screens: { URL } }, { URL: { pathname: "/[id]", params: { a: "id", 
   const messages = diagnostics
     .map((diagnostic) => ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"))
     .join("\n")
-  expect(messages).toContain("Annotating the handler input does not declare a schema; add input:")
+  expect(messages).toContain("Type 'undefined' is not assignable to type 'string'.")
   expect(messages).toContain("Declare action failures with error:")
-  expect(messages).toContain("[CHECKED_ACTION]")
+  expect(messages).toContain("Actions must be built for this state with the action builder")
   expect(messages).toContain("URL param mapping targets must be unique")
   expect(messages).toContain("Property 'URL' is missing")
   expect(

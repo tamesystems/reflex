@@ -1,4 +1,4 @@
-import { legacyApp } from "@reflex/effect/internal"
+import { APP_HOST_ADAPTER } from "@reflex/runtime/internal"
 import { afterEach, expect, test } from "bun:test"
 import { Screen, defineApp, defineFixture, defineService, defineNavigation } from "@reflex/effect"
 import { createTestAppPool } from "@reflex/test"
@@ -26,7 +26,7 @@ const Counter = defineService({
 })
 
 test("author actions decode once, encode errors, and retain defect outcomes", async () => {
-  const app = await pool.open(legacyApp(defineApp({ name: "author", services: [Counter] })))
+  const app = await pool.open(defineApp({ name: "author", services: [Counter] })[APP_HOST_ADAPTER])
   const node = await app.node(Counter)
   await node.actions.Set("7")
   expect(await node.state()).toBe(7)
@@ -64,7 +64,7 @@ const detail = Detail.implement({
 const navigation = Nav.implement([home, detail], { initial: Home })
 
 test("push and back complete their handlers before retiring a screen; root back is refused", async () => {
-  const app = await pool.open(legacyApp(defineApp({ name: "navigation", navigation })))
+  const app = await pool.open(defineApp({ name: "navigation", navigation })[APP_HOST_ADAPTER])
   const first = await app.focused(home)
   expect(await first.expectRefusal.Back()).toMatchObject({
     status: "refused",
@@ -101,9 +101,9 @@ const Toggle = Screen.define("Toggle", {
 const ToggleNav = defineNavigation({ Toggle })
 test("Screen.define preserves identity and when guards refuse before invoking a reducer", async () => {
   const app = await pool.open(
-    legacyApp(
-      defineApp({ name: "guards", navigation: ToggleNav.implement([Toggle], { initial: Toggle }) }),
-    ),
+    defineApp({ name: "guards", navigation: ToggleNav.implement([Toggle], { initial: Toggle }) })[
+      APP_HOST_ADAPTER
+    ],
   )
   const node = await app.focused(Toggle)
   await node.actions.Increment()
@@ -144,7 +144,7 @@ const fixtureApp = defineApp({
   defaultScenario: "first",
 })
 test("fixtures precede common and scenario layers, handlers see overrides, and reset rebuilds fixture state", async () => {
-  const app = await pool.open(legacyApp(fixtureApp))
+  const app = await pool.open(fixtureApp[APP_HOST_ADAPTER])
   const fixture = await app.node(Fixture)
   await fixture.actions.Increment()
   await (await app.node(Reader)).actions.Read()
@@ -162,7 +162,7 @@ test("scenario-specific fixtures do not mount in scenarios that opt out", async 
     { withFixture: {}, withoutFixture: { fixtures: [] } },
     { defaultScenario: "withFixture", fixtures: [Fixture] },
   )
-  const controller = await createController(legacyApp(app))
+  const controller = await createController(app[APP_HOST_ADAPTER])
   try {
     expect((await controller.request("app.inspect", { name: "Fixture" })).node).not.toBeNull()
     await controller.request("app.reset", { scenario: "withoutFixture" })
@@ -174,7 +174,7 @@ test("scenario-specific fixtures do not mount in scenarios that opt out", async 
   }
 })
 
-const unsafeApp = (spec: Erased): AppHost => legacyApp((defineApp as Erased)(spec))
+const unsafeApp = (spec: Erased): AppHost => (defineApp as Erased)(spec)[APP_HOST_ADAPTER]
 for (const [stage, layer, scenarios] of [
   [
     "common",
@@ -264,7 +264,7 @@ test("a suspended guarded write refuses instead of overwriting a new variant", a
       Finish: a.when("ready").reduce({ reducer: () => ({ _tag: "done" }) }),
     }),
   })
-  const app = await pool.open(legacyApp(defineApp({ name: "stale", services: [Guard] })))
+  const app = await pool.open(defineApp({ name: "stale", services: [Guard] })[APP_HOST_ADAPTER])
   const operation = await app.raw.start("Slow")
   await entered.promise
   await app.client.request("app.dispatch", { action: "Finish", await: true })
@@ -296,7 +296,7 @@ test("each action closes its child scope before reporting completion", async () 
       }),
     }),
   })
-  const app = await pool.open(legacyApp(defineApp({ name: "scoped", services: [Scoped] })))
+  const app = await pool.open(defineApp({ name: "scoped", services: [Scoped] })[APP_HOST_ADAPTER])
   await (await app.node(Scoped)).actions.Run()
   expect(finalized).toBe(1)
 })
@@ -325,7 +325,7 @@ test("jsonCodec supplies the actual input, state, and error wire representation"
       Fail: a({ error: codec, handler: () => Effect.fail(3) }),
     }),
   })
-  const app = await pool.open(legacyApp(defineApp({ name: "wire", services: [Wire] })))
+  const app = await pool.open(defineApp({ name: "wire", services: [Wire] })[APP_HOST_ADAPTER])
   const node = await app.node(Wire)
   await node.actions.Set({ value: 2 })
   expect(await node.state()).toEqual({ value: 2 })
@@ -349,12 +349,10 @@ test("contract names survive differently named classes and exact constructor own
     actions: (a) => ({ Again: a.navigates({ handler: () => Nav.push(DifferentClassName) }) }),
   })
   const app = await pool.open(
-    legacyApp(
-      defineApp({
-        name: "names",
-        navigation: Nav.implement([definition], { initial: DifferentClassName }),
-      }),
-    ),
+    defineApp({
+      name: "names",
+      navigation: Nav.implement([definition], { initial: DifferentClassName }),
+    })[APP_HOST_ADAPTER],
   )
   expect((await app.inspectRaw("DeclaredName")).name).toBe("DeclaredName")
   await (await app.focused(definition)).actions.Again()
@@ -364,12 +362,10 @@ test("contract names survive differently named classes and exact constructor own
     actions: (a) => ({ Wrong: a.navigates({ handler: () => Nav.push(Subclass) }) }),
   })
   const other = await pool.open(
-    legacyApp(
-      defineApp({
-        name: "constructor",
-        navigation: Nav.implement([wrong], { initial: DifferentClassName }),
-      }),
-    ),
+    defineApp({
+      name: "constructor",
+      navigation: Nav.implement([wrong], { initial: DifferentClassName }),
+    })[APP_HOST_ADAPTER],
   )
   expect(await other.raw.dispatchRaw("Wrong")).toMatchObject({
     status: "failed",

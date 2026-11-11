@@ -1,11 +1,11 @@
+import { APP_HOST_ADAPTER } from "@reflex/runtime/internal"
 import { afterEach, expect, test } from "bun:test"
-import { defineApp, defineCapability } from "@reflex/effect"
-import { type ActionsOf, type Capability, NoParams } from "@reflex/effect/advanced"
+import { createEffectHost, defineCapability } from "@reflex/effect/internal"
+import { type ActionsOf, type Capability, NoParams } from "@reflex/effect/internal"
 import {
   defineNavigationFactories,
   mountOwned as mount,
   dispatchDecoded,
-  liveNodeOf,
   REDACTED_TEXT,
   redact,
   Registry,
@@ -33,7 +33,8 @@ import * as Option from "effect/Option"
 import * as Redacted from "effect/Redacted"
 import * as Schema from "effect/Schema"
 import * as SchemaGetter from "effect/SchemaGetter"
-import app from "../../../examples/inventory/src/scenarios.ts"
+import inventoryDefinition from "../../../examples/inventory/src/scenarios.ts"
+const app = inventoryDefinition[APP_HOST_ADAPTER]
 
 const pool = createTestAppPool()
 afterEach(pool.disposeAll)
@@ -42,7 +43,7 @@ const appFor = <S, A extends ActionsOf<S>, W>(
   capability: Capability<S, A, never, Record<string, never>, W>,
   initial: S,
 ) =>
-  defineApp({
+  createEffectHost({
     name: "test",
     defaultScenario: "default",
     root: Layer.effectDiscard(
@@ -194,7 +195,7 @@ test("exploring finds work a step set off that crashed in the background", async
       }),
     }),
   })
-  const host = defineApp({
+  const host = createEffectHost({
     name: "haunted",
     defaultScenario: "default",
     root: Nav.layer({
@@ -217,7 +218,7 @@ test("a crash on starting is found even with nothing to do afterwards", async ()
     },
     actions: () => ({}),
   })
-  const host = defineApp({
+  const host = createEffectHost({
     name: "haunted",
     defaultScenario: "default",
     root: Layer.effectDiscard(
@@ -641,7 +642,7 @@ test("a live node gives the UI stable snapshots and a typed send", async () => {
     }),
   })
   const seen: Array<number> = []
-  const host = defineApp({
+  const host = createEffectHost({
     name: "ui",
     defaultScenario: "default",
     root: Layer.effectDiscard(
@@ -684,7 +685,7 @@ test("state that cannot be published does not become the state", async () => {
     }),
   })
   let readState = () => ({ n: 0 })
-  const host = defineApp({
+  const host = createEffectHost({
     name: "strict",
     defaultScenario: "default",
     root: Layer.effectDiscard(
@@ -719,7 +720,7 @@ test("a screen's send rejects on an input that will not encode, rather than thro
     }),
   })
   let sending: Promise<unknown> = Promise.resolve()
-  const host = defineApp({
+  const host = createEffectHost({
     name: "bounded",
     defaultScenario: "default",
     root: Layer.effectDiscard(
@@ -742,7 +743,7 @@ const focusHarness = (onFocus: () => Effect.Effect<unknown>) => {
     actions: () => ({}),
   })
   const refocus = { run: () => {} }
-  const host = defineApp({
+  const host = createEffectHost({
     name: "focusing",
     defaultScenario: "default",
     root: Layer.effectDiscard(
@@ -820,7 +821,7 @@ test("a focus hook that throws is that work's failure, not the navigation's", as
     actions: () => ({}),
   })
   const Home = defineCapability({ name: "Home", state: Schema.Struct({}), actions: () => ({}) })
-  const host = defineApp({
+  const host = createEffectHost({
     name: "focus",
     defaultScenario: "default",
     root: Nav.layer({
@@ -842,14 +843,14 @@ test("a node is only returned for the capability that made it", async () => {
   const First = defineCapability({ name: "Shared", state, actions: () => ({}) })
   const Second = defineCapability({ name: "Shared", state, actions: () => ({}) })
   let found: Array<unknown> = []
-  const host = defineApp({
+  const host = createEffectHost({
     name: "identity",
     defaultScenario: "default",
     root: Layer.effectDiscard(
       Effect.gen(function* () {
         const node = yield* mount(First, { value: 42 })
         const runtime = yield* Registry
-        found = [liveNodeOf(runtime, node.id, First), liveNodeOf(runtime, node.id, Second)]
+        found = [First.resolve(runtime, node.id), Second.resolve(runtime, node.id)]
       }),
     ),
     scenarios: { default: { layer: Layer.empty } },
@@ -875,7 +876,7 @@ test("a secret in an action's input reaches the handler, and goes no further", a
     }),
   })
   let signing: Promise<unknown> = Promise.resolve()
-  const host = defineApp({
+  const host = createEffectHost({
     name: "login",
     defaultScenario: "default",
     root: Layer.effectDiscard(
@@ -903,7 +904,7 @@ test("a live subscriber that throws cannot fail the action or starve the others"
     }),
   })
   const seen: Array<number> = []
-  const host = defineApp({
+  const host = createEffectHost({
     name: "subscribers",
     defaultScenario: "default",
     root: Layer.effectDiscard(
@@ -927,7 +928,7 @@ test("a live subscriber that throws cannot fail the action or starve the others"
 test("node listeners are capped", async () => {
   const Plain = defineCapability({ name: "Plain", state: Schema.Struct({}), actions: () => ({}) })
   let overflow: unknown
-  const host = defineApp({
+  const host = createEffectHost({
     name: "listeners",
     defaultScenario: "default",
     root: Layer.effectDiscard(
@@ -983,7 +984,7 @@ test("an action taking anything is sent its input; one taking nothing is sent no
     }),
   })
   let sending: Promise<unknown> = Promise.resolve()
-  const host = defineApp({
+  const host = createEffectHost({
     name: "any",
     defaultScenario: "default",
     root: Layer.effectDiscard(
@@ -1089,7 +1090,7 @@ test("a declared focus failure reaches the session reporter", async () => {
     onFocus: () => Effect.fail({ _tag: "Offline", message: "focus offline" }),
     actions: () => ({}),
   })
-  const host = defineApp({
+  const host = createEffectHost({
     name: "focus-reporting",
     defaultScenario: "default",
     root: Layer.effectDiscard(

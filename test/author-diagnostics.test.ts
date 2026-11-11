@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { Screen, defineApp, defineNavigation } from "@reflex/effect"
-import { legacyApp } from "@reflex/effect/internal"
+import { APP_HOST_ADAPTER } from "@reflex/runtime/internal"
 import {
   createController,
   systemTimers,
@@ -34,12 +34,10 @@ const page = Page.implement({
     Foreign: a.navigates({ handler: () => Foreign.back }),
   }),
 })
-const host: AppHost = legacyApp(
-  (defineApp as Erased)({
-    name: "diagnostics",
-    navigation: Nav.implement([page], { initial: Page }),
-  }),
-)
+const host: AppHost = (defineApp as Erased)({
+  name: "diagnostics",
+  navigation: Nav.implement([page], { initial: Page }),
+})[APP_HOST_ADAPTER]
 const messages = {
   Plain: authorMessages.plainNavigation,
   Dropped: authorMessages.discardedCommand,

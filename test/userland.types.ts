@@ -1,9 +1,5 @@
-import {
-  legacyDefineApp as defineApp,
-  legacyDefineNavigation as defineNavigation,
-} from "@reflex/effect/internal"
-import { defineCapability, defineScreen } from "@reflex/effect"
-import type { NodeOf } from "@reflex/effect/advanced"
+import { defineApp, defineNavigation, Screen as screenContract } from "@reflex/effect"
+import { APP_HOST_ADAPTER } from "@reflex/runtime/internal"
 import { defineStoreNode, standardInput } from "@reflex/runtime"
 import * as Layer from "effect/Layer"
 import * as Schema from "effect/Schema"
@@ -11,10 +7,9 @@ import { z } from "zod"
 import { expoRoutes } from "../packages/expo/src/routes-effect.ts"
 import { createTestAppPool, explore } from "@reflex/test"
 
-const DetailContract = defineScreen({
-  name: "Detail",
+const DetailContract = screenContract("Detail", {
   state: Schema.TaggedStruct("editing", { quantity: Schema.Number }),
-  params: Schema.Struct({ productId: Schema.String }),
+  params: { productId: Schema.String },
   initial: () => ({ _tag: "editing" as const, quantity: 0 }),
 })
 const Detail = DetailContract.implement({
@@ -25,45 +20,44 @@ const Detail = DetailContract.implement({
     }),
   }),
 })
-const HomeContract = defineScreen({
-  name: "Home",
-  state: Schema.Number,
-  initial: () => 0,
-})
+const HomeContract = screenContract("Home", { state: Schema.Number, initial: () => 0 })
 const Home = HomeContract.implement({ actions: () => ({}) })
-const Nav = defineNavigation("types", { Detail: DetailContract, Home: HomeContract })
-defineNavigation("invalid", {
-  // @ts-expect-error Navigation screens must own initial(params).
-  Missing: defineCapability({ name: "Missing", state: Schema.Number, actions: () => ({}) }),
+const Nav = defineNavigation({ Detail: DetailContract, Home: HomeContract })
+defineNavigation({
+  // @ts-expect-error Navigation requires screen contracts, not ambient services.
+  Missing: defineService({
+    name: "Missing",
+    state: Schema.Number,
+    initial: () => 0,
+    actions: () => ({}),
+  }),
 })
 
 const app = defineApp({
   name: "typed",
-  root: Nav.layer({ screens: { Detail, Home }, initial: { route: "Home", params: {} } }),
-  nodes: { Detail, Home },
+  navigation: Nav.implement([Detail, Home], { initial: HomeContract }),
   scenarios: { default: { layer: Layer.empty } },
   defaultScenario: "default",
 })
+// @ts-expect-error The default must name a defined scenario.
 defineApp({
   name: "bad",
-  root: Layer.empty,
+
   scenarios: { default: { layer: Layer.empty } },
-  // @ts-expect-error The default must name a defined scenario.
   defaultScenario: "missing",
 })
 
-export const contracts = async (node: NodeOf<typeof Detail>) => {
+export const contracts = async (node: NonNullable<ReturnType<typeof Detail.resolve>>) => {
   const pool = createTestAppPool()
-  const session = await pool.open(app, { scenario: "default" })
+  const session = await pool.open(app[APP_HOST_ADAPTER], { scenario: "default" })
   // @ts-expect-error Scenario names derive from app.
-  await pool.open(app, { scenario: "missing" })
+  await pool.open(app[APP_HOST_ADAPTER], { scenario: "missing" })
   const detail = await session.focused(Detail, { _tag: "editing" })
   const quantity: number = (await detail.state()).quantity
   await detail.actions.SetQuantity({ quantity })
   await session.focused(
     // @ts-expect-error Tests accept only nodes declared by this app.
-    defineCapability({
-      name: "Foreign",
+    screenContract.define("Foreign", {
       state: Schema.Number,
       initial: () => 0,
       actions: () => ({}),
@@ -76,49 +70,55 @@ export const contracts = async (node: NodeOf<typeof Detail>) => {
   // @ts-expect-error Wrong input.
   await detail.actions.SetQuantity({ quantity: "wrong" })
   // @ts-expect-error Wrong route param.
-  Nav.push("Detail", { productId: 123 })
+  Nav.push(DetailContract, { productId: 123 })
   // @ts-expect-error Extra route param.
-  Nav.push("Detail", { productId: "x", nonsense: true })
+  Nav.push(DetailContract, { productId: "x", nonsense: true })
   // @ts-expect-error Unknown route.
   Nav.push("Missing")
-  Nav.push("Home")
-  Nav.push("Detail", { productId: "x" })
-  expoRoutes(Nav, { Home: "/", Detail: { pathname: "/detail/[id]", params: { productId: "id" } } })
-  // @ts-expect-error Mapper keys derive from route params.
-  expoRoutes(Nav, { Home: "/", Detail: { pathname: "/detail/[id]", params: { id: "id" } } })
-  await explore(app, { knownInputs: { Detail: { SetQuantity: [{ quantity: 1 }] } } })
-  // @ts-expect-error Exploration inputs derive from the node's actions.
-  await explore(app, { knownInputs: { Detail: { SetQuantity: [{ quantity: "wrong" }] } } })
+  Nav.push(HomeContract)
+  Nav.push(DetailContract, { productId: "x" })
+  expoRoutes(
+    { screens: { Detail: DetailContract, Home: HomeContract } },
+    { Home: "/", Detail: { pathname: "/detail/[id]", params: { productId: "id" } } },
+  )
+  expoRoutes(
+    { screens: { Detail: DetailContract, Home: HomeContract } },
+    // @ts-expect-error Mapper keys derive from route params.
+    { Home: "/", Detail: { pathname: "/detail/[id]", params: { id: "id" } } },
+  )
+  await explore(app[APP_HOST_ADAPTER], {
+    knownInputs: { Detail: { SetQuantity: [{ quantity: 1 }] } },
+  })
+  await explore(app[APP_HOST_ADAPTER], {
+    // @ts-expect-error Exploration inputs derive from the node's actions.
+    knownInputs: { Detail: { SetQuantity: [{ quantity: "wrong" }] } },
+  })
   // @ts-expect-error Unknown action.
-  await explore(app, { knownInputs: { Detail: { Save: [{}] } } })
+  await explore(app[APP_HOST_ADAPTER], { knownInputs: { Detail: { Save: [{}] } } })
   await node.actions.SetQuantity({ quantity: 2 })
   await pool.disposeAll()
 }
 
 // Round two: contracts establish state and routes before any handlers import navigation.
-import type { InferState, InferInput, InferError } from "@reflex/effect"
-import { NavigationRefused } from "@reflex/effect/advanced"
+import type { InferState, InferInput, InferError } from "@reflex/runtime"
 import * as Effect from "effect/Effect"
 import { includes } from "@reflex/test"
 import { serveLive } from "@reflex/live"
-const First = defineScreen({
-  name: "First",
+const First = screenContract("First", {
   state: Schema.TaggedStruct("ready", {}),
   initial: () => ({ _tag: "ready" }),
 })
-const Second = defineScreen({
-  name: "Second",
+const Second = screenContract("Second", {
   state: Schema.Number,
-  params: Schema.Struct({ id: Schema.String }),
+  params: { id: Schema.String },
   initial: () => 0,
 })
-const ContractNav = defineNavigation("contracts/one", { First, Second })
-const OtherNav = defineNavigation("contracts/two", { First, Second })
+const ContractNav = defineNavigation({ First, Second }, { key: "contracts/one" })
+const OtherNav = defineNavigation({ First, Second }, { key: "contracts/two" })
 const FirstImpl = First.implement({
   actions: (action) => ({
-    Open: action({
-      error: NavigationRefused,
-      handler: () => ContractNav.push("Second", { id: "one" }),
+    Open: action.navigates({
+      handler: () => ContractNav.push(Second, { id: "one" }),
     }),
     Empty: action({
       handler: (input) => {
@@ -132,22 +132,17 @@ const FirstImpl = First.implement({
   }),
 })
 const SecondImpl = Second.implement({ actions: () => ({}) })
-export const contractNavigation = (route: "First" | "Second") => {
+export const contractNavigation = (route: typeof First | typeof Second) => {
   // @ts-expect-error A union route cannot be paired with just one member's params.
   ContractNav.push(route, { id: "one" })
-  const onlyOther = OtherNav.layer({
-    screens: { First: FirstImpl, Second: SecondImpl },
-    initial: { route: "First", params: {} },
-  })
-  // @ts-expect-error Navigator service identity includes its literal key.
-  const wrong: Layer.Success<typeof onlyOther> = null as unknown as Effect.Services<
-    ReturnType<typeof ContractNav.push>
-  >
+  const onlyOther = OtherNav.implement([FirstImpl, SecondImpl], { initial: First })
+  // @ts-expect-error Navigator identity includes its literal key.
+  const wrong: typeof onlyOther = ContractNav.implement([FirstImpl, SecondImpl], { initial: First })
   return wrong
 }
 const NoMembers = defineApp({
   name: "no-members",
-  root: Layer.empty,
+
   scenarios: { default: { layer: Layer.empty } },
   defaultScenario: "default",
 })
@@ -156,9 +151,9 @@ export const strictMembers = async () => {
   // @ts-expect-error Omitting membership never means accept every definition.
   await session.focused(Home)
   // @ts-expect-error Exploration scenario names derive from the host.
-  await explore(NoMembers, { scenario: "missing" })
+  await explore(NoMembers[APP_HOST_ADAPTER], { scenario: "missing" })
   // @ts-expect-error Live serving has the same scenario contract.
-  await serveLive(NoMembers, { setting: "unused", scenario: "missing" })
+  await serveLive(NoMembers[APP_HOST_ADAPTER], { setting: "unused", scenario: "missing" })
 }
 const UnknownStore = defineStoreNode({
   name: "Unknown",
@@ -200,13 +195,16 @@ defineStoreNode({
   project: (state) => state,
   actions: () => ({}),
 })
-const Big = defineScreen({ name: "Big", state: Schema.BigInt, initial: () => 12n }).implement({
-  actions: () => ({}),
-})
+const Big = screenContract("Big", { state: Schema.BigIntFromString, initial: () => 12n }).implement(
+  {
+    actions: () => ({}),
+  },
+)
 const wireBig: InferState<typeof Big> = "12"
 // @ts-expect-error BigInts arrive as strings on the wire.
 const wrongBig: InferState<typeof Big> = 12n
 const quantityInput: InferInput<typeof Detail, "SetQuantity"> = { quantity: 1 }
+// @ts-expect-error Navigation refusals are not declared domain errors.
 const refusal: InferError<typeof FirstImpl, "Open"> = {
   _tag: "NavigationStackFull",
   message: "full",
@@ -218,10 +216,9 @@ const bindings = expoRoutes(
 )
 // @ts-expect-error Router projection plumbing is absent from the consumer surface.
 bindings.toHref({ route: "Nope" })
-const NumberRoute = defineScreen({
-  name: "NumberRoute",
+const NumberRoute = screenContract("NumberRoute", {
   state: Schema.Number,
-  params: Schema.Struct({ id: Schema.Number }),
+  params: { id: Schema.Number },
   initial: () => 0,
 }).implement({ actions: () => ({}) })
 expoRoutes(
@@ -248,10 +245,9 @@ defineStoreNode({
     },
   }),
 })
-const OptionalRoute = defineScreen({
-  name: "Optional",
+const OptionalRoute = screenContract("Optional", {
   state: Schema.Number,
-  params: Schema.Struct({ query: Schema.optionalKey(Schema.String) }),
+  params: { query: Schema.optionalKey(Schema.String) },
   initial: () => 0,
 }).implement({ actions: () => ({}) })
 // @ts-expect-error Optional-only params still require a mapping.
@@ -263,7 +259,7 @@ expoRoutes(
     Second: { pathname: "/second/[wrong]", params: { id: "id" } },
   },
 )
-export const noOwnership = (node: NodeOf<typeof Detail>) => {
+export const noOwnership = (node: NonNullable<ReturnType<typeof Detail.resolve>>) => {
   // @ts-expect-error Consumer handles do not own disposal.
   node.dispose()
   // @ts-expect-error Decoded dispatch is an explicit advanced function.

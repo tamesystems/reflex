@@ -3,9 +3,10 @@ import { ErrorCode, SUBSCRIBERS_MAX } from "@reflex/protocol"
 import { createTestAppPool } from "@reflex/test"
 import { defineStoreApp, defineStoreNode, standardInput } from "@reflex/runtime"
 import { z } from "zod"
-import { mountSessionRoute } from "@reflex/runtime/internal"
+import { mountSessionRoute, APP_HOST_ADAPTER } from "@reflex/runtime/internal"
 import { createStore } from "zustand/vanilla"
-import app from "../examples/inventory/src/scenarios.ts"
+import inventoryDefinition from "../examples/inventory/src/scenarios.ts"
+const app = inventoryDefinition[APP_HOST_ADAPTER]
 const screens = app.screens
 import { InventoryList } from "../examples/inventory/src/features/inventory-list.ts"
 import { InventoryDetail } from "../examples/inventory/src/features/inventory-detail.ts"
@@ -147,18 +148,19 @@ test("Expo registration derives both directions and validates renamed incoming p
 })
 
 test("route binding compares encoded params after decoding an incoming transform", async () => {
-  const { defineScreen, defineNavigation } = await import("@reflex/effect")
+  const { Screen: screenContract } = await import("@reflex/effect")
   const Schema = await import("effect/Schema")
-  const Detail = defineScreen({
-    name: "NumericDetail",
+  const Detail = screenContract("NumericDetail", {
     state: Schema.Number,
-    params: Schema.Struct({ id: Schema.NumberFromString }),
+    params: { id: Schema.NumberFromString },
     initial: () => 0,
   })
-  const navigation = defineNavigation("numeric-routes", { Detail })
-  const routes = expoRoutes(navigation, {
-    Detail: { pathname: "/detail/[sku]", params: { id: "sku" } },
-  })
+  const routes = expoRoutes(
+    { screens: { Detail } },
+    {
+      Detail: { pathname: "/detail/[sku]", params: { id: "sku" } },
+    },
+  )
   expect(routes.Detail[SCREEN_BINDING].params({ sku: "42" })).toEqual({ id: 42 })
   expect(routes.Detail[SCREEN_BINDING].encodedParams({ sku: "42" })).toEqual({ id: "42" })
   expect(routes[ROUTE_MAPPING].fromLocation(["detail", "[sku]"], { sku: "42" })).toEqual({
@@ -186,38 +188,36 @@ test("typed focused access selects the top instance when screen names repeat", a
 })
 
 test("Effect actions accept encoded inputs locally and in journeys, decoding once for handlers", async () => {
-  const { defineApp, defineCapability } = await import("@reflex/effect")
-  const { mount } = await import("@reflex/effect/advanced")
+  const { defineApp, defineService } = await import("@reflex/effect")
+  const { mountEffect } = await import("@reflex/effect/advanced")
   const Effect = await import("effect/Effect")
-  const Layer = await import("effect/Layer")
   const Schema = await import("effect/Schema")
-  const Parsed = defineCapability({
+  const Parsed = defineService({
     name: "Parsed",
-    type: "service",
     state: Schema.Number,
+    initial: () => 0,
     actions: (action) => ({
       Set: action({
         input: Schema.NumberFromString,
-        handler: (value, state) => state.update(() => value),
+        handler: (value, { state }) => state.set(value),
       }),
     }),
   })
-  const host = defineApp({
-    name: "parsed",
-    nodes: { Parsed },
-    defaultScenario: "default",
-    scenarios: { default: { layer: Layer.empty } },
-    root: Layer.effectDiscard(
+  await Effect.runPromise(
+    Effect.scoped(
       Effect.gen(function* () {
-        const node = yield* mount(Parsed, 0)
-        expect(yield* Effect.promise(() => node.actions.Set("12"))).toEqual({ status: "completed" })
-        expect(node.getSnapshot()).toBe(12)
+        const node = yield* mountEffect(Parsed)
+        expect(yield* Effect.promise(() => node.actions.Set.run("12"))).toEqual({
+          status: "completed",
+        })
+        expect(node.state).toBe(12)
       }),
     ),
-  })
-  const session = await pool.open(host)
+  )
+  const host = defineApp({ name: "parsed", services: [Parsed] })
+  const session = await pool.open(host[APP_HOST_ADAPTER])
   const node = await session.node(Parsed)
-  expect(await node.state()).toBe(12)
+  expect(await node.state()).toBe(0)
   expect(await node.actions.Set("13")).toEqual({ status: "completed" })
   expect(await (await session.node(Parsed)).state()).toBe(13)
 })

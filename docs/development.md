@@ -290,8 +290,8 @@ inference cases, complete documentation snippets, root/mobile/web typechecks and
 Intentionally partial snippets use `ts partial: reason` or `tsx partial: reason`.
 
 `bun docs/design/prototypes/check.ts --real` also compares the exact type and value
-export-name sets for the React, React Router and Expo root/advanced entries against the
-spec declarations. Effect/runtime/live/test export cleanup remains in progress. The store author entry now
+export-name sets for the Effect, React, React Router and Expo root/advanced entries against the
+spec declarations. Internal Effect and runtime/live/test export cleanup remains in progress. The store author entry now
 accepts only screen/service arrays and withStore overrides; conformance tests drive the
 wire client directly. Raw store mounting and throwable failure exports have been removed. Run
 `bun docs/design/prototypes/check.ts` for the declaration examples, diagnostic locations
@@ -331,3 +331,11 @@ The partial D2 store/conformance cleanup passes the unchanged root type gate at 
 instantiations. Regression tests construct store definitions directly; overlapping store
 inference cases live in `packages/runtime/test/store-author.types.ts`. See ADR 0020 for
 remaining cleanup and source counts; this checkpoint does not meet final acceptance.
+
+The D3 Effect checkpoint passes the unchanged root gate at 486,449 instantiations
+(539,368 K memory, 1.51 s check locally). Eight public root/advanced export sets match
+the declarations. Real-package examples compiled with 248,857 instantiations. Reference
+performance gates passed at 8.60 ms per added screen and at most 0.050 ms per added hook;
+real-package gates passed at 19.0 ms per screen and at most 0.117 ms per hook. These
+measurements include local scheduler noise; no budget was raised. See ADR 0020 and its
+Effect inventory for the two remaining low-level fixture suites and internal cleanup.

@@ -6,7 +6,8 @@ import { createEventEncoder, createLoopbackClient } from "@reflex/rpc"
 import { createController } from "@reflex/runtime/internal"
 import { EventLog } from "../packages/runtime/src/event-log.ts"
 import * as Schema from "effect/Schema"
-import inventory from "../examples/inventory/src/scenarios.ts"
+import inventoryDefinition from "../examples/inventory/src/scenarios.ts"
+const inventory = inventoryDefinition[APP_HOST_ADAPTER]
 
 const REQUEST_COUNT = 2_000
 const FRAME_COUNT = 200

@@ -1,3 +1,4 @@
+import { APP_HOST_ADAPTER } from "@reflex/runtime/internal"
 /** Each command is a separate process; only the session persists between them. */
 import { afterAll, beforeAll, beforeEach, expect, setDefaultTimeout, test } from "bun:test"
 import {
@@ -361,7 +362,8 @@ test(
 test("shutdown is refused inside a batch, so its reply is not lost", async () => {
   const { createConnection } = await import("@reflex/rpc")
   const { createController } = await import("@reflex/runtime/internal")
-  const { default: app } = await import("../../../examples/inventory/src/scenarios.ts")
+  const { default: definition } = await import("../../../examples/inventory/src/scenarios.ts")
+  const app = definition[APP_HOST_ADAPTER]
   const controller = await createController(app)
   let shutdowns = 0
   const lines: Array<unknown> = []
@@ -488,7 +490,9 @@ test(
 const CLI = join(root, "packages/cli/src/cli.ts")
 
 const appModule = (body: string) => `
-  import inventory from ${JSON.stringify(pathToFileURL(join(root, "examples/inventory/src/scenarios.ts")).href)}
+  import definition from ${JSON.stringify(pathToFileURL(join(root, "examples/inventory/src/scenarios.ts")).href)}
+  import { APP_HOST_ADAPTER } from ${JSON.stringify(pathToFileURL(join(root, "packages/runtime/src/definition-identity.ts")).href)}
+  const inventory = definition[APP_HOST_ADAPTER]
   ${body}
 `
 

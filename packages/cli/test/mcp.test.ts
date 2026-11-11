@@ -1,10 +1,12 @@
+import { APP_HOST_ADAPTER } from "@reflex/runtime/internal"
 /** The MCP server, against a real headless session reached through the real protocol. */
 import { afterEach, expect, test } from "bun:test"
 import { type AccessPolicy, ErrorCode } from "@reflex/protocol"
 import { type Client, createLoopbackClient } from "@reflex/rpc"
 import { type Controller, createController } from "@reflex/runtime/internal"
 import { nextTurn, waitUntil } from "@reflex/test"
-import app from "../../../examples/inventory/src/scenarios.ts"
+import inventoryDefinition from "../../../examples/inventory/src/scenarios.ts"
+const app = inventoryDefinition[APP_HOST_ADAPTER]
 import * as commands from "../src/commands.ts"
 import type { Target } from "../src/config.ts"
 import { createMcpServer, MCP_CALLS_MAX, MCP_PROTOCOL_VERSIONS, TOOLS } from "../src/mcp.ts"

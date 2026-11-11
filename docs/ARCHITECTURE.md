@@ -85,7 +85,9 @@ packages/
   effect/     author-screen.ts (Screen, defineService, defineFixture),
               author-navigation.ts (terminal commands and scoped screens),
               author-app.ts (ordered Layers and scenarios), capability.ts (internal
-              mounting/state access), app.ts (session lifecycle), redaction.ts.
+              mounting/state access), app.ts (session lifecycle), mount-effect.ts (explicit
+              scoped ownership) and redaction.ts. Root and advanced exports match the
+              target declarations; the remaining capability builders are internal.
   test/       App/scenario-typed createTestApp/connectJourney clients, raw protocol tests
               and explore random walks, through the real protocol.
   cli/        The reflex command. cli.ts parses; commands.ts does; session.ts runs and

@@ -1,3 +1,4 @@
+import { APP_HOST_ADAPTER } from "@reflex/runtime/internal"
 /** The app's dialler, against a socket the test plays the bridge with. */
 import { expect, test } from "bun:test"
 import {
@@ -9,7 +10,8 @@ import {
 } from "@reflex/protocol"
 import { createController, type Timers } from "@reflex/runtime/internal"
 import { nextTurn } from "@reflex/test"
-import app from "../../../examples/inventory/src/scenarios.ts"
+import inventoryDefinition from "../../../examples/inventory/src/scenarios.ts"
+const app = inventoryDefinition[APP_HOST_ADAPTER]
 import { type BridgeSocket, type BridgeStatus, connectBridge } from "../src/bridge.ts"
 
 const TOKEN = "t".repeat(43)

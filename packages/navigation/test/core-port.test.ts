@@ -1,35 +1,34 @@
 import { expect, test } from "bun:test"
-import { defineApp, defineCapability } from "@reflex/effect"
-import { NoParams } from "@reflex/effect/advanced"
-import { defineNavigationFactories, mountOwned as mount } from "@reflex/effect/internal"
+import { defineApp, defineNavigation, Screen } from "@reflex/effect"
+import { APP_HOST_ADAPTER } from "@reflex/runtime/internal"
 import * as Effect from "effect/Effect"
-import * as Layer from "effect/Layer"
 import * as Schema from "effect/Schema"
 import { corePortOf } from "../src/core-port.ts"
 
 const calls: Array<string> = []
-const Nav = defineNavigationFactories("test/Captured", { Home: NoParams, Next: NoParams })
 const handlerCalled = (name: string) =>
   Effect.sync(() => {
     calls.push(name)
   })
-const Captures = defineCapability({
-  name: "Captures",
-  state: Schema.Struct({}),
-  actions: (action) => ({
-    GoBack: action({ handler: () => handlerCalled("GoBack") }),
-    Navigate: action({ input: Schema.Unknown, handler: () => handlerCalled("Navigate") }),
+class Home extends Screen("Home", { state: Schema.Number, initial: () => 0 }) {}
+class Next extends Screen("Next", { state: Schema.Number, initial: () => 0 }) {}
+const Nav = defineNavigation({ Home, Next })
+const home = Home.implement({
+  actions: (a) => ({
+    GoBack: a({ handler: () => handlerCalled("GoBack") }),
+    Navigate: a({ input: Schema.Json, handler: () => handlerCalled("Navigate") }),
+  }),
+})
+const next = Next.implement({
+  actions: (a) => ({
+    GoBack: a({ handler: () => handlerCalled("GoBack") }),
+    Navigate: a({ input: Schema.Json, handler: () => handlerCalled("Navigate") }),
   }),
 })
 const host = defineApp({
   name: "captured",
-  defaultScenario: "default",
-  root: Nav.layer({
-    initial: { route: "Home", params: {} },
-    screens: { Home: () => mount(Captures, {}), Next: () => mount(Captures, {}) },
-  }),
-  scenarios: { default: { layer: Layer.empty } },
-})
+  navigation: Nav.implement([home, next], { initial: Home }),
+})[APP_HOST_ADAPTER]
 
 test("the router's back and navigate reach navigation, whatever a screen calls its actions", async () => {
   calls.length = 0

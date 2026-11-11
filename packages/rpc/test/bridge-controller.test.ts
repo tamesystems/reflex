@@ -1,7 +1,6 @@
 import { afterEach, expect, test } from "bun:test"
-import { defineApp, defineCapability } from "@reflex/effect"
-import { mount } from "@reflex/effect/advanced"
-import { Registry } from "@reflex/effect/internal"
+import { defineApp, defineNavigation, Screen } from "@reflex/effect"
+import { APP_HOST_ADAPTER } from "@reflex/runtime/internal"
 import {
   BRIDGE_WAITERS_MAX,
   CANCEL_NOTIFICATION,
@@ -19,33 +18,24 @@ import {
 } from "@reflex/rpc"
 import { type Controller, createController, type Timers } from "@reflex/runtime/internal"
 import { nextTurn, waitUntil } from "@reflex/test"
-import * as Effect from "effect/Effect"
-import * as Layer from "effect/Layer"
 import * as Schema from "effect/Schema"
 
-const Counter = defineCapability({
-  name: "Counter",
+const Counter = Screen.define("Counter", {
+  initial: () => ({ count: 0 }),
   state: Schema.Struct({ count: Schema.Int }),
   actions: (action) => ({
     Add: action({
       input: Schema.Struct({ by: Schema.Int }),
-      handler: ({ by }, state) => state.update((s) => ({ count: s.count + by })),
+      handler: ({ by }, { state }) => state.update((s) => ({ count: s.count + by })),
     }),
   }),
 })
 
+const Nav = defineNavigation({ Counter })
 const host = defineApp({
   name: "counter",
-  defaultScenario: "default",
-  root: Layer.effectDiscard(
-    Effect.gen(function* () {
-      const node = yield* mount(Counter, { count: 0 })
-      const registry = yield* Registry
-      registry.setFocus(node.id)
-    }),
-  ),
-  scenarios: { default: { layer: Layer.empty } },
-})
+  navigation: Nav.implement([Counter], { initial: Counter }),
+})[APP_HOST_ADAPTER]
 
 const cleanups: Array<() => Promise<void> | void> = []
 afterEach(async () => {

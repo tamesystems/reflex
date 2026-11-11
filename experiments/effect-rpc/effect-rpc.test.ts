@@ -1,3 +1,4 @@
+import { APP_HOST_ADAPTER } from "@reflex/runtime/internal"
 /**
  * The comparison behind ADR 0014: identical plain JSON-RPC traffic, sent to the hand-written
  * connection and to the prototype in `connection.ts`, which serves the request methods
@@ -12,7 +13,8 @@ import { afterEach, expect, test } from "bun:test"
 import { ErrorCode } from "@reflex/protocol"
 import { createConnection } from "@reflex/rpc"
 import { type Controller, createController } from "@reflex/runtime/internal"
-import app from "../../examples/inventory/src/scenarios.ts"
+import inventoryDefinition from "../../examples/inventory/src/scenarios.ts"
+const app = inventoryDefinition[APP_HOST_ADAPTER]
 import { createEffectRpcConnection } from "./connection.ts"
 
 const REPLY_DEADLINE_MS = 10_000

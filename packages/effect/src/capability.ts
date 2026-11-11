@@ -339,7 +339,10 @@ export function defineCapability<
   return {
     resolve(runtime, id) {
       const nodeId = id ?? runtime.inspect({ name: definition.name }).node?.id
-      return nodeId === undefined ? undefined : liveNodeOf(runtime, nodeId, this)
+      const live = nodeId === undefined ? undefined : runtime.liveOf(nodeId)
+      return live instanceof NodeInstance && live.isInstanceOf(this)
+        ? (live as unknown as LiveNode<PublicState<W>, A>)
+        : undefined
     },
     params: definition.params ?? (Schema.Record(Schema.String, Schema.Never) as WireCodec<P>),
     initial: definition.initial,
@@ -388,13 +391,6 @@ export function defineCapability<
   }
 }
 
-/** A live instance. The same object serves the UI and the protocol. */
-export type NodeOf<C> = C extends ConsumerDefinition<infer S, unknown> & {
-  readonly actions: infer A
-}
-  ? LiveNode<S, A>
-  : never
-
 export type ActionCalls<A> = {
   readonly [K in keyof A]: (
     ...args: ConsumerArgs<A[K]>
@@ -442,44 +438,12 @@ export type SendArgs<D> =
       : [input: I]
     : never
 
-/** A screen of a known capability behind a protocol handle, for UI bindings. */
-export const liveNodeOf = <S, A extends ActionsOf<S>, R, P, W>(
-  runtime: Runtime,
-  nodeId: NodeId,
-  capability: Capability<S, A, R, P, W>,
-): LiveNode<PublicState<W>, A> | undefined => {
-  const live = runtime.liveOf(nodeId)
-  if (live instanceof NodeInstance && live.isInstanceOf(capability)) {
-    // Identity of the capability object is what proves `S` and `A`: names can repeat.
-    return live as unknown as LiveNode<PublicState<W>, A>
-  }
-  return undefined
-}
-
 export interface MountedNode<S, A, W = S> {
   readonly node: OwnedLiveNode<PublicState<W>, A>
   readonly access: StateAccess<S>
 }
 
-/**
- * Create and register a live node. It lives as long as the surrounding scope;
- * closing that scope interrupts its running actions and unregisters it.
- */
-export const mount = <S, A extends ActionsOf<S>, R, P, W>(
-  capability: Capability<S, A, R, P, W>,
-  initial: S,
-  options: { readonly focus?: boolean } = {},
-): Effect.Effect<LiveNode<PublicState<W>, A>, never, R | Registry | Scope.Scope> =>
-  Effect.flatMap(mountWithAccess(capability, initial), ({ node }) =>
-    Effect.map(Registry, (runtime) => {
-      if (options.focus === true) {
-        runtime.setFocus(node.id)
-      }
-      return node
-    }),
-  )
-
-/** Like `mount`, for owners that also write state from outside an action. */
+/** Mount a definition and its private write access in the surrounding scope. */
 export const mountWithAccess = <S, A extends ActionsOf<S>, R, P, W>(
   capability: Capability<S, A, R, P, W>,
   initial: S,

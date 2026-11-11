@@ -1,12 +1,13 @@
+import { APP_HOST_ADAPTER } from "@reflex/runtime/internal"
 /** Regressions from adversarial review: sessions, waits, and connections ending. */
 import { afterEach, expect, spyOn, test } from "bun:test"
-import { defineApp, defineCapability } from "@reflex/effect"
+import { createEffectHost, defineCapability } from "@reflex/effect/internal"
 import {
   type ActionsOf,
   type Capability,
   NavigationRefused,
   NoParams,
-} from "@reflex/effect/advanced"
+} from "@reflex/effect/internal"
 import { defineNavigationFactories, mountOwned as mount, Registry } from "@reflex/effect/internal"
 import {
   BATCH_LARGE_REPLY_CHARACTERS_MAX,
@@ -41,7 +42,8 @@ import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
 import * as Redacted from "effect/Redacted"
 import * as Schema from "effect/Schema"
-import inventory from "../examples/inventory/src/scenarios.ts"
+import inventoryDefinition from "../examples/inventory/src/scenarios.ts"
+const inventory = inventoryDefinition[APP_HOST_ADAPTER]
 
 const pool = createTestAppPool()
 const controllers: Array<Controller> = []
@@ -106,7 +108,7 @@ const focused = <S, A extends ActionsOf<S>>(
   capability: Capability<S, A, never>,
   initial: S,
 ) =>
-  defineApp({
+  createEffectHost({
     name,
     defaultScenario: "default",
     root: Layer.effectDiscard(
@@ -362,7 +364,7 @@ test("route params are scrubbed before they reach navigation state", async () =>
       }),
     }),
   })
-  const host = defineApp({
+  const host = createEffectHost({
     name: "secret",
     defaultScenario: "default",
     root: Nav.layer({
@@ -383,7 +385,7 @@ test("cancelling a navigation abandons it, and it never lands later", async () =
   const Nav = defineNavigationFactories("test/Slow", { A: Schema.Struct({}), B: Schema.Struct({}) })
   const blank = (name: string) =>
     defineCapability({ name, state: Schema.Struct({}), actions: () => ({}) })
-  const host = defineApp({
+  const host = createEffectHost({
     name: "slow",
     defaultScenario: "default",
     root: Nav.layer({
@@ -443,7 +445,7 @@ test("a route whose params cannot be encoded leaves the stack as it was", async 
       }),
     }),
   })
-  const host = defineApp({
+  const host = createEffectHost({
     name: "encoding",
     defaultScenario: "default",
     root: Nav.layer({
@@ -780,7 +782,7 @@ test("a screen that fails to build leaves nothing behind", async () => {
     state: Schema.Struct({}),
     actions: () => ({}),
   })
-  const host = defineApp({
+  const host = createEffectHost({
     name: "defect",
     defaultScenario: "default",
     root: Nav.layer({
@@ -923,7 +925,7 @@ const screenThatRedirects = () => {
     yield* nav.push("Next", {})
     return yield* mount(Plain, {})
   })
-  return defineApp({
+  return createEffectHost({
     name: "redirect",
     defaultScenario: "default",
     root: Nav.layer({
@@ -1411,7 +1413,7 @@ const stackApp = (options: {
     }
     return node
   })
-  const host = defineApp({
+  const host = createEffectHost({
     name: "stack",
     defaultScenario: "default",
     root: Nav.layer({

@@ -1,8 +1,13 @@
 import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
 import { afterEach, expect, test } from "bun:test"
-import { defineApp, defineNavigation, defineScreen } from "@reflex/effect"
-import { liveNodeOf } from "@reflex/effect/internal"
+import {
+  defineApp,
+  defineNavigation,
+  defineFixture,
+  Screen as screenContract,
+} from "@reflex/effect"
+import { APP_HOST_ADAPTER } from "@reflex/runtime/internal"
 import { createRuntime, mountSessionRoute, definitionIdentity } from "@reflex/runtime/internal"
 import { defineStoreApp, defineStoreNode, standardInput } from "@reflex/runtime"
 import { createTestAppPool } from "@reflex/test"
@@ -15,21 +20,24 @@ const pool = createTestAppPool()
 afterEach(pool.disposeAll)
 
 class Amount extends Context.Service<Amount, number>()("round3/Amount") {}
-const Count = defineScreen({ name: "Count", state: Schema.NumberFromString, initial: () => 1 })
-const Nav = defineNavigation("round3/Navigation", { Count })
+const Count = screenContract("Count", { state: Schema.NumberFromString, initial: () => 1 })
+const Nav = defineNavigation({ Count }, { key: "round3/Navigation" })
 const Counter = Count.implement({
   actions: (action) => ({
     Add: action({
-      handler: (_, state) => Effect.flatMap(Amount, (amount) => state.update((n) => n + amount)),
+      handler: (_, { state }) =>
+        Effect.flatMap(Amount, (amount) => state.update((n) => n + amount)),
     }),
   }),
 })
-const app = defineApp({
+const authored = defineApp({
   name: "round3",
-  navigation: Nav.implement({ Count: Counter }, { initial: "Count" }),
+  navigation: Nav.implement([Counter], { initial: Count }),
   scenarios: { default: { layer: Layer.succeed(Amount, 1) } },
   defaultScenario: "default",
 })
+
+const app = authored[APP_HOST_ADAPTER]
 
 test("navigation preserves transformed state and contract lookup across implementations", async () => {
   const session = await pool.open(app)
@@ -45,67 +53,79 @@ test("navigation preserves transformed state and contract lookup across implemen
     if (id === null) {
       throw new Error("Expected focus")
     }
-    expect(liveNodeOf(live.runtime, id, second)).toBeDefined()
+    expect(second.resolve(live.runtime, id)).toBeDefined()
   } finally {
     await live.dispose()
   }
 })
 
 test("composition rejects foreign contracts and duplicate implementations immediately", () => {
-  const clone = defineScreen({
-    name: "Count",
+  const clone = screenContract("Count", {
     state: Schema.NumberFromString,
     initial: () => 1,
   }).implement({ actions: () => ({}) })
-  expect(() => Nav.layer({ screens: { Count: clone }, initial: "Count" })).toThrow(
+  expect(() => Nav.implement([clone], { initial: Count })).toThrow(
     "must implement its registered contract",
   )
-  const Duplicate = defineNavigation("duplicate", { One: Count, Two: Count })
+  // @ts-expect-error Adversarial runtime duplicate probe.
+  expect(() => Nav.implement([Counter, Counter], { initial: Count })).toThrow(
+    "declared more than once",
+  )
+  const fixture = defineFixture({
+    name: "Count",
+    state: Schema.Number,
+    initial: () => 0,
+    actions: () => ({}),
+  })
   expect(() =>
-    Duplicate.layer({ screens: { One: Counter, Two: Counter }, initial: "One" }),
-  ).toThrow("duplicate implementations")
+    defineApp({
+      name: "duplicate-name",
+      navigation: Nav.implement([Counter], { initial: Count }),
+      fixtures: [fixture],
+      scenarios: { default: { layer: Layer.succeed(Amount, 1) } },
+    }),
+  ).toThrow("Count is declared more than once")
   expect(() =>
     defineApp({
       name: "conflict",
-      navigation: Nav.implement({ Count: Counter }, { initial: "Count" }),
-      fixtures: { Clone: clone },
+      navigation: Nav.implement([Counter], { initial: Count }),
+      screens: [clone],
       scenarios: { default: { layer: Layer.succeed(Amount, 1) } },
-      defaultScenario: "default",
-    }),
-  ).toThrow('conflicting definitions named "Count"')
+    } as never),
+  ).toThrow("Choose navigation or screens")
 })
 
 test("journey membership rejects an independent same-name definition", async () => {
   const session = await pool.open(app)
-  const clone = defineScreen({
-    name: "Count",
+  const clone = screenContract("Count", {
     state: Schema.NumberFromString,
     initial: () => 1,
   }).implement({
-    actions: (action) => ({ Add: action({ handler: (_, state) => state.update((n) => n + 1) }) }),
+    actions: (action) => ({
+      Add: action({ handler: (_, { state }) => state.update((n) => n + 1) }),
+    }),
   })
   await expect(session.node(clone)).rejects.toThrow("not a contract")
 })
 
 test("un-narrowed journey state follows legitimate union transitions", async () => {
-  const Contract = defineScreen({
-    name: "Union",
+  const Contract = screenContract("Union", {
     state: Schema.Union([Schema.TaggedStruct("one", {}), Schema.TaggedStruct("two", {})]),
     initial: () => ({ _tag: "one" }),
   })
   const Union = Contract.implement({
     actions: (action) => ({
-      Next: action({ handler: (_, state) => state.update(() => ({ _tag: "two" })) }),
+      Next: action({ handler: (_, { state }) => state.update(() => ({ _tag: "two" })) }),
     }),
   })
-  const navigation = defineNavigation("union", { Union: Contract })
+  const navigation = defineNavigation({ Union: Contract })
   const host = defineApp({
     name: "union",
-    navigation: navigation.implement({ Union }, { initial: "Union" }),
+    navigation: navigation.implement([Union], { initial: Contract }),
     scenarios: { default: { layer: Layer.empty } },
     defaultScenario: "default",
   })
-  const session = await pool.open(host)
+  const session = await pool.open(host[APP_HOST_ADAPTER])
   const node = await session.node(Union)
   const focused = await session.focused(Union)
   const narrowed = await session.focused(Union, { _tag: "one" })
@@ -116,22 +136,22 @@ test("un-narrowed journey state follows legitimate union transitions", async () 
 })
 
 test("back completes the calling action before retiring its screen", async () => {
-  const Home = defineScreen({ name: "Home", state: Schema.Number, initial: () => 0 })
-  const Detail = defineScreen({ name: "Detail", state: Schema.Number, initial: () => 0 })
-  const nav = defineNavigation("return", { Home, Detail })
+  const Home = screenContract("Home", { state: Schema.Number, initial: () => 0 })
+  const Detail = screenContract("Detail", { state: Schema.Number, initial: () => 0 })
+  const nav = defineNavigation({ Home, Detail })
   const home = Home.implement({
-    actions: (action) => ({ Open: action({ handler: () => nav.push("Detail") }) }),
+    actions: (action) => ({ Open: action.navigates({ handler: () => nav.push(Detail) }) }),
   })
   const detail = Detail.implement({
-    actions: (action) => ({ SaveAndClose: action({ handler: () => nav.back }) }),
+    actions: (action) => ({ SaveAndClose: action.navigates({ handler: () => nav.back }) }),
   })
   const host = defineApp({
     name: "return",
-    navigation: nav.implement({ Home: home, Detail: detail }, { initial: "Home" }),
+    navigation: nav.implement([home, detail], { initial: Home }),
     scenarios: { default: { layer: Layer.empty } },
     defaultScenario: "default",
   })
-  const session = await pool.open(host)
+  const session = await pool.open(host[APP_HOST_ADAPTER])
   await (await session.focused(home)).actions.Open()
   expect(await (await session.focused(detail)).actions.SaveAndClose()).toEqual({
     status: "completed",
@@ -166,7 +186,7 @@ test("Effect route factories provide the session's service layer", async () => {
   const session = await app.start("default", { sessionId: "route-effect" })
   try {
     const node = await mountSessionRoute(session.runtime, Counter, {})
-    const resolved = liveNodeOf(session.runtime, node.id, Counter)
+    const resolved = Counter.resolve(session.runtime, node.id)
     expect(resolved?.getSnapshot()).toBe("1")
     session.runtime.setFocus(node.id)
     await resolved?.actions.Add()
@@ -206,10 +226,9 @@ test("store error transforms are checked, published and narrowed", async () => {
 })
 
 test("URL mapping rejects duplicate targets at runtime", () => {
-  const Screen = defineScreen({
-    name: "URL",
+  const Screen = screenContract("URL", {
     state: Schema.Number,
-    params: Schema.Struct({ a: Schema.String, b: Schema.String }),
+    params: { a: Schema.String, b: Schema.String },
     initial: () => 0,
   })
   const params: { a: string; b: string } = { a: "id", b: "id" }
@@ -220,52 +239,53 @@ test("URL mapping rejects duplicate targets at runtime", () => {
 })
 
 test("tuples retain position in published navigation state", async () => {
-  const Contract = defineScreen({
-    name: "Tuple",
+  const Contract = screenContract("Tuple", {
     state: Schema.Tuple([Schema.String, Schema.Number]),
     initial: () => ["a", 1],
   })
   const Tuple = Contract.implement({ actions: () => ({}) })
-  const navigation = defineNavigation("tuple", { Tuple: Contract })
+  const navigation = defineNavigation({ Tuple: Contract })
   const host = defineApp({
     name: "tuple",
-    navigation: navigation.implement({ Tuple }, { initial: "Tuple" }),
+    navigation: navigation.implement([Tuple], { initial: Contract }),
     scenarios: { default: { layer: Layer.empty } },
     defaultScenario: "default",
   })
-  const node = await (await pool.open(host)).focused(Tuple)
+  const node = await (await pool.open(host[APP_HOST_ADAPTER])).focused(Tuple)
   const state: readonly [string, number] = await node.state()
   expect(state).toEqual(["a", 1])
 })
 
 test("scenario extensions retain app identity and independent apps do not", () => {
-  const extended = app.withScenarios({ another: { layer: Layer.succeed(Amount, 2) } })
-  const twice = extended.withScenarios({ third: { layer: Layer.succeed(Amount, 3) } })
-  expect(definitionIdentity(extended)).toBe(definitionIdentity(app))
-  expect(definitionIdentity(twice)).toBe(definitionIdentity(app))
+  const another = { another: { layer: Layer.succeed(Amount, 2) } }
+  const third = { third: { layer: Layer.succeed(Amount, 3) } }
+  const extended = authored.withScenarios<typeof another>(another)
+  const twice = extended.withScenarios<typeof third>(third)
+  expect(definitionIdentity(extended)).toBe(definitionIdentity(authored))
+  expect(definitionIdentity(twice)).toBe(definitionIdentity(authored))
   const independent = defineApp({
     name: app.name,
-    navigation: Nav.implement({ Count: Counter }, { initial: "Count" }),
+    navigation: Nav.implement([Counter], { initial: Count }),
     scenarios: { default: { layer: Layer.succeed(Amount, 1) } },
     defaultScenario: "default",
   })
-  expect(definitionIdentity(independent)).not.toBe(definitionIdentity(app))
+  expect(definitionIdentity(independent)).not.toBe(definitionIdentity(authored))
 })
 
 test("navigation refusals need no action error schema", async () => {
   const { NAVIGATION_STACK_DEPTH_MAX, ErrorCode } = await import("@reflex/protocol")
-  const Screen = defineScreen({ name: "Loop", state: Schema.Number, initial: () => 0 })
-  const nav = defineNavigation("loop", { Loop: Screen })
+  const Screen = screenContract("Loop", { state: Schema.Number, initial: () => 0 })
+  const nav = defineNavigation({ Loop: Screen })
   const Loop = Screen.implement({
-    actions: (action) => ({ Open: action({ handler: () => nav.push("Loop") }) }),
+    actions: (action) => ({ Open: action.navigates({ handler: () => nav.push(Screen) }) }),
   })
   const host = defineApp({
     name: "loop",
-    navigation: nav.implement({ Loop }, { initial: "Loop" }),
+    navigation: nav.implement([Loop], { initial: Screen }),
     scenarios: { default: { layer: Layer.empty } },
     defaultScenario: "default",
   })
-  const session = await pool.open(host)
+  const session = await pool.open(host[APP_HOST_ADAPTER])
   for (let index = 1; index < NAVIGATION_STACK_DEPTH_MAX; index++) {
     await (await session.focused(Loop)).actions.Open()
   }
@@ -273,24 +293,9 @@ test("navigation refusals need no action error schema", async () => {
   expect(refusal).toMatchObject({ status: "refused", code: ErrorCode.ResourceExhausted })
 })
 
-test("defineApp rejects duplicate navigator keys in retained composition metadata", () => {
-  const OtherScreen = defineScreen({ name: "Other", state: Schema.Number, initial: () => 0 })
-  const Other = OtherScreen.implement({ actions: () => ({}) })
-  const other = defineNavigation("round3/Navigation", { Other: OtherScreen }).implement(
-    { Other },
-    { initial: "Other" },
+test("navigation rejects mismatched contract keys before composition", () => {
+  const Other = screenContract("Other", { state: Schema.Number, initial: () => 0 })
+  expect(() => defineNavigation({ Wrong: Other } as never)).toThrow(
+    "Navigation key Wrong must match contract name Other",
   )
-  const primary = Nav.implement({ Count: Counter }, { initial: "Count" })
-  const root = Object.assign(Layer.merge(primary.layer, other.layer), {
-    nodes: { ...primary.nodes, ...other.nodes },
-    navigatorKeys: [...primary.layer.navigatorKeys, ...other.layer.navigatorKeys],
-  })
-  expect(() =>
-    defineApp({
-      name: "duplicate-keys",
-      root,
-      scenarios: { default: { layer: Layer.succeed(Amount, 1) } },
-      defaultScenario: "default",
-    }),
-  ).toThrow("duplicate navigator keys")
 })

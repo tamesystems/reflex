@@ -1,17 +1,17 @@
-import { defineCapability } from "@reflex/effect"
-import type { LiveNode } from "@reflex/effect/advanced"
+import { Screen } from "@reflex/effect"
+import type { LiveNode } from "@reflex/effect/internal"
 import * as Effect from "effect/Effect"
 import * as Schema from "effect/Schema"
 import { send } from "../src/ui-actions.ts"
 
-const Detail = defineCapability({
-  name: "Detail",
+const Detail = Screen.define("Detail", {
+  initial: () => ({ quantity: 0 }),
   state: Schema.Struct({ quantity: Schema.Number }),
   actions: (action) => ({
     Save: action({ handler: () => Effect.void }),
     SetQuantity: action({
       input: Schema.Struct({ quantity: Schema.Number }),
-      handler: ({ quantity }, state) => state.update(() => ({ quantity })),
+      handler: ({ quantity }, { state }) => state.update(() => ({ quantity })),
     }),
   }),
 })
@@ -36,8 +36,8 @@ export const consumer = (node: LiveNode<typeof Detail.state.Type, typeof Detail.
 
 class Rejected extends Schema.TaggedError<Rejected>()("Rejected", { message: Schema.String }) {}
 class OtherError extends Schema.TaggedError<OtherError>()("OtherError", {}) {}
-export const ErrorContract = defineCapability({
-  name: "ErrorContract",
+export const ErrorContract = Screen.define("ErrorContract", {
+  initial: () => 0,
   state: Schema.Number,
   actions: (action) => ({
     Encoded: action({
@@ -50,10 +50,15 @@ export const ErrorContract = defineCapability({
       error: Rejected,
       handler: () => Effect.fail(new Rejected({ message: "no" })),
     }),
-    // @ts-expect-error Failure channels must be declared.
-    Undeclared: action({ handler: () => Effect.fail(new Rejected({ message: "no" })) }),
-    // @ts-expect-error The handler must fail with the declared error.
-    Mismatch: action({ error: Rejected, handler: () => Effect.fail(new OtherError({})) }),
+    Undeclared: action({
+      // @ts-expect-error Failure channels must be declared.
+      handler: () => Effect.fail(new Rejected({ message: "no" })),
+    }),
+    Mismatch: action({
+      error: Rejected,
+      // @ts-expect-error The handler must fail with the declared error.
+      handler: () => Effect.fail(new OtherError({})),
+    }),
   }),
 })
 
@@ -68,13 +73,13 @@ export const errorConsumer = async (node: LiveNode<number, typeof ErrorContract.
   return undefined
 }
 
-const Parsed = defineCapability({
-  name: "Parsed",
+const Parsed = Screen.define("Parsed", {
+  initial: () => 0,
   state: Schema.Number,
   actions: (action) => ({
     Set: action({
       input: Schema.NumberFromString,
-      handler: (value, state) => state.update(() => value),
+      handler: (value, { state }) => state.update(() => value),
     }),
   }),
 })

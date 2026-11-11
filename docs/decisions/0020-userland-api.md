@@ -195,3 +195,47 @@ Source lines after this partial D2 checkpoint (all files under each package's sr
 
 These counts do not justify an exception to the final budget: most legacy Effect/test
 machinery still remains. A final per-package budget assessment is premature.
+
+### D3 Effect checkpoint
+
+The Effect root and advanced entries now equal their target declaration export names,
+including types. The harness checks all eight Effect/React/React Router/Expo entries.
+The old screen module, string-keyed contract navigation, public capability/action and
+mount exports, consumer lookup wrapper, Effect inference aliases and author-host adapter
+are removed. App composition and scenario extension now have one author implementation;
+the internal host engine handles session lifetime without a second composition path.
+Explicit advanced ownership is implemented by scoped `mountEffect`. Authored descriptors
+and their scenario extensions now expose the same stable definition identity as their
+internal hosts.
+
+[The module/export inventory](../design/effect-cleanup.md) classifies all source modules
+and exports, including what remains. Round-three behavior and type tests use Screen,
+terminal navigation and implementation arrays. Route codec, encoded-input, exploration,
+RPC/bridge and UI reporting fixtures also use authored definitions. Their limits,
+cancellation, event, wait and refusal assertions are retained. Advanced ownership tests
+cover dependencies, focus, encoded publication/errors, change notifications, pending
+work, explicit and scope disposal, independent owners and resource refusal. No experiment
+was deleted.
+
+| Effect line count                        | Before D3 | After D3 |
+| ---------------------------------------- | --------: | -------: |
+| All `src/*.ts`                           |     4,096 |    3,788 |
+| Entire package, excluding `node_modules` |     6,022 |    5,813 |
+
+This is a green partial checkpoint, not final Effect acceptance. Remaining work is
+specifically the internal capability/action builder and legacy type branches in
+`capability.ts`, their adapters in `author-screen.ts` and `author-actions.ts`, and the
+low-level capability/schema-navigation fixtures in `test/lifecycle.test.ts` and
+`packages/effect/test/capability.test.ts`. Port those fixtures before removing their
+internal exports, then reduce the remaining state guard, action, coverage and navigation
+types to one representation. Shared mounting, registry, redaction and scoped navigation
+are runtime behavior and must be preserved. The full source budget and the other
+packages' remaining export cleanup still block final landing. Protocol and CLI/MCP
+implementations are unchanged.
+
+D3 verification: `bun run check` passes (688 tests passed, four platform/device skips),
+with 486,449 root instantiations under the unchanged 505,132 ceiling. Both declaration
+and real-package harness performance modes pass. Mobile `e2e`, `e2e:plain`, `e2e:live`,
+`e2e:services` and web `e2e` pass; the final services run needed a retry after Metro's
+chosen port was occupied. CLI/MCP process, access-policy and both-mode conformance
+suites are included in the green check.

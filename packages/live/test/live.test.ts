@@ -1,3 +1,4 @@
+import { APP_HOST_ADAPTER } from "@reflex/runtime/internal"
 /** The app's side of the bridge: the sessions a provider shows, and the protocol over them. */
 import { afterEach, expect, test } from "bun:test"
 import {
@@ -8,7 +9,8 @@ import {
 } from "@reflex/protocol"
 import { type AppHost, createRuntime, systemTimers, type Timers } from "@reflex/runtime/internal"
 import { nextTurn, waitUntil } from "@reflex/test"
-import app from "../../../examples/inventory/src/scenarios.ts"
+import inventoryDefinition from "../../../examples/inventory/src/scenarios.ts"
+const app = inventoryDefinition[APP_HOST_ADAPTER]
 import { createLiveController } from "../src/live-controller.ts"
 import { LiveSessions, liveSessionOf } from "../src/live-sessions.ts"
 

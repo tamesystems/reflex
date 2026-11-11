@@ -1,3 +1,4 @@
+import { APP_HOST_ADAPTER } from "@reflex/runtime/internal"
 import { afterEach, expect, test } from "bun:test"
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
@@ -12,7 +13,8 @@ import {
 } from "@reflex/rpc"
 import { createController, restrictController } from "@reflex/runtime/internal"
 import { waitUntil } from "@reflex/test"
-import app from "../../../examples/inventory/src/scenarios.ts"
+import inventoryDefinition from "../../../examples/inventory/src/scenarios.ts"
+const app = inventoryDefinition[APP_HOST_ADAPTER]
 
 const cleanups: Array<() => Promise<void> | void> = []
 afterEach(async () => {

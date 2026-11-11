@@ -1,18 +1,18 @@
 import { expect, test } from "bun:test"
 import type { InspectResult } from "@reflex/protocol"
-import { defineApp, defineCapability } from "@reflex/effect"
-import { type ActionsOf, type Capability, mount, NoParams } from "@reflex/effect/advanced"
-import { Registry } from "@reflex/effect/internal"
+import { defineApp, defineService } from "@reflex/effect"
+import { APP_HOST_ADAPTER } from "@reflex/runtime/internal"
 import { explore } from "@reflex/test"
 import * as Effect from "effect/Effect"
-import * as Layer from "effect/Layer"
 import * as Schema from "effect/Schema"
-import app from "../examples/inventory/src/scenarios.ts"
+import inventoryDefinition from "../examples/inventory/src/scenarios.ts"
+const app = inventoryDefinition[APP_HOST_ADAPTER]
 
 const hostWithInput = (inputs: Array<unknown>) => {
-  const Recording = defineCapability({
+  const Recording = defineService({
     name: "Recording",
-    state: NoParams,
+    state: Schema.Number,
+    initial: () => 0,
     actions: (action) => ({
       Go: action({
         input: Schema.NullOr(Schema.String),
@@ -20,33 +20,22 @@ const hostWithInput = (inputs: Array<unknown>) => {
       }),
     }),
   })
-  return focusedApp(Recording)
+  return defineApp({
+    name: "explored",
+    services: [Recording],
+  })[APP_HOST_ADAPTER]
 }
 
-const focusedApp = <A extends ActionsOf<Record<string, never>>>(
-  capability: Capability<Record<string, never>, A, never>,
-) =>
-  defineApp({
-    name: "explored",
-    nodes: { Recording: capability },
-    defaultScenario: "default",
-    root: Layer.effectDiscard(
-      Effect.gen(function* () {
-        const node = yield* mount(capability, {})
-        const registry = yield* Registry
-        registry.setFocus(node.id)
-      }),
-    ),
-    scenarios: { default: { layer: Layer.empty } },
-  })
-
-const hangingHost = focusedApp(
-  defineCapability({
-    name: "Hanging",
-    state: NoParams,
-    actions: (action) => ({ Hang: action({ handler: () => Effect.never }) }),
-  }),
-)
+const Hanging = defineService({
+  name: "Hanging",
+  state: Schema.Number,
+  initial: () => 0,
+  actions: (action) => ({ Hang: action({ handler: () => Effect.never }) }),
+})
+const hangingHost = defineApp({
+  name: "explored",
+  services: [Hanging],
+})[APP_HOST_ADAPTER]
 
 const knownInputs = {
   InventoryList: { OpenProduct: [{ productId: "product-123" }, { productId: "product-456" }] },

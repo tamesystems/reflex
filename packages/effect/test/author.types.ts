@@ -1,13 +1,5 @@
-import {
-  Screen,
-  defineApp,
-  defineNavigation,
-  defineService,
-  defineFixture,
-  type InferState,
-  type InferInput,
-  type InferError,
-} from "@reflex/effect"
+import type { InferState, InferInput, InferError } from "@reflex/runtime"
+import { Screen, defineApp, defineNavigation, defineService, defineFixture } from "@reflex/effect"
 import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
@@ -31,7 +23,7 @@ const count = Count.implement({
   }),
 })
 const home = Home.implement({ actions: () => ({}) })
-const initial: InferState<typeof Count> = "1"
+const initial: InferState<typeof count> = "1"
 const input: InferInput<typeof count, "Set"> = "2"
 const error: InferError<typeof count, "Set"> = "3"
 void initial

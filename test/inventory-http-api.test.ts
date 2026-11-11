@@ -1,4 +1,4 @@
-import { legacyApp } from "@reflex/effect/internal"
+import { APP_HOST_ADAPTER } from "@reflex/runtime/internal"
 import { expect, test } from "bun:test"
 import { createController } from "@reflex/runtime/internal"
 import { defineApp } from "@reflex/effect"
@@ -130,7 +130,7 @@ for (const leave of ["pop", "reset"] as const) {
       defaultScenario: "http",
       scenarios: { http: { layer: withFetch(fetcher) } },
     })
-    const controller = await createController(legacyApp(host))
+    const controller = await createController(host[APP_HOST_ADAPTER])
     const client = createLoopbackClient(controller)
     try {
       await client.request("app.wait", { idle: true })
