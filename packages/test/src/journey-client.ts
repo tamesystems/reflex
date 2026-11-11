@@ -1,3 +1,10 @@
+import type {
+  StateMatch,
+  MatchedState,
+  JourneyNode,
+  JourneyOperation,
+  JourneyActions,
+} from "@reflex/runtime/internal"
 import type { Json, NodeId, NodeSnapshot, OperationInfo, OperationId } from "@reflex/protocol"
 import {
   actionOutcome,
@@ -17,10 +24,8 @@ export type CheckedActions<A, Status extends string> = {
     ? (...args: Args) => Promise<Extract<Outcome, { readonly status: Status }>>
     : never
 }
-const inclusion = Symbol("reflex/includes")
-export interface Includes<M> {
-  readonly [inclusion]: readonly M[]
-}
+import { inclusion, type Includes } from "@reflex/runtime/internal"
+export type { Includes } from "@reflex/runtime/internal"
 /** Match array members by content, without positional placeholders. */
 export const includes = <E>(...items: readonly Partial<NoInfer<E>>[]): Includes<E> => ({
   [inclusion]: items as readonly E[],
@@ -64,34 +69,6 @@ const matchesState = (actual: unknown, expected: unknown): boolean => {
     matchesState((actual as Record<string, unknown>)[key], item),
   )
 }
-export type StateMatch<S> = S extends readonly (infer Item)[]
-  ?
-      | (number extends S["length"]
-          ? readonly StateMatch<Item>[]
-          : { readonly [K in keyof S]: StateMatch<S[K]> })
-      | Includes<StateMatch<Item>>
-  : S extends object
-    ? { readonly [K in keyof S]?: StateMatch<S[K]> }
-    : S
-export type MatchedState<S, M> = S extends unknown
-  ? keyof M extends keyof S
-    ? M extends { readonly _tag: infer Tag }
-      ? S extends { readonly _tag: Tag }
-        ? S
-        : never
-      : S
-    : never
-  : never
-export interface JourneyNode<D, M> {
-  /** Read this exact node again, rather than retaining a captured snapshot. */
-  state(): Promise<MatchedState<InferState<D>, M>>
-  readonly actions: JourneyActions<InferActions<D>>
-  readonly expectFailure: CheckedActions<InferActions<D>, "domain-error">
-  readonly expectRefusal: CheckedActions<InferActions<D>, "refused">
-  readonly allowCancellation: CheckedActions<InferActions<D>, "completed" | "cancelled">
-  readonly id: NodeId
-}
-
 export interface JourneyTransport {
   inspect(name?: string, nodeId?: NodeId): Promise<NodeSnapshot>
   wait(name: string, match?: Json): Promise<void>
@@ -114,32 +91,6 @@ export interface JourneyClient<D extends ConsumerDefinition = ConsumerDefinition
   ): Promise<JourneyNode<C, M>>
 }
 
-export interface JourneyOperation<E> {
-  readonly id?: OperationId
-  completed(options?: { readonly allowCancellation?: boolean }): Promise<void>
-  cancelled(): Promise<{ readonly status: "cancelled" }>
-  expectError(): Promise<{ readonly status: "error"; readonly error: E }>
-  expectRefusal(): Promise<{ readonly status: "refused"; readonly reason: string }>
-  cancel(): Promise<void>
-}
-type PublishedError<O> = O extends { status: "domain-error"; error: { data?: infer E } } ? E : never
-export type JourneyActions<A> = {
-  readonly [K in keyof A]: A[K] extends (...args: infer Args) => Promise<infer O>
-    ? ((...args: Args) => Promise<Extract<O, { status: "completed" }>>) & {
-        run(
-          ...args: Args
-        ): Promise<import("@reflex/runtime/advanced").ActionOutcome<PublishedError<O>>>
-        expectCompleted(...args: Args): Promise<void>
-        expectError(
-          ...args: Args
-        ): Promise<{ readonly status: "error"; readonly error: PublishedError<O> }>
-        expectRefusal(
-          ...args: Args
-        ): Promise<{ readonly status: "refused"; readonly reason: string }>
-        start(...args: Args): Promise<JourneyOperation<PublishedError<O>>>
-      }
-    : never
-}
 const assertOutcome = (
   name: string,
   outcome: ActionOutcome<unknown>,
@@ -436,3 +387,11 @@ const waitForMatch = async (
     void read()
   })
 }
+
+export type {
+  StateMatch,
+  MatchedState,
+  JourneyNode,
+  JourneyOperation,
+  JourneyActions,
+} from "@reflex/runtime/internal"

@@ -4,7 +4,7 @@ import type {
   InferState,
   DEFINITION_IDENTITY,
 } from "@reflex/runtime/internal"
-import type { ActionOutcome } from "@reflex/runtime/advanced"
+import type { ActionOutcome } from "@reflex/runtime"
 import type { ReactNode, ComponentType, ComponentProps, ReactElement } from "react"
 import type { Bridge } from "./react.tsx"
 

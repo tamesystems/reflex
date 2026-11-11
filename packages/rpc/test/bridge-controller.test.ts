@@ -17,7 +17,7 @@ import {
   type EventListener,
 } from "@reflex/rpc"
 import { type Controller, createController, type Timers } from "@reflex/runtime/internal"
-import { nextTurn, waitUntil } from "@reflex/test"
+import { nextTurn, waitUntil } from "../../../test/support.ts"
 import * as Schema from "effect/Schema"
 
 const Counter = Screen.define("Counter", {

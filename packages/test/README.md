@@ -43,8 +43,8 @@ The mobile services E2E uses this API without a custom transport.
 `explore` is exported from the package root. `inputs: { Node: { Action: [input] } }` and
 `invariants: { Node: state => messageOrUndefined }` are keyed and typed by the app. It
 checks mounted services as well as focused screens. `steps`, `scenario`, `seed`, and an
-async `invariant(session)` are also supported, as in the compiled spec examples. Existing
-`stepCount`, `runCount`, `knownInputs`, result summaries and shrinking remain supported.
+async `invariant(session)` are also supported, as in the compiled spec examples. `knownInputs` supplies values that need application-specific knowledge.
+Exploration is bounded and shrinks failing walks.
 Supply known inputs for store actions that cannot generate samples from their schemas.
 
 `session.raw.request(method, params)` permits malformed requests for protocol tests;

@@ -1,3 +1,4 @@
+import { explore } from "../../test/src/explore.ts"
 import { APP_HOST_ADAPTER } from "@reflex/runtime/internal"
 import { afterEach, expect, test } from "bun:test"
 import { createEffectHost, defineCapability } from "@reflex/effect/internal"
@@ -24,7 +25,8 @@ import {
   SCHEMA_NODES_MAX,
   toNodeId,
 } from "@reflex/protocol"
-import { createTestAppPool, explore, nextTurn, waitUntil } from "@reflex/test"
+import { createTestAppPool } from "../../test/src/test-app.ts"
+import { nextTurn, waitUntil } from "../../../test/support.ts"
 import * as Chunk from "effect/Chunk"
 import * as Cause from "effect/Cause"
 import * as Effect from "effect/Effect"

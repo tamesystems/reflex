@@ -11,7 +11,6 @@ import {
 import {
   createTestApp as createLegacyTestApp,
   createRemoteTestApp,
-  createTestAppPool as createLegacyPool,
   type TestApp,
   type TestAppOptions,
 } from "./test-app.ts"
@@ -25,23 +24,18 @@ export function createTestApp<A extends AuthorApp, K extends Scenarios<A> = Defa
   app: A,
   options?: { readonly scenario?: K; readonly timeoutMs?: number },
 ): Promise<JourneyClientFor<A, K>>
-export function createTestApp<H extends AppHost>(
-  app: H,
-  options?: TestAppOptions<NoInfer<H>>,
-): Promise<TestApp<H>>
 export async function createTestApp(
-  app: AppHost | AuthorApp,
+  app: AuthorApp,
   options: { readonly scenario?: string; readonly timeoutMs?: number } = {},
 ): Promise<unknown> {
-  const host = APP_HOST_ADAPTER in app ? (app[APP_HOST_ADAPTER] as AppHost) : (app as AppHost)
+  const host =
+    APP_HOST_ADAPTER in app ? (app[APP_HOST_ADAPTER] as AppHost) : (app as unknown as AppHost)
   const session = await createLegacyTestApp(host, options)
-  return "services" in app
-    ? bindAppJourney(
-        app as AuthorApp,
-        session as unknown as AnySession,
-        options.scenario ?? app.defaultScenario,
-      )
-    : session
+  return bindAppJourney(
+    app,
+    session as unknown as AnySession,
+    options.scenario ?? app.defaultScenario,
+  )
 }
 const definitions = (value: unknown): ConsumerDefinition[] =>
   value == null
@@ -126,20 +120,15 @@ export const bindAppJourney = (
   }
 }
 export const createTestAppPool = () => {
-  const legacy = createLegacyPool()
   const sessions: { dispose(): Promise<void> }[] = []
   return {
-    open: (async (app: AppHost | AuthorApp, options?: TestAppOptions) => {
-      const session = await createTestApp(app as AppHost, options)
+    open: (async (app: AuthorApp, options?: TestAppOptions) => {
+      const session = await createTestApp(app as AuthorApp, options)
       sessions.push(session)
       return session
     }) as typeof createTestApp,
-    openOn: legacy.openOn,
     async disposeAll() {
-      const results = await Promise.allSettled([
-        legacy.disposeAll(),
-        ...sessions.splice(0).map((s) => s.dispose()),
-      ])
+      const results = await Promise.allSettled([...sessions.splice(0).map((s) => s.dispose())])
       const errors = results.flatMap((r) => (r.status === "rejected" ? [r.reason] : []))
       if (errors.length) {
         throw new AggregateError(errors, "Some test apps failed to dispose")

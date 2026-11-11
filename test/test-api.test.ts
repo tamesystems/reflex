@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
-import { createTestApp, connectJourney, explore, includes, nextTurn } from "@reflex/test"
+import { createTestApp, connectJourney, explore, includes } from "@reflex/test"
+import { nextTurn } from "../test/support.ts"
 import {
   createProtocolTestSession,
   protocolEvents,

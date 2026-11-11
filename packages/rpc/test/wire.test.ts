@@ -33,7 +33,7 @@ import {
   serveSocket,
 } from "@reflex/rpc"
 import { createController } from "@reflex/runtime/internal"
-import { nextTurn, waitUntil } from "@reflex/test"
+import { nextTurn, waitUntil } from "../../../test/support.ts"
 import * as Schema from "effect/Schema"
 import inventoryDefinition from "../../../examples/inventory/src/scenarios.ts"
 const app = inventoryDefinition[APP_HOST_ADAPTER]

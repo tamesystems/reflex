@@ -4,7 +4,7 @@ import { afterEach, expect, test } from "bun:test"
 import { type AccessPolicy, ErrorCode } from "@reflex/protocol"
 import { type Client, createLoopbackClient } from "@reflex/rpc"
 import { type Controller, createController } from "@reflex/runtime/internal"
-import { nextTurn, waitUntil } from "@reflex/test"
+import { nextTurn, waitUntil } from "../../../test/support.ts"
 import inventoryDefinition from "../../../examples/inventory/src/scenarios.ts"
 const app = inventoryDefinition[APP_HOST_ADAPTER]
 import * as commands from "../src/commands.ts"

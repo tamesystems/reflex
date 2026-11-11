@@ -74,7 +74,8 @@ packages/
               advanced.ts exposes owned store runtimes and typed handles.
               node-handle.ts is the shared consumer contract. The store adapter wraps existing stores with public JSON projections, Standard Schema
               validation and Promise operations. No Effect, no platform APIs.
-              Start: runtime.ts, then controller.ts.
+              Shared journey contracts and structural duration inputs live in journey-types.ts,
+              journey-node-types.ts and duration.ts. Start: runtime.ts, then controller.ts.
   rpc/        JSON-RPC 2.0 over newline-delimited JSON. server.ts is one peer's
               connection to a Controller; client.ts the other end; socket.ts the Unix socket, Windows pipe and stdio transports;
               local-auth.ts authenticates Windows pipe peers; local-cipher.ts encrypts

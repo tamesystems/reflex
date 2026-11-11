@@ -62,6 +62,14 @@ if (blocks.length !== authored.length) {
 /** Compare symbols, including type-only and re-exported names, rather than runtime keys. */
 function checkImplementedExports() {
   const entries = [
+    ["runtime", "index", "runtime"],
+    ["runtime", "advanced", "runtime-advanced"],
+    ["live", "index", "live"],
+    ["live", "advanced", "live-advanced"],
+    ["live", "dev", "live-dev"],
+    ["test", "index", "test"],
+    ["test", "advanced", "test-advanced"],
+    ["expo", "dev", "expo-dev"],
     ["effect", "index", "effect"],
     ["effect", "advanced", "effect-advanced"],
     ["react", "index", "react"],
@@ -114,7 +122,7 @@ function checkImplementedExports() {
       )
     }
   }
-  console.log(`Exact root/advanced export names: ${pairs.length} entries passed`)
+  console.log(`Exact public export names: ${pairs.length} entries passed`)
 }
 const real = process.argv.includes("--real")
 if (real) {

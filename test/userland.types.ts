@@ -1,5 +1,4 @@
 import { defineApp, defineNavigation, Screen as screenContract } from "@reflex/effect"
-import { APP_HOST_ADAPTER } from "@reflex/runtime/internal"
 import { defineStoreNode, standardInput } from "@reflex/runtime"
 import * as Layer from "effect/Layer"
 import * as Schema from "effect/Schema"
@@ -49,9 +48,9 @@ defineApp({
 
 export const contracts = async (node: NonNullable<ReturnType<typeof Detail.resolve>>) => {
   const pool = createTestAppPool()
-  const session = await pool.open(app[APP_HOST_ADAPTER], { scenario: "default" })
+  const session = await pool.open(app, { scenario: "default" })
   // @ts-expect-error Scenario names derive from app.
-  await pool.open(app[APP_HOST_ADAPTER], { scenario: "missing" })
+  await pool.open(app, { scenario: "missing" })
   const detail = await session.focused(Detail, { _tag: "editing" })
   const quantity: number = (await detail.state()).quantity
   await detail.actions.SetQuantity({ quantity })
@@ -86,21 +85,21 @@ export const contracts = async (node: NonNullable<ReturnType<typeof Detail.resol
     // @ts-expect-error Mapper keys derive from route params.
     { Home: "/", Detail: { pathname: "/detail/[id]", params: { id: "id" } } },
   )
-  await explore(app[APP_HOST_ADAPTER], {
+  await explore(app, {
     knownInputs: { Detail: { SetQuantity: [{ quantity: 1 }] } },
   })
-  await explore(app[APP_HOST_ADAPTER], {
+  await explore(app, {
     // @ts-expect-error Exploration inputs derive from the node's actions.
     knownInputs: { Detail: { SetQuantity: [{ quantity: "wrong" }] } },
   })
   // @ts-expect-error Unknown action.
-  await explore(app[APP_HOST_ADAPTER], { knownInputs: { Detail: { Save: [{}] } } })
+  await explore(app, { knownInputs: { Detail: { Save: [{}] } } })
   await node.actions.SetQuantity({ quantity: 2 })
   await pool.disposeAll()
 }
 
 // Round two: contracts establish state and routes before any handlers import navigation.
-import type { InferState, InferInput, InferError } from "@reflex/runtime"
+import type { InferState, InferInput, InferError } from "@reflex/runtime/internal"
 import * as Effect from "effect/Effect"
 import { includes } from "@reflex/test"
 import { serveLive } from "@reflex/live"
@@ -151,9 +150,9 @@ export const strictMembers = async () => {
   // @ts-expect-error Omitting membership never means accept every definition.
   await session.focused(Home)
   // @ts-expect-error Exploration scenario names derive from the host.
-  await explore(NoMembers[APP_HOST_ADAPTER], { scenario: "missing" })
+  await explore(NoMembers, { scenario: "missing" })
   // @ts-expect-error Live serving has the same scenario contract.
-  await serveLive(NoMembers[APP_HOST_ADAPTER], { setting: "unused", scenario: "missing" })
+  await serveLive(NoMembers, { setting: "unused", scenario: "missing" })
 }
 const UnknownStore = defineStoreNode({
   name: "Unknown",

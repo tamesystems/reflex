@@ -96,18 +96,9 @@ export type Initial<C> = C extends unknown
     ? C
     : { screen: C; params: Params<C> }
   : never
-export declare const terminal: unique symbol
-declare const navigationOwner: unique symbol
-interface AnyNavigationCommand {
-  readonly [terminal]: string
-  readonly kind: "navigation"
-}
-export type NavigationCommand<K extends string = string> = string extends K
-  ? AnyNavigationCommand
-  : AnyNavigationCommand & {
-      readonly [terminal]: K
-      readonly [navigationOwner]: (key: K) => K
-    }
+export type { NavigationCommand } from "@reflex/runtime/advanced"
+import type { NavigationCommand } from "@reflex/runtime/advanced"
+import type { terminal, navigationOwner } from "@reflex/runtime/internal"
 export type Navigator<K extends string> = string extends K
   ? { readonly navigator: string }
   : {

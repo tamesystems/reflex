@@ -8,7 +8,7 @@ import {
   type RuntimeEvent,
 } from "@reflex/protocol"
 import { type AppHost, createRuntime, systemTimers, type Timers } from "@reflex/runtime/internal"
-import { nextTurn, waitUntil } from "@reflex/test"
+import { nextTurn, waitUntil } from "../../../test/support.ts"
 import inventoryDefinition from "../../../examples/inventory/src/scenarios.ts"
 const app = inventoryDefinition[APP_HOST_ADAPTER]
 import { createLiveController } from "../src/live-controller.ts"

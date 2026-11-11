@@ -239,3 +239,14 @@ and real-package harness performance modes pass. Mobile `e2e`, `e2e:plain`, `e2e
 `e2e:services` and web `e2e` pass; the final services run needed a retry after Metro's
 chosen port was occupied. CLI/MCP process, access-policy and both-mode conformance
 suites are included in the green check.
+
+### Public entry parity
+
+All 16 specified root, advanced and dev entries have exact type/value export-name
+equality with the declarations, enforced by the real-package harness. Runtime store
+compatibility types, the string-based test facade and test scheduling helpers are no
+longer root exports. The public test factory accepts authored descriptors only and its
+pool has no low-level open method. Authored regressions use descriptors, action-level
+error/refusal assertions and reset generations. Deliberately malformed host/lifecycle
+fixtures retain the private loopback engine; their assertions remain intact. Shared
+journey contracts live in runtime to preserve dependency direction.

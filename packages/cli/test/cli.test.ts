@@ -20,7 +20,7 @@ import { join, resolve } from "node:path"
 import { WRITE_QUEUE_BYTES_MAX } from "@reflex/protocol"
 import { loadConfig } from "../src/config.ts"
 import { connectToSession } from "../src/session.ts"
-import { nextTurn, waitUntil } from "@reflex/test"
+import { nextTurn, waitUntil } from "../../../test/support.ts"
 
 /** A hung command must fail its test, not the whole run. */
 const COMMAND_TIMEOUT_MS = 30_000

@@ -1,6 +1,5 @@
 import { Screen, defineApp, defineNavigation, defineService } from "@reflex/effect"
-import type { InferState, InferError } from "@reflex/runtime"
-import { APP_HOST_ADAPTER } from "@reflex/runtime/internal"
+import type { InferState, InferError } from "@reflex/runtime/internal"
 import { defineStoreNode, standardInput } from "@reflex/runtime"
 import { createTestAppPool } from "@reflex/test"
 import * as Schema from "effect/Schema"
@@ -70,7 +69,7 @@ export const checkDates = (node: ReturnType<typeof Dates.mount>) => {
 const app = defineApp({ name: "nominal", navigation: Nav.implement([Impl], { initial: First }) })
 export const checkRaw = async () => {
   const pool = createTestAppPool()
-  const session = await pool.open(app[APP_HOST_ADAPTER])
+  const session = await pool.open(app)
   // @ts-expect-error Raw controls do not appear on a typed session.
   await session.precondition("Bogus")
   await session.raw.precondition("First")

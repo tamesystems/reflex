@@ -6,7 +6,7 @@
  */
 import { expect, test } from "bun:test"
 import { defined, type OperationInfo, toNodeId, toOperationId } from "@reflex/protocol"
-import { nextTurn } from "@reflex/test"
+import { nextTurn } from "../../../test/support.ts"
 import type { Destination, RouterLocation, StackEntry } from "../src/projection.ts"
 import {
   ProjectionController,

@@ -12,7 +12,7 @@ import {
   serveSocket,
 } from "@reflex/rpc"
 import { createController, restrictController } from "@reflex/runtime/internal"
-import { waitUntil } from "@reflex/test"
+import { waitUntil } from "../../../test/support.ts"
 import inventoryDefinition from "../../../examples/inventory/src/scenarios.ts"
 const app = inventoryDefinition[APP_HOST_ADAPTER]
 

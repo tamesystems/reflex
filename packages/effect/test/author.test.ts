@@ -26,13 +26,13 @@ const Counter = defineService({
 })
 
 test("author actions decode once, encode errors, and retain defect outcomes", async () => {
-  const app = await pool.open(defineApp({ name: "author", services: [Counter] })[APP_HOST_ADAPTER])
+  const app = await pool.open(defineApp({ name: "author", services: [Counter] }))
   const node = await app.node(Counter)
   await node.actions.Set("7")
   expect(await node.state()).toBe(7)
-  expect(await node.expectFailure.Error()).toMatchObject({
-    status: "domain-error",
-    error: { data: "12" },
+  expect(await node.actions.Error.expectError()).toMatchObject({
+    status: "error",
+    error: "12",
   })
   expect(await app.raw.dispatchRaw("Die")).toMatchObject({
     status: "failed",
@@ -64,9 +64,9 @@ const detail = Detail.implement({
 const navigation = Nav.implement([home, detail], { initial: Home })
 
 test("push and back complete their handlers before retiring a screen; root back is refused", async () => {
-  const app = await pool.open(defineApp({ name: "navigation", navigation })[APP_HOST_ADAPTER])
+  const app = await pool.open(defineApp({ name: "navigation", navigation }))
   const first = await app.focused(home)
-  expect(await first.expectRefusal.Back()).toMatchObject({
+  expect(await first.actions.Back.expectRefusal()).toMatchObject({
     status: "refused",
     reason: "Already at the root screen",
   })
@@ -79,7 +79,7 @@ test("push and back complete their handlers before retiring a screen; root back 
   await second.actions.Back()
   await app.focused(home)
   expect(
-    app.events
+    app.raw.events
       .filter((e) => e.type === "operation.finished")
       .every((e) => e.type !== "operation.finished" || e.operation.status !== "cancelled"),
   ).toBe(true)
@@ -101,15 +101,13 @@ const Toggle = Screen.define("Toggle", {
 const ToggleNav = defineNavigation({ Toggle })
 test("Screen.define preserves identity and when guards refuse before invoking a reducer", async () => {
   const app = await pool.open(
-    defineApp({ name: "guards", navigation: ToggleNav.implement([Toggle], { initial: Toggle }) })[
-      APP_HOST_ADAPTER
-    ],
+    defineApp({ name: "guards", navigation: ToggleNav.implement([Toggle], { initial: Toggle }) }),
   )
   const node = await app.focused(Toggle)
   await node.actions.Increment()
   expect(await node.state()).toEqual({ _tag: "ready", value: 1 })
   await node.actions.Finish()
-  expect(await node.expectRefusal.Increment()).toMatchObject({
+  expect(await node.actions.Increment.expectRefusal()).toMatchObject({
     status: "refused",
     reason: "Requires ready state",
   })
@@ -144,17 +142,17 @@ const fixtureApp = defineApp({
   defaultScenario: "first",
 })
 test("fixtures precede common and scenario layers, handlers see overrides, and reset rebuilds fixture state", async () => {
-  const app = await pool.open(fixtureApp[APP_HOST_ADAPTER])
+  const app = await pool.open(fixtureApp)
   const fixture = await app.node(Fixture)
   await fixture.actions.Increment()
   await (await app.node(Reader)).actions.Read()
   expect(await (await app.node(Reader)).state()).toBe(3)
   await fixture.actions.ReadService()
   expect(await fixture.state()).toBe(3)
-  await app.reset("second")
-  expect(await (await app.node(Fixture)).state()).toBe(0)
-  await (await app.node(Reader)).actions.Read()
-  expect(await (await app.node(Reader)).state()).toBe(9)
+  const next = await app.reset("second")
+  expect(await (await next.node(Fixture)).state()).toBe(0)
+  await (await next.node(Reader)).actions.Read()
+  expect(await (await next.node(Reader)).state()).toBe(9)
 })
 
 test("scenario-specific fixtures do not mount in scenarios that opt out", async () => {
@@ -264,14 +262,14 @@ test("a suspended guarded write refuses instead of overwriting a new variant", a
       Finish: a.when("ready").reduce({ reducer: () => ({ _tag: "done" }) }),
     }),
   })
-  const app = await pool.open(defineApp({ name: "stale", services: [Guard] })[APP_HOST_ADAPTER])
+  const app = await pool.open(defineApp({ name: "stale", services: [Guard] }))
   const operation = await app.raw.start("Slow")
   await entered.promise
-  await app.client.request("app.dispatch", { action: "Finish", await: true })
+  await app.raw.client.request("app.dispatch", { action: "Finish", await: true })
   resume.resolve()
-  await app.waitFor({ operationId: operation.operationId })
+  await app.raw.client.request("app.wait", { operationId: operation.operationId })
   expect(
-    await app.client.request("app.operation", { operationId: operation.operationId }),
+    await app.raw.client.request("app.operation", { operationId: operation.operationId }),
   ).toMatchObject({ status: "failed", error: { tag: "StateChanged", defect: false } })
   expect(await (await app.node(Guard)).state()).toEqual({ _tag: "done" })
 })
@@ -296,7 +294,7 @@ test("each action closes its child scope before reporting completion", async () 
       }),
     }),
   })
-  const app = await pool.open(defineApp({ name: "scoped", services: [Scoped] })[APP_HOST_ADAPTER])
+  const app = await pool.open(defineApp({ name: "scoped", services: [Scoped] }))
   await (await app.node(Scoped)).actions.Run()
   expect(finalized).toBe(1)
 })
@@ -325,15 +323,17 @@ test("jsonCodec supplies the actual input, state, and error wire representation"
       Fail: a({ error: codec, handler: () => Effect.fail(3) }),
     }),
   })
-  const app = await pool.open(defineApp({ name: "wire", services: [Wire] })[APP_HOST_ADAPTER])
+  const app = await pool.open(defineApp({ name: "wire", services: [Wire] }))
   const node = await app.node(Wire)
   await node.actions.Set({ value: 2 })
   expect(await node.state()).toEqual({ value: 2 })
-  expect(await node.expectFailure.Fail()).toMatchObject({
-    status: "domain-error",
-    error: { data: { value: 3 } },
+  expect(await node.actions.Fail.expectError()).toMatchObject({
+    status: "error",
+    error: { value: 3 },
   })
-  expect((await app.inspectRaw("Wire")).actions.Set?.inputSchema).toMatchObject({
+  expect(
+    (await app.raw.client.request("app.inspect", { name: "Wire" })).node?.actions.Set?.inputSchema,
+  ).toMatchObject({
     type: "object",
     required: ["value"],
   })
@@ -352,11 +352,13 @@ test("contract names survive differently named classes and exact constructor own
     defineApp({
       name: "names",
       navigation: Nav.implement([definition], { initial: DifferentClassName }),
-    })[APP_HOST_ADAPTER],
+    }),
   )
-  expect((await app.inspectRaw("DeclaredName")).name).toBe("DeclaredName")
+  expect((await app.raw.client.request("app.inspect", { name: "DeclaredName" })).node?.name).toBe(
+    "DeclaredName",
+  )
   await (await app.focused(definition)).actions.Again()
-  expect((await app.inspect()).focus).toContain("DeclaredName")
+  expect((await app.raw.client.request("app.inspect", {})).focus).toContain("DeclaredName")
   class Subclass extends DifferentClassName {}
   const wrong = DifferentClassName.implement({
     actions: (a) => ({ Wrong: a.navigates({ handler: () => Nav.push(Subclass) }) }),
@@ -365,7 +367,7 @@ test("contract names survive differently named classes and exact constructor own
     defineApp({
       name: "constructor",
       navigation: Nav.implement([wrong], { initial: DifferentClassName }),
-    })[APP_HOST_ADAPTER],
+    }),
   )
   expect(await other.raw.dispatchRaw("Wrong")).toMatchObject({
     status: "failed",

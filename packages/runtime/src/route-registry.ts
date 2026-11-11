@@ -155,7 +155,7 @@ class Entry<T> implements RouteLease<T> {
   }
 }
 /** One session owner for render resources, committed views and bounded history. */
-class RouteRegistry<T> {
+export class RouteRegistry<T> {
   private readonly entries = new Map<string, Entry<T>>()
   private readonly pendingBuilds = new Map<Entry<T>, number>()
   private keys: string[] = []

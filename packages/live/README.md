@@ -54,3 +54,7 @@ correlated outcome union. See [adopting](../../docs/adopting.md).
 provides platform-free session/controller and UI action infrastructure without the dialler.
 `@reflex/live/vite` owns Vite's development guard and dynamically loads the bridge. These
 entries deliberately remain separate so production UI builds exclude transport code.
+
+`@reflex/live/advanced` provides `createSessionOwner(start)`: `close()` waits for an
+in-flight start and closes its result once. The root exposes only `connectBridge`,
+`serveLive`, `Bridge`, `BackgroundReporter` and the shared `JourneyClient` type.

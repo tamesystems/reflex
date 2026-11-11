@@ -1,4 +1,3 @@
-import { APP_HOST_ADAPTER } from "@reflex/runtime/internal"
 import { afterEach, expect, test } from "bun:test"
 import { defineApp, Screen as screenContract } from "@reflex/effect"
 import { defineStoreApp, defineStoreNode } from "@reflex/runtime"
@@ -9,7 +8,7 @@ import * as Schema from "effect/Schema"
 import { expoRoutes } from "../packages/expo/src/routes-effect.ts"
 import { ROUTE_MAPPING, SCREEN_BINDING } from "../packages/expo/src/route-token.ts"
 import inventoryDefinition from "../examples/inventory/src/scenarios.ts"
-const inventory = inventoryDefinition[APP_HOST_ADAPTER]
+const inventory = inventoryDefinition
 import { InventoryList } from "../examples/inventory/src/features/inventory-list.ts"
 import { InventoryDetail } from "../examples/inventory/src/features/inventory-detail.ts"
 import { InventoryFixture } from "../examples/inventory/src/fixtures.ts"
@@ -82,8 +81,8 @@ test("journeys fail on refusal and domain errors, and handles read live state", 
   await expect(detail.actions.Save()).rejects.toThrow("ApiError: Server error")
   await detail.actions.SetQuantity({ quantity: 0 })
   await expect(detail.actions.Decrement()).rejects.toThrow("refused")
-  expect((await detail.expectRefusal.Decrement()).status).toBe("refused")
-  await detail.allowCancellation.SaveAndClose()
+  expect((await detail.actions.Decrement.expectRefusal()).status).toBe("refused")
+  await (await detail.actions.SaveAndClose.start()).completed({ allowCancellation: true })
   await session.focused(InventoryList, { _tag: "ready" })
   await expect(detail.state()).rejects.toThrow()
 })

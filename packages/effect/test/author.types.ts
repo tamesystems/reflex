@@ -1,4 +1,4 @@
-import type { InferState, InferInput, InferError } from "@reflex/runtime"
+import type { InferState, InferInput, InferError } from "@reflex/runtime/internal"
 import { Screen, defineApp, defineNavigation, defineService, defineFixture } from "@reflex/effect"
 import * as Context from "effect/Context"
 import * as Effect from "effect/Effect"

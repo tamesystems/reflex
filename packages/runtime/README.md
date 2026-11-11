@@ -53,3 +53,7 @@ journey serialization. See [adopting](../../docs/adopting.md) and ADR 0020.
 
 `src/publication.ts` shares detached, deeply frozen JSON publication with the Effect
 adapter. Publication rejects accessors, non-JSON values and values outside protocol limits.
+
+The root exports only the store author API, `ActionOutcome`, `StateOf`, `JourneyClient`
+and `StateChanged`. Shared journey contracts and duration inputs stay in this Effect-free
+package so live and test consumers use the same types without upward dependencies.

@@ -26,3 +26,20 @@ export { createRouteRegistry, type RouteLease, type RouteSnapshot } from "./rout
 export { descriptorFingerprint } from "./descriptor.ts"
 
 export { openSessionRoute } from "./open-route.ts"
+
+export type {
+  JourneyApp,
+  JourneyClientFor,
+  JourneyClient,
+  AppJourneyNode,
+  Scenarios,
+  DefaultScenario,
+  Screens,
+  Services,
+  Params,
+  Args,
+} from "./journey-types.ts"
+export * from "./journey-node-types.ts"
+export * from "./duration.ts"
+
+export type { terminal, navigationOwner } from "./public-types.ts"

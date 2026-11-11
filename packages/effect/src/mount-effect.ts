@@ -1,5 +1,6 @@
 import { createRuntime } from "@reflex/runtime/internal"
-import type { ActionOutcome, OwnedNode } from "@reflex/runtime/advanced"
+import type { ActionOutcome } from "@reflex/runtime"
+import type { OwnedNode } from "@reflex/runtime/advanced"
 import * as Effect from "effect/Effect"
 import * as Exit from "effect/Exit"
 import * as Scope from "effect/Scope"

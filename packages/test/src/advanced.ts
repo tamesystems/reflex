@@ -1,7 +1,7 @@
 import type { RuntimeEvent } from "@reflex/protocol"
 import type { Client } from "@reflex/rpc"
 import { createTestApp, bindAppJourney, type AuthorApp, type AnySession } from "./app-journey.ts"
-import type { JourneyApp, JourneyClientFor, Scenarios, DefaultScenario } from "./app-types.ts"
+import type { JourneyClientFor, Scenarios, DefaultScenario } from "./app-types.ts"
 import { createRemoteTestApp, type RawTestApp } from "./test-app.ts"
 export interface ProtocolTestSession extends AsyncDisposable {
   request(method: string, params: unknown): Promise<unknown>
@@ -114,4 +114,3 @@ export function createJourneyClient<
     [Symbol.asyncDispose]: dispose,
   } as unknown as JourneyClientFor<A, K>
 }
-export type { JourneyApp }

@@ -50,11 +50,7 @@ export async function createRuntime<A extends AppHost>(
   })
   return handle
 }
-export type ActionOutcome<E = never> =
-  | { readonly status: "completed" | "cancelled" }
-  | { readonly status: "error"; readonly error: E }
-  | { readonly status: "refused"; readonly reason: string }
-  | { readonly status: "defect"; readonly message: string }
+import type { ActionOutcome } from "./public-types.ts"
 type PublishedError<O> = O extends {
   readonly status: "domain-error"
   readonly error: { readonly data?: infer E }
@@ -159,3 +155,6 @@ export function mountOwned<D extends Definition>(
 }
 
 export { createRouteRegistry } from "./route-registry.ts"
+
+export type { NavigationCommand, NavigationRefused, StateChanged } from "./public-types.ts"
+export type { RouteLease, RouteRegistry } from "./route-registry.ts"

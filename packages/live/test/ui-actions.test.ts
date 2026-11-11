@@ -2,7 +2,7 @@ import { expect, spyOn, test } from "bun:test"
 import { defineApp, defineNavigation, Screen } from "@reflex/effect"
 import { APP_HOST_ADAPTER } from "@reflex/runtime/internal"
 import { NODE_STATE_CHARACTERS_MAX } from "@reflex/protocol"
-import { waitUntil } from "@reflex/test"
+import { waitUntil } from "../../../test/support.ts"
 import * as Schema from "effect/Schema"
 import { send } from "../src/ui-actions.ts"
 

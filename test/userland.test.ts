@@ -6,8 +6,8 @@ import { z } from "zod"
 import { mountSessionRoute, APP_HOST_ADAPTER } from "@reflex/runtime/internal"
 import { createStore } from "zustand/vanilla"
 import inventoryDefinition from "../examples/inventory/src/scenarios.ts"
-const app = inventoryDefinition[APP_HOST_ADAPTER]
-const screens = app.screens
+const app = inventoryDefinition
+const screens = inventoryDefinition[APP_HOST_ADAPTER].screens
 import { InventoryList } from "../examples/inventory/src/features/inventory-list.ts"
 import { InventoryDetail } from "../examples/inventory/src/features/inventory-detail.ts"
 import { QUANTITY_MAX } from "../examples/inventory/src/domain.ts"
@@ -24,18 +24,17 @@ test("typed journey actions expose declared data and guard refusals", async () =
   await list.actions.OpenProduct({ productId: "product-123" })
   const detail = await session.focused(InventoryDetail, { _tag: "editing" })
   await detail.actions.SetQuantity({ quantity: QUANTITY_MAX })
-  expect(await detail.expectRefusal.Increment()).toMatchObject({
+  expect(await detail.actions.Increment.expectRefusal()).toMatchObject({
     status: "refused",
-    code: ErrorCode.ActionUnavailable,
     reason: "Quantity is already at its maximum",
   })
   await session.raw.dispatchRaw("FailNextSave")
-  const outcome = await detail.expectFailure.Save()
-  expect(outcome.status).toBe("domain-error")
-  if (outcome.status === "domain-error") {
-    const tag: "ApiError" | undefined = outcome.error.data?._tag
+  const outcome = await detail.actions.Save.expectError()
+  expect(outcome.status).toBe("error")
+  if (outcome.status === "error") {
+    const tag: "ApiError" | undefined = outcome.error._tag
     expect(tag).toBe("ApiError")
-    expect(outcome.error.data?.message).toBe("Server error")
+    expect(outcome.error.message).toBe("Server error")
   }
 })
 
@@ -215,7 +214,7 @@ test("Effect actions accept encoded inputs locally and in journeys, decoding onc
     ),
   )
   const host = defineApp({ name: "parsed", services: [Parsed] })
-  const session = await pool.open(host[APP_HOST_ADAPTER])
+  const session = await pool.open(host)
   const node = await session.node(Parsed)
   expect(await node.state()).toBe(0)
   expect(await node.actions.Set("13")).toEqual({ status: "completed" })

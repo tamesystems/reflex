@@ -37,7 +37,7 @@ const authored = defineApp({
   defaultScenario: "default",
 })
 
-const app = authored[APP_HOST_ADAPTER]
+const app = authored
 
 test("navigation preserves transformed state and contract lookup across implementations", async () => {
   const session = await pool.open(app)
@@ -45,7 +45,7 @@ test("navigation preserves transformed state and contract lookup across implemen
   expect(await count.state()).toBe("1")
   await count.actions.Add()
   expect(await count.state()).toBe("2")
-  const live = await app.start("default", { sessionId: "identity" })
+  const live = await app[APP_HOST_ADAPTER].start("default", { sessionId: "identity" })
   try {
     const second = Count.implement({ actions: () => ({}) })
     const id = live.runtime.focus
@@ -105,7 +105,7 @@ test("journey membership rejects an independent same-name definition", async () 
       Add: action({ handler: (_, { state }) => state.update((n) => n + 1) }),
     }),
   })
-  await expect(session.node(clone)).rejects.toThrow("not a contract")
+  await expect(session.focused(clone)).rejects.toThrow("does not belong")
 })
 
 test("un-narrowed journey state follows legitimate union transitions", async () => {
@@ -125,8 +125,8 @@ test("un-narrowed journey state follows legitimate union transitions", async () 
     scenarios: { default: { layer: Layer.empty } },
     defaultScenario: "default",
   })
-  const session = await pool.open(host[APP_HOST_ADAPTER])
-  const node = await session.node(Union)
+  const session = await pool.open(host)
+  const node = await session.focused(Union)
   const focused = await session.focused(Union)
   const narrowed = await session.focused(Union, { _tag: "one" })
   await node.actions.Next()
@@ -151,7 +151,7 @@ test("back completes the calling action before retiring its screen", async () =>
     scenarios: { default: { layer: Layer.empty } },
     defaultScenario: "default",
   })
-  const session = await pool.open(host[APP_HOST_ADAPTER])
+  const session = await pool.open(host)
   await (await session.focused(home)).actions.Open()
   expect(await (await session.focused(detail)).actions.SaveAndClose()).toEqual({
     status: "completed",
@@ -183,7 +183,7 @@ test("route factories use the session's scenario overrides", async () => {
 })
 
 test("Effect route factories provide the session's service layer", async () => {
-  const session = await app.start("default", { sessionId: "route-effect" })
+  const session = await app[APP_HOST_ADAPTER].start("default", { sessionId: "route-effect" })
   try {
     const node = await mountSessionRoute(session.runtime, Counter, {})
     const resolved = Counter.resolve(session.runtime, node.id)
@@ -251,7 +251,7 @@ test("tuples retain position in published navigation state", async () => {
     scenarios: { default: { layer: Layer.empty } },
     defaultScenario: "default",
   })
-  const node = await (await pool.open(host[APP_HOST_ADAPTER])).focused(Tuple)
+  const node = await (await pool.open(host)).focused(Tuple)
   const state: readonly [string, number] = await node.state()
   expect(state).toEqual(["a", 1])
 })
@@ -273,7 +273,7 @@ test("scenario extensions retain app identity and independent apps do not", () =
 })
 
 test("navigation refusals need no action error schema", async () => {
-  const { NAVIGATION_STACK_DEPTH_MAX, ErrorCode } = await import("@reflex/protocol")
+  const { NAVIGATION_STACK_DEPTH_MAX } = await import("@reflex/protocol")
   const Screen = screenContract("Loop", { state: Schema.Number, initial: () => 0 })
   const nav = defineNavigation({ Loop: Screen })
   const Loop = Screen.implement({
@@ -285,12 +285,12 @@ test("navigation refusals need no action error schema", async () => {
     scenarios: { default: { layer: Layer.empty } },
     defaultScenario: "default",
   })
-  const session = await pool.open(host[APP_HOST_ADAPTER])
+  const session = await pool.open(host)
   for (let index = 1; index < NAVIGATION_STACK_DEPTH_MAX; index++) {
     await (await session.focused(Loop)).actions.Open()
   }
-  const refusal = await (await session.focused(Loop)).expectRefusal.Open()
-  expect(refusal).toMatchObject({ status: "refused", code: ErrorCode.ResourceExhausted })
+  const refusal = await (await session.focused(Loop)).actions.Open.expectRefusal()
+  expect(refusal).toMatchObject({ status: "refused", reason: expect.any(String) })
 })
 
 test("navigation rejects mismatched contract keys before composition", () => {

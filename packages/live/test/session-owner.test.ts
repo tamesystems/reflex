@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { UNFINISHED_SESSIONS_MAX, ErrorCode } from "@reflex/protocol"
 import { type AppHost, type AppSession, createRuntime, type Timers } from "@reflex/runtime/internal"
-import { nextTurn } from "@reflex/test"
+import { nextTurn } from "../../../test/support.ts"
 import { type SessionLifecycle, SessionOwner } from "../src/session-owner.ts"
 
 /** Starts that finish when the test says, and a clock that moves when it says. */

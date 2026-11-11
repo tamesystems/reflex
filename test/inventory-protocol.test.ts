@@ -1,7 +1,8 @@
 import { APP_HOST_ADAPTER } from "@reflex/runtime/internal"
 import { afterEach, expect, test } from "bun:test"
 import { ErrorCode, toNodeId } from "@reflex/protocol"
-import { createTestAppPool, type InferState } from "@reflex/test"
+import { createTestAppPool } from "../packages/test/src/test-app.ts"
+import type { InferState } from "@reflex/runtime/internal"
 import inventoryDefinition from "../examples/inventory/src/scenarios.ts"
 const app = inventoryDefinition[APP_HOST_ADAPTER]
 import { QUANTITY_MAX } from "../examples/inventory/src/domain.ts"
@@ -334,7 +335,9 @@ test("a route without params refuses junk from a deep link", async () => {
 test("the shared real-services behavior journey passes with guarded headless fixtures", async () => {
   const { servicesJourney } = await import("../examples/inventory/journeys/services.ts")
   const { authoredApp } = await import("../examples/inventory/src/scenarios.ts")
-  const session = await pool.open(authoredApp)
+  await using session = await import("@reflex/test").then(({ createTestApp }) =>
+    createTestApp(authoredApp),
+  )
   await servicesJourney(session, async () => {
     await session.raw.dispatchRaw("FailNextSave")
   })

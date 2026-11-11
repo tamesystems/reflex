@@ -37,7 +37,8 @@ import {
   createController,
   type Timers,
 } from "@reflex/runtime/internal"
-import { createTestApp, createTestAppPool, nextTurn, waitUntil } from "@reflex/test"
+import { createTestApp, createTestAppPool } from "../packages/test/src/test-app.ts"
+import { nextTurn, waitUntil } from "../test/support.ts"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
 import * as Redacted from "effect/Redacted"

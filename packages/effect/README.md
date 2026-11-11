@@ -45,8 +45,7 @@ finish before navigation runs. Push/back report `completed`; navigation refusal 
 from a different navigator produce diagnostics. Navigation uses exact contract identity.
 
 Inputs, errors, params and state must encode JSON. `/advanced` exports `jsonCodec` for
-explicit custom wire representations. The `InferState`, `InferActions`, `InferInput` and
-`InferError` helpers from `@reflex/runtime` describe encoded definition values; handlers
+explicit custom wire representations. Consumer state and action types follow directly from the definition; handlers
 keep decoded values.
 
 App provision order is fixtures → common `layer` → scenario `layer` → handlers. Each

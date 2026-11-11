@@ -8,6 +8,7 @@
     ".": "./src/index.ts",
     "./session": "./src/session.ts",
     "./vite": "./src/vite.ts",
+    "./advanced": "./src/advanced.ts",
     "./dev": "./src/dev.ts"
   },
   "dependencies": {

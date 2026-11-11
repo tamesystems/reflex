@@ -9,7 +9,7 @@ import {
   FRAME_CHARACTERS_MAX,
 } from "@reflex/protocol"
 import { createController, type Timers } from "@reflex/runtime/internal"
-import { nextTurn } from "@reflex/test"
+import { nextTurn } from "../../../test/support.ts"
 import inventoryDefinition from "../../../examples/inventory/src/scenarios.ts"
 const app = inventoryDefinition[APP_HOST_ADAPTER]
 import { type BridgeSocket, type BridgeStatus, connectBridge } from "../src/bridge.ts"
