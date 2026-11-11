@@ -185,3 +185,20 @@ surface parity and behavioral acceptance, rather than further internal shrinking
 this landing. The command-erasure lint rule and core-owned React Router projection remain
 explicit follow-ups. No report or module inventory file is part of the maintained API.
 Maintainer validation commands and performance budgets live in development.md.
+
+## Acceptance evidence
+
+On Bun 1.4.4 / TypeScript 5.9.3, `bun run check` passes: 688 tests, four
+platform/device skips, all three typechecks, documentation examples and all 16 export
+sets. Root instantiations are 495,490 under the unchanged 505,132 ceiling.
+
+Mobile e2e, e2e:plain, e2e:live and e2e:services and web e2e pass, including
+production bridge/token/instrumentation exclusions, the plain Effect-free graph, and
+HTTP/AsyncStorage persistence across reset/reload. The live run required one retry
+after Metro's selected port was occupied. Frozen installs at root/mobile/web pass.
+Both declaration and real-package harness performance modes pass: maximum added-screen
+costs are 5.8 and 6.8 ms, respectively, below 25 ms; additional narrowed hooks cost at
+most 0.067 and 0.089 ms, below 5 ms. Timings are local measurements, not new budgets.
+
+The protocol package and CLI/MCP implementation are unchanged by this final cleanup.
+The six Ubuntu/Windows check, browser and Hermes jobs remain the remote landing gate.
