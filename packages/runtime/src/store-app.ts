@@ -12,11 +12,14 @@ export interface MountableNode {
   mount(
     runtime: Runtime,
     store?: unknown,
+    type?: import("@reflex/protocol").NodeType,
   ): { readonly id: import("@reflex/protocol").NodeId; dispose(): void }
 }
 export interface StoreScenario<N extends Record<string, MountableNode>> {
   readonly description?: string
-  readonly stores?: { readonly [K in keyof N]?: () => ReturnType<N[K]["createStore"]> }
+  readonly stores?: {
+    readonly [K in keyof N]?: (...params: never[]) => ReturnType<N[K]["createStore"]>
+  }
 }
 export interface StoreApp<
   N extends Record<string, MountableNode>,
@@ -34,13 +37,21 @@ export interface StoreApp<
   ): StoreApp<N, S & Extra, Screens>
 }
 
+const disposeNodes = async (nodes: ReturnType<MountableNode["mount"]>[]): Promise<void> => {
+  for (const node of nodes.reverse()) {
+    node.dispose()
+  }
+}
+
 /** Own fresh stores, typed scenario overrides, focus and disposal on every start/reset. */
-export const defineStoreApp = <
+export const defineLegacyStoreApp = <
   const N extends Record<string, MountableNode> = Record<never, never>,
   const RN extends Record<string, MountableNode> = Record<never, never>,
   const S extends Record<string, StoreScenario<N & RN>> = { default: Record<string, never> },
 >(definition: {
   readonly name: string
+  /** Author composition assigns ambient roles; legacy nodes retain their declared type. */
+  readonly ambientType?: "service"
   readonly nodes?: N
   /** Definitions mounted by route components, included in the application contract. */
   readonly screens?: RN
@@ -68,7 +79,7 @@ export const defineStoreApp = <
     })),
     withScenarios: (extra, options) =>
       Object.assign(
-        defineStoreApp({
+        defineLegacyStoreApp({
           ...definition,
           scenarios: { ...scenarios, ...extra },
           defaultScenario: options?.defaultScenario ?? defaultScenario,
@@ -89,12 +100,13 @@ export const defineStoreApp = <
       registerRouteFactories(
         runtime,
         new Map(
-          Object.entries(definition.screens ?? {}).map(([key, route]) => [
+          Object.entries({ ...definition.nodes, ...definition.screens }).map(([key, route]) => [
             route,
             (params: unknown) => {
               const node = route.mount(
                 runtime,
-                scenario.stores?.[key]?.() ?? route.createStore(params as never),
+                scenario.stores?.[key]?.(params as never) ?? route.createStore(params as never),
+                Object.hasOwn(definition.screens ?? {}, key) ? "screen" : definition.ambientType,
               )
               nodes.push(node)
               return node
@@ -103,16 +115,20 @@ export const defineStoreApp = <
         ),
       )
       const nodes: ReturnType<MountableNode["mount"]>[] = []
-      const dispose = async () => {
-        for (const node of nodes.reverse()) {
-          node.dispose()
-        }
-      }
+      const dispose = () => disposeNodes(nodes)
       try {
         for (const [key, nodeDefinition] of Object.entries(definition.nodes ?? {})) {
-          const node = nodeDefinition.mount(runtime, scenario.stores?.[key]?.())
+          const node = nodeDefinition.mount(
+            runtime,
+            scenario.stores?.[key]?.(),
+            definition.ambientType,
+          )
           nodes.push(node)
-          if (nodeDefinition.type === "screen" && runtime.focus === null) {
+          if (
+            definition.ambientType === undefined &&
+            nodeDefinition.type === "screen" &&
+            runtime.focus === null
+          ) {
             runtime.setFocus(node.id)
           }
         }

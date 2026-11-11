@@ -1,25 +1,17 @@
-import { defineStoreApp, defineStoreNode, standardInput } from "@reflex/runtime"
+import { defineStoreNode, defineStoreApp, standardInput } from "@reflex/runtime"
 import { createStore } from "zustand/vanilla"
 import { z } from "zod"
 
-export const addSchema = z.strictObject({ by: z.int() })
-export const addInput = standardInput(addSchema)
-
-/** The app still owns its state and can write it without going through Reflex. */
+// The existing Zustand store remains usable without Reflex.
 export const createCounterStore = () => createStore(() => ({ count: 0, token: "private-token" }))
-
 export const Counter = defineStoreNode({
   name: "Counter",
-  type: "screen",
   store: createCounterStore,
   project: ({ count }) => ({ count }),
   actions: (action) => ({
     Add: action({
-      input: addInput,
-      handler: ({ by }, { store }) => {
-        const current = store.getState()
-        store.setState({ count: current.count + by })
-      },
+      input: z.strictObject({ by: z.int() }),
+      handler: ({ by }, { store }) => store.setState((s) => ({ count: s.count + by })),
     }),
     Reset: action({
       available: ({ count }) => (count === 0 ? "Already zero" : true),
@@ -27,5 +19,22 @@ export const Counter = defineStoreNode({
     }),
   }),
 })
-export const plainBackend = defineStoreApp({ name: "counter", nodes: { Counter } })
+export const authoredApp = defineStoreApp({ name: "plain-counter", services: [Counter] })
+
+// Compatibility host for existing screen-based conformance and mobile consumers (step B).
+export const plainBackend = defineStoreApp({
+  name: "counter",
+  nodes: {
+    Counter: {
+      ...Counter,
+      type: "screen",
+      mount: (
+        runtime: Parameters<typeof Counter.mount>[0],
+        store?: ReturnType<typeof createCounterStore>,
+      ) => Counter.mount(runtime, store, "screen"),
+    },
+  },
+})
+export const addSchema = z.strictObject({ by: z.int() })
+export const addInput = standardInput(addSchema)
 export default plainBackend

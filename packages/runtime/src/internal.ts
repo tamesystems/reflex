@@ -11,7 +11,8 @@ export * from "./timers.ts"
 export * from "./store-node.ts"
 
 export * from "./node-handle.ts"
-export * from "./store-app.ts"
+export type { MountableNode, StoreApp, StoreScenario } from "./store-app.ts"
+export { defineStoreApp } from "./store-author-app.ts"
 
 export type { OwnedRoute } from "./route-mount.ts"
 export { registerRouteFactories, mountSessionRoute } from "./route-mount.ts"

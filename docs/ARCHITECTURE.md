@@ -69,6 +69,8 @@ packages/
               SessionController that starts, resets and closes sessions (controller.ts),
               and restrictController, which holds any controller to a policy.
               store-node.ts defines typed store nodes; store-app.ts owns their app lifetime.
+              store-author-app.ts normalizes author arrays and definition-keyed overrides;
+              advanced.ts exposes owned store runtimes and typed handles.
               node-handle.ts is the shared consumer contract. The store adapter wraps existing stores with public JSON projections, Standard Schema
               validation and Promise operations. No Effect, no platform APIs.
               Start: runtime.ts, then controller.ts.
@@ -323,7 +325,7 @@ rotates its local secret only after obtaining its lock; the device bridge token 
 - **Identity.** Node handles name their session (`screen/InventoryDetail/session-ab12-1/4`),
   so a handle from before a reset cannot match anything after it. Revisions count changes;
   sequences count events; a cursor is a session id and a sequence.
-- **Secrets.** Store nodes require an explicit safe projection; there is no automatic
+- **Secrets.** Store nodes publish JSON state directly or use an explicit safe projection; there is no automatic
   redaction on that path. Effect `Schema.Redacted` values are replaced before any state, error data or route
   param is encoded. Unusual cases fail closed rather than leak
   ([ADR 0011](decisions/0011-secrets-fail-closed.md)).

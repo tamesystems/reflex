@@ -2525,3 +2525,17 @@ reference model's consumer fields remain declaration plumbing until their migrat
 The HTTP example now uses `filterStatusOk`, `schemaBodyJson`, and `catchTags`, while
 retaining byte/deadline bounds and the established invalid-JSON error message. Its
 extracted example and this document are kept identical.
+
+A2 adds the store author path alongside the legacy store overloads. The plain example
+exports its service-based composition as `authoredApp`; its default remains the
+screen-based `plainBackend` adapter for unchanged mobile and live conformance consumers
+until B. The exact extracted plain and live-counter examples compile against the real
+packages. `serveLive` already satisfied the process example and needed no change.
+
+Legacy callable actions and transformed-error handlers remain supported: `fail` also
+accepts a validator's input for those existing handlers. Authored decoded failures can
+use `projectError`; both the declaration and published JSON are checked. Explicit
+`project` callbacks retain the existing node-level JSON constraint, while omitted
+projections are checked at app composition. Actual state is checked at mount, so app
+composition does not instantiate stores. Advanced owned store handles use the new
+outcome vocabulary; old hosts and journeys retain their current outcomes until B.

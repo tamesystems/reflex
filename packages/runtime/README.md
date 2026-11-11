@@ -27,21 +27,27 @@ See [architecture](../../docs/ARCHITECTURE.md) and [development](../../docs/deve
 
 ## Author API
 
-`defineStoreNode` captures the store factory, public projection and contextual action builder.
-`standardInput(schema)` derives JSON Schema through the Standard JSON Schema contract,
-with an explicit override when needed. Input types before/after validation remain distinct;
-consumer inputs are transport-safe. A node may also declare params with standardInput;
-its store factory receives decoded route params.
-`defineStoreApp({ name, nodes })` owns runtime construction, default focus and disposal.
-Router-mounted definitions belong in `screens`; session factories apply their scenario
-overrides when the route mounts. Scenarios accept typed stores overrides; `.withScenarios` composes them without losing
-node/state/scenario contracts.
-`node.actions.Action(input)` returns an ActionOutcome; `availability` is shared with the
-protocol and React. Declared store errors use a Standard Schema validator directly and typed context.fail(error).
-Error transforms run before publication; only failures validated by that invocation can
-publish domain data. Tagged outcomes retain the declared tag/data relationship.
-AppHost remains an explicit escape hatch. `mountStore` and createRuntime are advanced
-ownership seams under `@reflex/runtime/internal`.
+`defineStoreNode` infers state from `store.getState`. JSON state needs no `project`;
+otherwise supply an explicit safe JSON projection. Inputs and params accept Standard
+Schema validators directly, including Zod. `standardInput(schema, jsonSchema)` supplies
+an explicit wire schema for opaque validators. Handlers receive decoded inputs and
+`{ store, signal }`; declared errors add `fail`. `projectError` publishes rich failures
+as JSON. Undeclared or invalid failures are defects.
+
+`defineStoreApp({ name, screens, services })` checks roles, unique names, JSON state and
+params. Services mount immediately and cannot require params; screens mount on demand.
+Scenarios use `stores: [Counter.withStore(factory)]`, preserving store and decoded
+params types. Foreign overrides are rejected. `.withScenarios` retains app identity.
+
+`createRuntime(app, { scenario })` and `mountOwned(runtime, Counter)` under
+`@reflex/runtime/advanced` expose owned state, subscriptions, typed action views and
+disposal. Runtime disposal revokes the generation before ending its stores. Independently
+retained raw stores remain application-owned. Owned action views return `completed`,
+`error`, `refused`, `cancelled` or `defect` outcomes.
+
+Legacy record-based `nodes`/`screens`, callable actions, `mountStore` and the low-level
+runtime remain available for existing consumers under `@reflex/runtime/internal`.
+See [ADR 0025](../../docs/decisions/0025-additive-store-author-api.md).
 
 `src/node-handle.ts` defines the shared Effect/store consumer contract and definition-owned
 journey serialization. See [adopting](../../docs/adopting.md) and ADR 0020.

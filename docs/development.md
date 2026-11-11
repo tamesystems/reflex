@@ -347,3 +347,18 @@ this mode and the real-package negative cases in `packages/effect/test/author.ty
 The full declaration harness remains `bun docs/design/prototypes/check.ts` for the
 consumer tiers that have not migrated. See [ADR 0024](decisions/0024-additive-effect-author-api.md)
 and the [type graph audit](performance/userland-api-a1.md).
+
+### Store author API migration (A2)
+
+Use `defineStoreNode({ name, store, actions, params?, project? })` and
+`defineStoreApp({ name, screens?, services? })`. Zod inputs and params work directly;
+`standardInput(validator, jsonSchema)` supplies opaque validators' wire schema.
+JSON state needs no projection. Scenarios replace stores by identity with
+`stores: [Counter.withStore(factory)]`; factories retain decoded params and store types.
+Advanced store ownership uses `createRuntime` and `mountOwned` from
+`@reflex/runtime/advanced`. See [ADR 0025](decisions/0025-additive-store-author-api.md).
+
+The real-package harness now includes the exact plain and live-counter examples.
+Plain's `authoredApp` uses an ambient service; its legacy default keeps the current
+mobile and conformance screen behavior until host migration B. No mobile adapter
+change is needed in A2. Legacy store overloads remain in use by other consumers.

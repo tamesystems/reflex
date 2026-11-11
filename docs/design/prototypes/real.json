@@ -1,5 +1,11 @@
 {
   "extends": "./examples.json",
-  "compilerOptions": { "paths": {} },
-  "include": ["examples/examples/inventory/src/**/*.ts"]
+  "compilerOptions": {
+    "paths": {}
+  },
+  "include": [
+    "examples/examples/inventory/src/**/*.ts",
+    "examples/examples/plain/src/**/*.ts",
+    "examples/examples/live-counter/src/**/*.ts"
+  ]
 }

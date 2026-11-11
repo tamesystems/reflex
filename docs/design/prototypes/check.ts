@@ -62,7 +62,7 @@ if (blocks.length !== authored.length) {
 if (process.argv.includes("--real")) {
   const result = tsc(join(home, "real.json"))
   console.log(
-    `Real @reflex/effect inventory examples: passed (${result.instantiations} instantiations)`,
+    `Real inventory, plain and live-counter author examples: passed (${result.instantiations} instantiations)`,
   )
   process.exit(0)
 }

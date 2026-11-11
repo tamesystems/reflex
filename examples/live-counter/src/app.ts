@@ -1,8 +1,7 @@
 import { defineStoreApp, defineStoreNode } from "@reflex/runtime"
 
-const Counter = defineStoreNode({
+export const Counter = defineStoreNode({
   name: "Counter",
-  type: "service",
   store: () => {
     let state = { count: 0 }
     const listeners = new Set<() => void>()
@@ -22,7 +21,6 @@ const Counter = defineStoreNode({
       },
     }
   },
-  project: (state) => state,
   actions: (action) => ({ Increment: action({ handler: (_, { store }) => store.increment() }) }),
 })
-export default defineStoreApp({ name: "live-counter", nodes: { Counter } })
+export default defineStoreApp({ name: "live-counter", services: [Counter] })
