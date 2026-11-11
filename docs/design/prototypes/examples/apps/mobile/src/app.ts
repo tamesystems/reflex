@@ -3,7 +3,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage"
 import * as Effect from "effect/Effect"
 import * as Redacted from "effect/Redacted"
 import * as Schema from "effect/Schema"
-import inventory from "@reflex/example-inventory"
+import inventory, { productionServices } from "@reflex/example-inventory"
 import { SettingsStore } from "@reflex/example-inventory/domain.ts"
 import { httpInventoryApi } from "@reflex/example-inventory/http-api.ts"
 
@@ -53,12 +53,13 @@ const baseUrl = __DEV__ ? process.env.EXPO_PUBLIC_INVENTORY_API : undefined
 const deviceScenarios = {
   "device-services": {
     description: "Development HTTP and device settings",
-    layer: Layer.merge(httpInventoryApi(baseUrl ?? "http://127.0.0.1:4318"), storage),
+    layer:
+      baseUrl === undefined ? productionServices : Layer.merge(httpInventoryApi(baseUrl), storage),
     fixtures: [],
   },
 }
 const deviceApp = inventory.withScenarios(deviceScenarios, {
-  defaultScenario: baseUrl === undefined ? "live-services" : "device-services",
+  defaultScenario: baseUrl === undefined ? "production" : "device-services",
 })
 
 export default deviceApp

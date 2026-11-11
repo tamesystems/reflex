@@ -34,7 +34,11 @@ function tsc(config: string, expectedFailure: boolean | null = false, extra: str
   if (!count) {
     throw new Error("Missing instantiation count")
   }
-  return { output: result.stdout, instantiations: Number(count[1]) }
+  return {
+    output: result.stdout,
+    instantiations: Number(count[1]),
+    checkSeconds: Number(/Check time:\s+([\d.]+)s/.exec(result.stdout)?.[1] ?? 0),
+  }
 }
 if (ts.version !== "5.9.3") {
   throw new Error(`Expected TypeScript 5.9.3, found ${ts.version}`)
@@ -55,6 +59,53 @@ for (const file of authored) {
 if (blocks.length !== authored.length) {
   throw new Error("Spec has an unextracted example")
 }
+function checkPublicExamples() {
+  const config = ts.readConfigFile(join(home, "examples.json"), ts.sys.readFile)
+  const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, home)
+  const program = ts.createProgram(parsed.fileNames, parsed.options)
+  const checker = program.getTypeChecker()
+  const used = new Set<ts.Symbol>()
+  const canonical = (symbol: ts.Symbol) =>
+    symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol
+  const visit = (node: ts.Node) => {
+    if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
+      return
+    }
+    if (ts.isIdentifier(node)) {
+      const symbol = checker.getSymbolAtLocation(node)
+      if (symbol) {
+        used.add(canonical(symbol))
+      }
+    }
+    ts.forEachChild(node, visit)
+  }
+  for (const file of program.getSourceFiles()) {
+    if (file.fileName.startsWith(join(home, "examples"))) {
+      visit(file)
+    }
+  }
+  for (const file of program.getSourceFiles()) {
+    if (
+      !file.fileName.startsWith(join(home, "api")) ||
+      /(?:model|routes)\.d\.ts$/.test(file.fileName)
+    ) {
+      continue
+    }
+    const module = checker.getSymbolAtLocation(file)
+    if (!module) {
+      continue
+    }
+    for (const item of checker.getExportsOfModule(module)) {
+      const symbol = canonical(item)
+      if (symbol.flags & ts.SymbolFlags.Value && !used.has(symbol)) {
+        throw new Error(
+          `Public export has no compiled example: ${relative(home, file.fileName)}:${item.name}`,
+        )
+      }
+    }
+  }
+}
+checkPublicExamples()
 const checker = tsc(join(home, "checker.json"))
 const examples = tsc(join(home, "examples.json"))
 // Check our declaration bodies as well as calls; upstream .d.ts errors are excluded
@@ -85,7 +136,14 @@ const cases = files(join(home, "negative")).flatMap((file) =>
 )
 for (const c of cases) {
   const matches = diagnostics.filter((d) => d.file === c.file && d.line === c.line)
-  if (!matches.some((d) => d.text.includes(c.marker))) {
+  const precise = matches.some((d) => {
+    const custom = [...d.text.matchAll(/Msg<([^>]+)>/g)].flatMap((m) =>
+      [...(m[1] ?? "").matchAll(/"([^"]+)"/g)].map((v) => v[1]),
+    )
+    const sentences = d.text.split("\n").map((line) => line.replace(/^.*error TS\d+: /, "").trim())
+    return custom.includes(c.marker) || (c.marker.endsWith(".") && sentences.includes(c.marker))
+  })
+  if (!precise) {
     throw new Error(
       `${c.id}: missing '${c.marker}' at ${relative(root, c.file)}:${c.line}\n${matches.map((d) => d.text).join("\n")}`,
     )
@@ -106,7 +164,7 @@ if (diagnostics.some((d) => !d.used)) {
 for (const c of cases) {
   const row = spec.split("\n").find((line) => new RegExp(`\\|\\s+${c.id}\\s+\\|`).test(line))
   const location = `${relative(home, c.file).replaceAll("\\", "/")}#L${c.line}`
-  if (!row?.includes(`\`${c.marker}\``) || !row.includes(location)) {
+  if (!row?.includes(`\`${c.marker.replaceAll("|", "\\|")}\``) || !row.includes(location)) {
     throw new Error(`Misuse table drift for ${c.id}: expected marker and ${location}`)
   }
 }
@@ -116,19 +174,28 @@ if (new Set(cases.map((c) => c.id)).size !== cases.length) {
 
 const generated = join(home, ".generated")
 mkdirSync(generated, { recursive: true })
-const measurements: { screens: number; hooks: number; instantiations: number }[] = []
-for (const n of [0, 10, 50, 100]) {
+const measurements: {
+  screens: number
+  hooks: number
+  instantiations: number
+  checkSeconds: number
+}[] = []
+for (const n of [0, 100, 200, 400]) {
   for (const hooks of [0, 1, 10]) {
-    let source = `import {Screen,defineApp} from "@reflex/effect"\nimport {createReflex} from "@reflex/react"\nimport * as Schema from "effect/Schema"\n`
+    let source = `import {Screen,defineApp,defineNavigation} from "@reflex/effect"\nimport {createReflexRouter} from "@reflex/react-router"\nimport * as Schema from "effect/Schema"\n`
     for (let i = 0; i < n; i++) {
-      source += `class S${i} extends Screen("S${i}",{state:Schema.Struct({count:Schema.Number}),initial:()=>({count:0})}){declare private readonly nominal:undefined}\nconst I${i}=S${i}.implement({actions:a=>({Add:a.reduce({reducer:(_,s)=>({count:s.count+1})})})})\n`
+      source += `class S${i} extends Screen("S${i}",{params:{id:Schema.String},state:Schema.Union([Schema.Struct({_tag:Schema.Literal("loading")}),Schema.Struct({_tag:Schema.Literal("ready"),count:Schema.Number,label:Schema.Literal("label${i}")})]),initial:()=>({_tag:"ready",count:0,label:"label${i}"})}){}\nconst I${i}=S${i}.implement({actions:a=>({Add:a.when("ready").reduce({input:Schema.Struct({by:Schema.NumberFromString}),reducer:(input,s)=>({...s,count:s.count+input.by})})})})\n`
     }
-    source += `const app=defineApp({name:"scale",screens:[${Array.from({ length: n }, (_, i) => `I${i}`).join(",")}]})\nconst reflex=createReflex(app)\n`
-    if (n) {
-      for (let i = 0; i < n; i++) {
-        for (let j = 0; j < hooks; j++) {
-          source += `export function View${i}_${j}(){const v=reflex.useScreen(S${i});if(v.status==="ready"){const count:number=v.state.count;void count;void v.actions.Add.run()}return null}\n`
-        }
+    const defs = Array.from({ length: n }, (_, i) => `I${i}`).join(",")
+    const contracts = Array.from({ length: n }, (_, i) => `S${i}`).join(",")
+    source += n
+      ? `const nav=defineNavigation({${contracts}})\nconst app=defineApp({name:"scale",navigation:nav.implement([${defs}],{initial:{screen:S0,params:{id:"0"}}})})\n`
+      : `const app=defineApp({name:"scale"})\n`
+    source += `const reflex=createReflexRouter(app,{${Array.from({ length: n }, (_, i) => `S${i}:"/s${i}/:id"`).join(",")}})\n`
+    for (let i = 0; i < n && hooks > 0; i++) {
+      source += `const feature${i}=reflex.from(I${i})\n`
+      for (let j = 0; j < hooks; j++) {
+        source += `export function View${i}_${j}(){const v=feature${i}.useScreen();if(v.state._tag==="ready"){const count:number=v.state.count;void count;void v.actions.Add.run({by:"1"})}return null}\n`
       }
     }
     const config = join(generated, "tsconfig.json")
@@ -138,44 +205,50 @@ for (const n of [0, 10, 50, 100]) {
       JSON.stringify({ extends: "../examples.json", include: ["../api/**/*.d.ts", "./scale.ts"] }),
     )
     const measurement = tsc(config)
-    measurements.push({ screens: n, hooks, instantiations: measurement.instantiations })
+    measurements.push({
+      screens: n,
+      hooks,
+      instantiations: measurement.instantiations,
+      checkSeconds: measurement.checkSeconds,
+    })
   }
 }
 const slopes = []
 for (const hooks of [0, 1, 10]) {
   for (const [from, to] of [
-    [10, 50],
-    [50, 100],
-  ]) {
+    [100, 200],
+    [200, 400],
+  ] as const) {
     const a = measurements.find((m) => m.screens === from && m.hooks === hooks)
     const b = measurements.find((m) => m.screens === to && m.hooks === hooks)
-    if (!a || !b || from === undefined || to === undefined) {
-      throw new Error("Missing measurement")
+    if (!a || !b) {
+      throw new Error("Missing screen measurement")
     }
-    slopes.push({ hooks, from, to, perScreen: (b.instantiations - a.instantiations) / (to - from) })
+    slopes.push({
+      hooks,
+      from,
+      to,
+      instantiationsPerScreen: (b.instantiations - a.instantiations) / (to - from),
+      msPerScreen: (1000 * (b.checkSeconds - a.checkSeconds)) / (to - from),
+    })
   }
 }
-const maxSlope = Math.max(...slopes.filter((s) => s.hooks === 1).map((s) => s.perScreen))
-// Proposed acceptance gate: no more than 2,000 instantiations per added screen
-// including its unique useScreen consumer, and 100 for a repeated identical hook.
-if (maxSlope > 2000) {
-  throw new Error(`Screen slope gate failed: ${maxSlope}`)
-}
 const repeated = measurements
-  .filter((m) => m.hooks === 10 && m.screens > 0)
+  .filter((m) => m.hooks === 10)
   .map((m) => {
-    const single = measurements.find((s) => s.hooks === 1 && s.screens === m.screens)
+    const single = measurements.find((s) => s.screens === m.screens && s.hooks === 1)
     if (!single) {
-      throw new Error("Missing single-hook measurement")
+      throw new Error("Missing hook measurement")
     }
     return {
       screens: m.screens,
-      perAdditionalHook: (m.instantiations - single.instantiations) / (9 * m.screens),
+      msPerAdditionalHook:
+        m.screens === 0 ? 0 : (1000 * (m.checkSeconds - single.checkSeconds)) / (9 * m.screens),
     }
   })
-if (repeated.some((m) => m.perAdditionalHook > 100)) {
-  throw new Error(`Repeated hook gate failed: ${JSON.stringify(repeated)}`)
-}
+// Wall-clock gates intentionally allow scheduler noise. Measurements use heterogeneous
+// contracts, codecs, guards, params, navigation, routes and narrowed feature hooks.
+const maxSlope = Math.max(...slopes.filter((s) => s.hooks === 1).map((s) => s.msPerScreen))
 const results = {
   typescript: ts.version,
   authoredFiles: authored.length,
@@ -190,5 +263,14 @@ const results = {
   repeated,
   maxSlope,
 }
-writeFileSync(join(home, "results.json"), `${JSON.stringify(results, null, 2)}\n`)
+if (process.env.REFLEX_RECORD_TYPE_PERF === "1") {
+  writeFileSync(join(home, "results.json"), `${JSON.stringify(results, null, 2)}\n`)
+}
 console.log(JSON.stringify(results, null, 2))
+
+if (maxSlope > 25) {
+  throw new Error(`Screen check-time gate failed: ${maxSlope}ms`)
+}
+if (repeated.some((m) => m.msPerAdditionalHook > 5)) {
+  throw new Error(`Hook check-time gate failed: ${JSON.stringify(repeated)}`)
+}

@@ -3,6 +3,7 @@ import type * as Duration from "effect/Duration"
 import type * as Schema from "effect/Schema"
 import type * as Redacted from "effect/Redacted"
 import type * as Layer from "effect/Layer"
+import type * as Scope from "effect/Scope"
 export type Msg<S extends string> = { readonly [K in S]: never }
 export type Check<B, S extends string> = B extends true ? unknown : Msg<S>
 export interface StandardValidator {
@@ -45,7 +46,13 @@ export type JsonShape<T> = T extends (...args: never[]) => unknown
               : JsonShape<T[K]>
           }
         : never
-export type JsonCheck<T, M extends string> = [T] extends [JsonShape<T>] ? unknown : Msg<M>
+export type JsonCheck<T, M extends string> = [T] extends [undefined]
+  ? unknown
+  : [T] extends [import("@reflex/protocol").Json]
+    ? unknown
+    : [T] extends [JsonShape<T>]
+      ? unknown
+      : Msg<M>
 export interface Contract {
   new (): object
   readonly name: string
@@ -86,13 +93,23 @@ export type Initial<C> = C extends unknown
     : { screen: C; params: Params<C> }
   : never
 declare const terminal: unique symbol
-export interface NavigationCommand<K extends string = string> {
-  readonly [terminal]: K
+declare const navigationOwner: unique symbol
+interface AnyNavigationCommand {
+  readonly [terminal]: string
   readonly kind: "navigation"
 }
-export interface Navigator<K extends string> {
-  readonly navigator: K
-}
+export type NavigationCommand<K extends string = string> = string extends K
+  ? AnyNavigationCommand
+  : AnyNavigationCommand & {
+      readonly [terminal]: K
+      readonly [navigationOwner]: (key: K) => K
+    }
+export type Navigator<K extends string> = string extends K
+  ? { readonly navigator: string }
+  : {
+      readonly navigator: K
+      readonly [navigationOwner]: (key: K) => K
+    }
 export interface NavigationRefused {
   readonly _tag: "NavigationRefused"
   readonly reason: string
@@ -111,7 +128,9 @@ export interface StateAccess<S, All = S, Guard = never> {
 export interface EffectContext<S, All = S, G = never> {
   readonly state: StateAccess<S, All, G>
 }
-export interface Action<I = undefined, E = never, R = never> {
+declare const actionBuilder: unique symbol
+export interface Action<I = undefined, E = never, R = never, S = unknown> {
+  readonly [actionBuilder]: (state: S) => S
   readonly input: I
   readonly error: E
   readonly requirements: R
@@ -124,7 +143,9 @@ export type ErrorCheck<E, C> = [Exclude<E, StateChanged>] extends [
 ]
   ? unknown
   : Msg<"Declare action failures with error:">
-export type NavRequirement<O> = O extends NavigationCommand<infer K> ? Navigator<K> : never
+export type NavRequirement<O> = O extends { readonly [terminal]: infer K extends string }
+  ? Navigator<K>
+  : never
 export interface PlainEffectActionBuilder<S, All = S, G = never> {
   <
     I extends Codec | undefined = undefined,
@@ -133,22 +154,25 @@ export interface PlainEffectActionBuilder<S, All = S, G = never> {
     HE = never,
     R = never,
   >(spec: {
-    input?: I
-    error?: E
+    input?: I & JsonCheck<Enc<I>, "Input must encode JSON; use jsonCodec">
+    error?: E & JsonCheck<Public<Enc<E>>, "Error must encode JSON; use jsonCodec">
     description?: string
     available?: (s: NoInfer<S>) => true | string
     handler: ((i: NoInfer<Dec<I>>, c: EffectContext<S, All, G>) => Effect.Effect<O, HE, R>) &
       HasCommand<O> &
       ErrorCheck<HE, E>
-  }): Action<Enc<I>, E extends undefined ? never : Enc<E>, R>
+  }): Action<Enc<I>, E extends undefined ? never : Public<Enc<E>>, R, All>
   when<K extends Tags<S>>(tag: K): PlainEffectActionBuilder<Narrow<S, K>, All, StateChanged>
   reduce<I extends Codec | undefined = undefined>(spec: {
-    input?: I
+    input?: I & JsonCheck<Enc<I>, "Input must encode JSON; use jsonCodec">
     description?: string
     available?: (s: S) => true | string
     reducer: (i: NoInfer<Dec<I>>, s: S) => All
-  }): Action<Enc<I>>
+  }): Action<Enc<I>, never, never, All>
 }
+type Success<H> = H extends Effect.Effect<infer O, infer _E, infer _R> ? O : H
+type Failure<H> = H extends Effect.Effect<infer _O, infer E, infer _R> ? E : never
+type Environment<H> = H extends Effect.Effect<infer _O, infer _E, infer R> ? R : never
 export interface EffectActionBuilder<S, All = S, G = never> {
   <
     I extends Codec | undefined = undefined,
@@ -157,44 +181,51 @@ export interface EffectActionBuilder<S, All = S, G = never> {
     HE = never,
     R = never,
   >(spec: {
-    input?: I
-    error?: E
+    input?: I & JsonCheck<Enc<I>, "Input must encode JSON; use jsonCodec">
+    error?: E & JsonCheck<Public<Enc<E>>, "Error must encode JSON; use jsonCodec">
     description?: string
     available?: (s: NoInfer<S>) => true | string
     handler: ((i: NoInfer<Dec<I>>, c: EffectContext<S, All, G>) => Effect.Effect<O, HE, R>) &
       HasCommand<O> &
       ErrorCheck<HE, E>
-  }): Action<Enc<I>, E extends undefined ? never : Enc<E>, R>
+  }): Action<Enc<I>, E extends undefined ? never : Public<Enc<E>>, R, All>
   navigates<
     I extends Codec | undefined = undefined,
     E extends Codec | undefined = undefined,
-    O extends NavigationCommand = NavigationCommand,
-    HE = never,
-    R = never,
+    H extends
+      | NavigationCommand
+      | Effect.Effect<NavigationCommand, unknown, unknown> = NavigationCommand,
     RO = void,
     RR = never,
   >(spec: {
-    input?: I
-    error?: E
+    input?: I & JsonCheck<Enc<I>, "Input must encode JSON; use jsonCodec">
+    error?: E & JsonCheck<Public<Enc<E>>, "Error must encode JSON; use jsonCodec">
     description?: string
     available?: (s: NoInfer<S>) => true | string
-    handler: ((i: NoInfer<Dec<I>>, c: EffectContext<S, All, G>) => Effect.Effect<O, HE, R>) &
-      ErrorCheck<HE, E>
+    handler: ((i: NoInfer<Dec<I>>, c: EffectContext<S, All, G>) => H) & ErrorCheck<Failure<H>, E>
     onRefused?: ((
       error: NavigationRefused,
       c: EffectContext<S, All>,
     ) => Effect.Effect<RO, StateChanged, RR>) &
-      // biome-ignore lint/suspicious/noConfusingVoidType: Effect void success is distinct from undefined.
+      // biome-ignore lint/suspicious/noConfusingVoidType: Effect void is distinct from undefined.
       ([RO] extends [void] ? unknown : Msg<"Navigation refusal recovery must return void">)
-  }): Action<Enc<I>, E extends undefined ? never : Enc<E>, R | RR | NavRequirement<O>>
+  }): Action<
+    Enc<I>,
+    E extends undefined ? never : Public<Enc<E>>,
+    Environment<H> | RR | NavRequirement<Success<H>>,
+    All
+  >
   when<K extends Tags<S>>(tag: K): EffectActionBuilder<Narrow<S, K>, All, StateChanged>
   reduce<I extends Codec | undefined = undefined>(spec: {
-    input?: I
+    input?: I & JsonCheck<Enc<I>, "Input must encode JSON; use jsonCodec">
     description?: string
     available?: (s: S) => true | string
     reducer: (i: NoInfer<Dec<I>>, s: S) => All
-  }): Action<Enc<I>>
+  }): Action<Enc<I>, never, never, All>
 }
+export type ActionMapCheck<A, S> = [A[keyof A]] extends [Action<unknown, unknown, unknown, S>]
+  ? unknown
+  : Msg<"Actions must be built for this state with the action builder">
 export type Requirements<A> = A[keyof A] extends infer V
   ? V extends { requirements: infer R }
     ? R
@@ -206,7 +237,9 @@ export type Contracts<D> = D extends { role: "store" }
   : D extends { contract: infer C }
     ? C
     : never
-export type DefinitionMap<D> = { [Item in D as Names<Item>]: Item }
+export type DefinitionMap<D> = {
+  [Item in Extract<D, { readonly name: string }> as Item["name"]]: Item
+}
 export type Selected<D, C extends { readonly name: string }> = DefinitionMap<D>[C["name"] &
   keyof DefinitionMap<D>]
 export type SelectedFromTable<T, C extends { readonly name: string }> = T[C["name"] & keyof T]
@@ -248,7 +281,12 @@ type UniqueNames<T extends readonly string[], Seen extends string = never> = T e
     : UniqueNames<Tail, Seen | H>
   : unknown
 export type Unique<T extends readonly unknown[]> = UniqueNames<NameTuple<T>>
+export interface StoreOverride<D = unknown> {
+  readonly definition: D
+  readonly factory: (...params: never[]) => unknown
+}
 export interface Scenario {
+  readonly stores?: readonly StoreOverride[]
   readonly layer?: unknown
   readonly fixtures?: readonly AnyDef[]
   readonly virtualTime?: boolean
@@ -264,34 +302,43 @@ type FixtureAccess<F> = F extends { name: infer N extends string } ? { readonly 
 export type Normalize<Sc, F> = {
   [K in keyof Sc]: Sc[K] & { readonly fixtures: readonly FixtureOf<Sc[K], F>[] }
 }
-export type ScenarioCoverage<Sc, D, V, F, Common = never> = {
-  [K in keyof Sc]: [
-    Exclude<
-      | DefinitionReq<D>
-      | DefinitionReq<V>
-      | DefinitionReq<FixtureOf<Sc[K], F>>
-      | LayerInput<ScenarioLayer<Sc[K]>>,
-      | LayerOutput<ScenarioLayer<Sc[K]>>
-      | Common
-      | FixtureAccess<FixtureOf<Sc[K], F>>
-      | Navigator<string>
-    >,
-  ] extends [never]
-    ? unknown
-    : {
-        readonly [P in `Scenario '${K & string}' must provide`]: Exclude<
-          | DefinitionReq<D>
-          | DefinitionReq<V>
-          | DefinitionReq<FixtureOf<Sc[K], F>>
-          | LayerInput<ScenarioLayer<Sc[K]>>,
-          | LayerOutput<ScenarioLayer<Sc[K]>>
-          | Common
-          | FixtureAccess<FixtureOf<Sc[K], F>>
-          | Navigator<string>
-        >
-      }
+type CommonOutput<C> = C extends Layer.Layer<infer P, infer _E, infer _R> ? P : C
+type MissingStage<Req, Available> = Exclude<Req, Available | Scope.Scope>
+export type Coverage<Sc, Req, Common, F, Nav = never> = {
+  [K in keyof Sc]:
+    | MissingStage<LayerInput<Common>, FixtureAccess<FixtureOf<Sc[K], F>>>
+    | MissingStage<
+        LayerInput<ScenarioLayer<Sc[K]>>,
+        CommonOutput<Common> | FixtureAccess<FixtureOf<Sc[K], F>>
+      >
+    | MissingStage<
+        Req | DefinitionReq<FixtureOf<Sc[K], F>>,
+        | CommonOutput<Common>
+        | LayerOutput<ScenarioLayer<Sc[K]>>
+        | FixtureAccess<FixtureOf<Sc[K], F>>
+        | Nav
+      > extends infer Missing
+    ? [Missing] extends [never]
+      ? unknown
+      : { readonly [P in `Scenario '${K & string}' must provide`]: Missing }
+    : never
 }
+export type ScenarioCoverage<Sc, D, V, F, Common = never> = Coverage<
+  Sc,
+  DefinitionReq<D> | DefinitionReq<V>,
+  Common,
+  F,
+  Navigator<string>
+>
 type FixtureDefault<F, FF> = FF extends readonly (infer D)[] ? D : F
+type OverrideDefinition<O> = O extends { readonly definition: infer D } ? D : never
+type StoreOverrideCheck<Sc, Allowed> = {
+  [K in keyof Sc]: Sc[K] extends { stores: readonly (infer O)[] }
+    ? Exclude<Names<OverrideDefinition<O>>, Names<Allowed>> extends never
+      ? unknown
+      : Msg<"Scenario stores must belong to this app">
+    : unknown
+}
 export interface App<
   N extends string = string,
   D = unknown,
@@ -313,9 +360,11 @@ export interface App<
     const K extends string,
     const FF extends readonly AnyDef[] | undefined = undefined,
   >(
-    extra: Extra & {
-      [P in keyof Extra & keyof Sc]: Msg<`Scenario ${P & string} already exists; choose a new name`>
-    } & NoInfer<ScenarioCoverage<Extra, D, V, FixtureDefault<F, FF>, Common>>,
+    extra: Extra &
+      NoInfer<StoreOverrideCheck<Extra, D | V>> & {
+        [P in keyof Extra &
+          keyof Sc]: Msg<`Scenario ${P & string} already exists; choose a new name`>
+      } & NoInfer<ScenarioCoverage<Extra, D, V, FixtureDefault<F, FF>, Common>>,
     options: { defaultScenario: K; fixtures?: FF } & ([K] extends [keyof Sc | keyof NoInfer<Extra>]
       ? unknown
       : Msg<"withScenarios defaultScenario must exist">),
@@ -329,9 +378,11 @@ export interface App<
     Common
   >
   withScenarios<const Extra extends ScenarioMap>(
-    extra: Extra & {
-      [P in keyof Extra & keyof Sc]: Msg<`Scenario ${P & string} already exists; choose a new name`>
-    } & NoInfer<ScenarioCoverage<Extra, D, V, F, Common>>,
+    extra: Extra &
+      NoInfer<StoreOverrideCheck<Extra, D | V>> & {
+        [P in keyof Extra &
+          keyof Sc]: Msg<`Scenario ${P & string} already exists; choose a new name`>
+      } & NoInfer<ScenarioCoverage<Extra, D, V, F, Common>>,
   ): App<N, D, V, Normalize<Sc, F> & Normalize<Extra, F>, Default, F, Common>
 }
 export interface AnyApp {
@@ -369,7 +420,7 @@ export type ActionOutcome<E = unknown> =
   | { status: "cancelled" }
   | { status: "defect"; message: string }
 export type ActionViews<A> = {
-  [K in keyof A]: A[K] extends Action<infer I, infer E, unknown>
+  [K in keyof A]: A[K] extends { readonly input: infer I; readonly error: infer E }
     ? {
         run(...args: InputArgs<I>): Promise<ActionOutcome<E>>
         available: boolean
@@ -426,27 +477,26 @@ export interface JourneyOperation<E> {
   cancelled(): Promise<{ status: "cancelled" }>
   completed(): Promise<void>
   expectError(): Promise<{ status: "error"; error: E }>
-  expectRefusal(): Promise<{ status: "refused" }>
+  expectRefusal(): Promise<{ status: "refused"; reason: string }>
   cancel(): Promise<void>
 }
-export type JourneyActions<A, Mode> = {
-  [K in keyof A]: A[K] extends Action<infer I, infer E, unknown>
-    ? ((...args: InputArgs<I>) => Promise<Mode extends "outcome" ? ActionOutcome<E> : void>) & {
+export type JourneyActions<A> = {
+  [K in keyof A]: A[K] extends { readonly input: infer I; readonly error: infer E }
+    ? {
+        run: (...args: InputArgs<I>) => Promise<ActionOutcome<E>>
+        expectCompleted: (...args: InputArgs<I>) => Promise<void>
         expectError: (...args: InputArgs<I>) => Promise<{ status: "error"; error: E }>
-        expectRefusal: (...args: InputArgs<I>) => Promise<{ status: "refused" }>
+        expectRefusal: (...args: InputArgs<I>) => Promise<{ status: "refused"; reason: string }>
         start: (...args: InputArgs<I>) => Promise<JourneyOperation<E>>
       }
     : never
 }
-export interface JourneyNode<D, M = unknown, Mode = "assert"> {
+export interface JourneyNode<D, M = unknown> {
   state(): Promise<Matched<State<D>, M>>
-  readonly actions: JourneyActions<Actions<D>, Mode>
+  readonly actions: JourneyActions<Actions<D>>
 }
-export interface JourneyClient<
-  A extends AnyApp,
-  K extends ScNames<A> = DefaultOf<A>,
-  Mode = "assert",
-> extends AsyncDisposable {
+export interface JourneyClient<A extends AnyApp, K extends ScNames<A> = DefaultOf<A>>
+  extends AsyncDisposable {
   readonly scenario: K
   focused<
     C extends Contract | AnyDef,
@@ -456,21 +506,25 @@ export interface JourneyClient<
   >(
     contract: C & ScreenMember<A["screens"], NoInfer<C>, A["name"]>,
     match?: M & NoInfer<MatchCheck<State<Selected<A["screens"], C>>, M>>,
-  ): Promise<JourneyNode<Selected<A["screens"], C>, M, Mode>>
+  ): Promise<JourneyNode<Selected<A["screens"], C>, M>>
   node<D extends AnyDef>(
     definition: D & SessionMember<A, K, NoInfer<D>>,
-  ): Promise<JourneyNode<D, unknown, Mode>>
+  ): Promise<JourneyNode<D, unknown>>
+  open<C extends Contract | AnyDef>(
+    contract: C & ScreenMember<A["screens"], NoInfer<C>, A["name"]>,
+    ...params: Args<Params<NoInfer<C>>>
+  ): Promise<JourneyNode<Selected<A["screens"], C>>>
   back(): Promise<void>
-  advanceTime(duration: Duration.Input): Promise<void>
-  reset<S extends ScNames<A>>(scenario: S): Promise<JourneyClient<A, S, Mode>>
+  advanceTime(
+    this: [A["scenarios"][K]] extends [{ readonly virtualTime: true }]
+      ? JourneyClient<A, K>
+      : Msg<"advanceTime requires a virtualTime scenario">,
+    duration: Duration.Input,
+  ): Promise<void>
+  reset<S extends ScNames<A>>(scenario: S): Promise<JourneyClient<A, S>>
   dispose(): Promise<void>
 }
 export type JourneyClientFor<A extends AnyApp, K extends ScNames<A> = DefaultOf<A>> = JourneyClient<
   A,
   K
->
-export type TypedClient<A extends AnyApp, K extends ScNames<A> = DefaultOf<A>> = JourneyClient<
-  A,
-  K,
-  "outcome"
 >

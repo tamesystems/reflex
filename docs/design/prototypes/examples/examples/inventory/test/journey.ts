@@ -9,16 +9,16 @@ test("one story through headless services", async () => {
   await using session = await createTestApp(app, { scenario: "inventory-with-products" })
   const fixture = await session.node(InventoryFixture)
   await servicesJourney(session, async () => {
-    await fixture.actions.FailNextSave()
+    await fixture.actions.FailNextSave.expectCompleted()
   })
 })
 
 test("slow save times out without losing edits", async () => {
   await using session = await createTestApp(app, { scenario: "slow-network" })
   const list = await session.focused(InventoryList, { _tag: "ready" })
-  await list.actions.OpenProduct({ productId: "product-123" })
+  await list.actions.OpenProduct.expectCompleted({ productId: "product-123" })
   const detail = await session.focused(InventoryDetail, { _tag: "editing" })
-  await detail.actions.SetQuantity({ quantity: 12 })
+  await detail.actions.SetQuantity.expectCompleted({ quantity: 12 })
   const saving = await detail.actions.Save.start()
   await session.focused(InventoryDetail, { _tag: "saving" })
   await session.advanceTime("5 seconds")
@@ -35,6 +35,6 @@ test.skipIf(process.env.REFLEX_LIVE !== "1")("the same story through the device"
   })
   const fixture = await session.node(InventoryFixture)
   await servicesJourney(session, async () => {
-    await fixture.actions.FailNextSave()
+    await fixture.actions.FailNextSave.expectCompleted()
   })
 })

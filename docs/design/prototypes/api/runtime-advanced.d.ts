@@ -2,6 +2,9 @@ import type * as M from "./model"
 export type { NavigationCommand, NavigationRefused, StateChanged } from "./model"
 export interface OwnedNode<D> {
   readonly definition: D
+  readonly state: M.State<D>
+  readonly changes: { subscribe(listener: (state: M.State<D>) => void): () => void }
+  readonly actions: M.ActionViews<M.Actions<D>>
   dispose(): Promise<void>
 }
 export interface Runtime {
@@ -25,3 +28,8 @@ export interface RouteRegistry {
 export declare function createRouteRegistry(
   factories: ReadonlyMap<object, (params: unknown) => Promise<unknown>>,
 ): RouteRegistry
+
+export declare function createRuntime<A extends M.AnyApp, K extends M.ScNames<A> = M.DefaultOf<A>>(
+  app: A,
+  options?: { scenario?: K },
+): Promise<Runtime & AsyncDisposable>

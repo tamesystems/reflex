@@ -1,12 +1,12 @@
 import type { ErrorBoundaryProps } from "expo-router"
 import { Suspense } from "react"
 import { Settings } from "@reflex/example-inventory/screens.ts"
-import { reflex } from "../src/routes.ts"
+import { useScreen } from "../src/routes.ts"
 import { Text } from "react-native"
 import { Action, Screen, styles } from "../src/ui.tsx"
 
 function SettingsContent() {
-  const node = reflex.useScreenSuspense(Settings)
+  const node = useScreen(Settings)
   const { state, actions } = node
   if (state._tag === "loading") {
     return null

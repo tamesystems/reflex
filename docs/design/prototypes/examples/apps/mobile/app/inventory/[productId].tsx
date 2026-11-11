@@ -1,10 +1,10 @@
 import { InventoryDetail } from "@reflex/example-inventory/screens.ts"
-import { reflex } from "../../src/routes.ts"
+import { useScreenStatus } from "../../src/routes.ts"
 import { Text } from "react-native"
 import { Action, Screen, styles } from "../../src/ui.tsx"
 
 export default function InventoryDetailView() {
-  const node = reflex.useScreen(InventoryDetail)
+  const node = useScreenStatus(InventoryDetail)
   const { status, state, actions } = node
   if (status === "error") {
     return (

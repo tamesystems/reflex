@@ -8,14 +8,14 @@ export async function resetAndReacquire() {
   await using initial = await createTestApp(app)
   const next = await initial.reset("empty-inventory")
   const list = await next.focused(InventoryList, { _tag: "ready" })
-  await list.actions.OpenSettings()
+  await list.actions.OpenSettings.expectCompleted()
   // initial and its handles are invalid now. Ownership stays with initial's disposer.
 }
 export async function fixtureStory() {
   await using session = await createTestApp(app, { scenario: "inventory-with-products" })
   const fixture = await session.node(InventoryFixture)
   await servicesJourney(session, async () => {
-    await fixture.actions.FailNextSave()
+    await fixture.actions.FailNextSave.expectCompleted()
   })
 }
 export async function realServiceStory(failNextSave: () => Promise<void>) {

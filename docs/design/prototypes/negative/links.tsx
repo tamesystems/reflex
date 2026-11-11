@@ -20,20 +20,20 @@ const expo = createReflexExpo(app, {
   InventoryDetail: "/[productId]",
   Settings: "/settings",
 })
-// @case link-required | params
+// @case link-required | Type '{ to: typeof InventoryDetail; }' is not assignable to type 'IntrinsicAttributes & ((({ to: typeof InventoryList; children?: ReactNode; replace?: boolean; className?: string; } & { params?: never; }) | ({ ...; } & { ...; }) | ({ ...; } & { ...; })) & Omit<...>)'.
 const missing = <web.Link to={InventoryDetail} />
-// @case link-name | not assignable
+// @case link-name | Type 'string' is not assignable to type 'typeof InventoryList | typeof InventoryDetail | typeof Settings'.
 const named = <web.Link to="InventoryDetail" params={{ productId: "p" }} />
-// @case expo-link-name | not assignable
+// @case expo-link-name | Type 'string' is not assignable to type 'typeof InventoryList | typeof InventoryDetail | typeof Settings'.
 const expoNamed = <expo.Link to="Settings" />
 declare const target: typeof InventoryDetail | typeof Settings
-// @case link-union | not assignable
+// @case link-union | Type '"Settings"' is not assignable to type '"InventoryDetail"'.
 const uncorrelated = <web.Link to={target} params={{ productId: "p" }} />
 Nav.implement([InventoryListLive, InventoryDetailLive, SettingsLive], {
-  // @case initial-union | not assignable
+  // @case initial-union | Type '"Settings"' is not assignable to type '"InventoryDetail"'.
   initial: { screen: target, params: { productId: "p" } },
 })
-// @case expo-href-union | not assignable
+// @case expo-href-union | Type '"Settings"' is not assignable to type '"InventoryDetail"'.
 expo.href(target, { productId: "p" })
 void missing
 void named

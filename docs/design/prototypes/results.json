@@ -1,125 +1,147 @@
 {
   "typescript": "5.9.3",
-  "authoredFiles": 44,
-  "negativeCases": 75,
-  "compiledFiles": 43,
+  "authoredFiles": 46,
+  "negativeCases": 97,
+  "compiledFiles": 45,
   "jsonFiles": 1,
-  "checker": 1088,
-  "examples": 90535,
-  "negative": 77643,
+  "checker": 1223,
+  "examples": 114268,
+  "negative": 108690,
   "measurements": [
     {
       "screens": 0,
       "hooks": 0,
-      "instantiations": 449
+      "instantiations": 5148,
+      "checkSeconds": 0.11
     },
     {
       "screens": 0,
       "hooks": 1,
-      "instantiations": 449
+      "instantiations": 5148,
+      "checkSeconds": 0.13
     },
     {
       "screens": 0,
       "hooks": 10,
-      "instantiations": 449
-    },
-    {
-      "screens": 10,
-      "hooks": 0,
-      "instantiations": 16316
-    },
-    {
-      "screens": 10,
-      "hooks": 1,
-      "instantiations": 19834
-    },
-    {
-      "screens": 10,
-      "hooks": 10,
-      "instantiations": 19834
-    },
-    {
-      "screens": 50,
-      "hooks": 0,
-      "instantiations": 58556
-    },
-    {
-      "screens": 50,
-      "hooks": 1,
-      "instantiations": 74794
-    },
-    {
-      "screens": 50,
-      "hooks": 10,
-      "instantiations": 74794
+      "instantiations": 5148,
+      "checkSeconds": 0.11
     },
     {
       "screens": 100,
       "hooks": 0,
-      "instantiations": 115856
+      "instantiations": 402546,
+      "checkSeconds": 0.88
     },
     {
       "screens": 100,
       "hooks": 1,
-      "instantiations": 147994
+      "instantiations": 423116,
+      "checkSeconds": 0.99
     },
     {
       "screens": 100,
       "hooks": 10,
-      "instantiations": 147994
+      "instantiations": 423116,
+      "checkSeconds": 1.35
+    },
+    {
+      "screens": 200,
+      "hooks": 0,
+      "instantiations": 928546,
+      "checkSeconds": 2.56
+    },
+    {
+      "screens": 200,
+      "hooks": 1,
+      "instantiations": 969616,
+      "checkSeconds": 1.97
+    },
+    {
+      "screens": 200,
+      "hooks": 10,
+      "instantiations": 969616,
+      "checkSeconds": 2.79
+    },
+    {
+      "screens": 400,
+      "hooks": 0,
+      "instantiations": 2400546,
+      "checkSeconds": 5.79
+    },
+    {
+      "screens": 400,
+      "hooks": 1,
+      "instantiations": 2482616,
+      "checkSeconds": 4.92
+    },
+    {
+      "screens": 400,
+      "hooks": 10,
+      "instantiations": 2482616,
+      "checkSeconds": 4.45
     }
   ],
   "slopes": [
     {
       "hooks": 0,
-      "from": 10,
-      "to": 50,
-      "perScreen": 1056
+      "from": 100,
+      "to": 200,
+      "instantiationsPerScreen": 5260,
+      "msPerScreen": 16.8
     },
     {
       "hooks": 0,
-      "from": 50,
-      "to": 100,
-      "perScreen": 1146
+      "from": 200,
+      "to": 400,
+      "instantiationsPerScreen": 7360,
+      "msPerScreen": 16.15
     },
     {
       "hooks": 1,
-      "from": 10,
-      "to": 50,
-      "perScreen": 1374
+      "from": 100,
+      "to": 200,
+      "instantiationsPerScreen": 5465,
+      "msPerScreen": 9.8
     },
     {
       "hooks": 1,
-      "from": 50,
-      "to": 100,
-      "perScreen": 1464
+      "from": 200,
+      "to": 400,
+      "instantiationsPerScreen": 7565,
+      "msPerScreen": 14.75
     },
     {
       "hooks": 10,
-      "from": 10,
-      "to": 50,
-      "perScreen": 1374
+      "from": 100,
+      "to": 200,
+      "instantiationsPerScreen": 5465,
+      "msPerScreen": 14.4
     },
     {
       "hooks": 10,
-      "from": 50,
-      "to": 100,
-      "perScreen": 1464
+      "from": 200,
+      "to": 400,
+      "instantiationsPerScreen": 7565,
+      "msPerScreen": 8.3
     }
   ],
   "repeated": [
     {
-      "screens": 10,
-      "perAdditionalHook": 0
-    },
-    {
-      "screens": 50,
-      "perAdditionalHook": 0
+      "screens": 0,
+      "msPerAdditionalHook": 0
     },
     {
       "screens": 100,
-      "perAdditionalHook": 0
+      "msPerAdditionalHook": 0.40000000000000013
+    },
+    {
+      "screens": 200,
+      "msPerAdditionalHook": 0.4555555555555556
+    },
+    {
+      "screens": 400,
+      "msPerAdditionalHook": -0.13055555555555548
     }
   ],
-  "maxSlope": 1464
+  "maxSlope": 14.75
 }

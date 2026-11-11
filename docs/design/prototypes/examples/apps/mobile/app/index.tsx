@@ -1,11 +1,11 @@
 import { InventoryList } from "@reflex/example-inventory/screens.ts"
 import { isLowStock } from "@reflex/example-inventory/domain.ts"
-import { reflex } from "../src/routes.ts"
+import { useScreenStatus } from "../src/routes.ts"
 import { Pressable, Text } from "react-native"
 import { Action, Screen, styles } from "../src/ui.tsx"
 
 export default function InventoryListView() {
-  const node = reflex.useScreen(InventoryList)
+  const node = useScreenStatus(InventoryList)
   const { status, state, actions } = node
   if (status === "error") {
     return (

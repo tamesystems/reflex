@@ -13,9 +13,7 @@ export class Count extends Screen("Count", {
   state: Schema.Struct({ count: Schema.Number }),
   params: { count: Schema.NumberFromString },
   initial: ({ count }) => ({ count }),
-}) {
-  declare private readonly nominal: undefined
-}
+}) {}
 export const Nav = defineNavigation({ Count })
 export const CountLive = Count.implement({
   actions: (action) => ({
@@ -37,7 +35,7 @@ Nav.push(Count, { count: 2 })
 reflex.href(Count, { count: "2" })
 const effectBinding = createReflex(app)
 export function useSetCount() {
-  const view = effectBinding.useScreen(Count)
+  const view = effectBinding.useScreenStatus(Count)
   return async () => {
     if (view.status !== "ready") {
       return null
@@ -91,6 +89,4 @@ export const StoreCounter = defineStoreNode({
 export const storeApp = defineStoreApp({ name: "store-codecs", services: [StoreCounter] })
 export const storeBinding = createReflex(storeApp)
 
-export class WireCount extends Screen("WireCount", { state: wire, initial: () => 1 }) {
-  declare private readonly nominal: undefined
-}
+export class WireCount extends Screen("WireCount", { state: wire, initial: () => 1 }) {}

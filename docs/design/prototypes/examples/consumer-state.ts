@@ -12,15 +12,13 @@ import { memorySettings } from "./examples/inventory/src/settings-store.ts"
 export class EncodedState extends Screen("EncodedState", {
   state: Schema.NumberFromString,
   initial: () => 1,
-}) {
-  declare private readonly nominal: undefined
-}
+}) {}
 export const EncodedLive = EncodedState.implement({
   actions: (action) => ({ Increment: action.reduce({ reducer: (_, n) => n + 1 }) }),
 })
 const reflex = createReflex(defineApp({ name: "encoded-state", screens: [EncodedLive] }))
 export function EncodedView() {
-  const view = reflex.useScreen(EncodedState)
+  const view = reflex.useScreenStatus(EncodedState)
   if (view.status === "ready") {
     const encoded: string = view.state
     void encoded
@@ -55,13 +53,11 @@ void newDefault
 export class Secret extends Screen("Secret", {
   state: Schema.Struct({ token: Schema.Redacted(Schema.String) }),
   initial: () => ({ token: Redacted.make("fixture-only") }),
-}) {
-  declare private readonly nominal: undefined
-}
+}) {}
 const SecretLive = Secret.implement({ actions: () => ({}) })
 const secretBinding = createReflex(defineApp({ name: "secret", screens: [SecretLive] }))
 export function SecretView() {
-  const view = secretBinding.useScreen(Secret)
+  const view = secretBinding.useScreenStatus(Secret)
   if (view.status === "ready") {
     const safe: "<redacted>" = view.state.token
     void safe

@@ -6,7 +6,7 @@ import { Nav } from "../navigation.ts"
 
 const SAVE_TIMEOUT = "5 seconds"
 
-const save = InventoryDetail.when("editing").handler(({ state }) =>
+const save = InventoryDetail.when("editing").handler((_, { state }) =>
   Effect.gen(function* () {
     const api = yield* InventoryApi
     const current = yield* state.get
@@ -63,14 +63,14 @@ export const InventoryDetailLive = InventoryDetail.implement({
     Save: action.when("editing")({
       description: "Persist the quantity; gives up after 5 seconds",
       error: ApiError,
-      handler: (_, { state }) => save({ state }),
+      handler: save,
     }),
     SaveAndClose: action.when("editing").navigates({
       description: "Persist the quantity and return to the previous screen",
       error: ApiError,
       handler: (_, { state }) =>
         Effect.gen(function* () {
-          yield* save({ state })
+          yield* save(undefined, { state })
           return Nav.back
         }),
       onRefused: ({ reason }, { state }) =>

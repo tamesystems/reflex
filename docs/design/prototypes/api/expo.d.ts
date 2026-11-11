@@ -4,4 +4,4 @@ import type { ValidateRoutes } from "./routes"
 export declare function createReflexExpo<A extends M.AnyApp, const R>(
   app: A,
   routes: R & ValidateRoutes<A, NoInfer<R>>,
-): HostBinding<A>
+): HostBinding<A, import("react").ComponentProps<typeof import("expo-router").Link>>

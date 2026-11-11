@@ -40,8 +40,16 @@ class ForeignDetail extends Screen("InventoryDetail", {
 }) {
   declare private readonly nominal: undefined
 }
-// @case nominal | This InventoryDetail is a different contract from app 'inventory''s InventoryDetail
-reflex.useScreen(ForeignDetail)
+Nav.implement(
+  // @case nominal | InventoryDetail is declared more than once
+  [
+    InventoryListLive,
+    InventoryDetailLive,
+    ForeignDetail.implement({ actions: () => ({}) }),
+    SettingsLive,
+  ],
+  { initial: InventoryList },
+)
 // @case screen-service | InventoryDetail is not a service of app 'inventory'
 reflex.useService(InventoryDetail)
 // @case fixture-service | InventoryFixture is not a service of app 'inventory'
@@ -55,28 +63,28 @@ const union = await createTestApp(app, { scenario })
 union.node(InventoryFixture)
 // @case duplicate-implementation | InventoryList is declared more than once
 Nav.implement([InventoryListLive, InventoryListLive], { initial: InventoryList })
-// @case missing-implementation | InventoryDetail
+// @case missing-implementation | InventoryDetail requires one implementation
 Nav.implement([InventoryListLive], { initial: InventoryList })
-// @case unknown-params | productId
+// @case unknown-params | Argument of type '{}' is not assignable to parameter of type '{ readonly productId: string; }'.
 Nav.push(InventoryDetail, {})
-// @case union-push | not assignable
+// @case union-push | Expected 1 arguments, but got 2.
 Nav.push(Math.random() ? InventoryDetail : Settings, { productId: "p" })
-// @case no-params | not assignable
+// @case no-params | Expected 1 arguments, but got 2.
 Nav.push(Settings, {})
-// @case decoded-command | not assignable to type 'number'
+// @case decoded-command | Type 'string' is not assignable to type 'number'.
 CodecNav.push(Count, { count: "2" })
-// @case encoded-href | not assignable to type 'string'
+// @case encoded-href | Type 'number' is not assignable to type 'string'.
 codecReflex.href(Count, { count: 2 })
 // This heterogeneous navigator mirrors href's full tuple correlation.
-// @case union-href | not assignable
+// @case union-href | Expected 1 arguments, but got 2.
 Nav.push(Math.random() ? Settings : InventoryDetail, { productId: "p" })
-// @case initial-correlation | not assignable
+// @case initial-correlation | Type 'string' is not assignable to type 'number'.
 CodecNav.implement([CountLive], { initial: { screen: Count, params: { count: "1" } } })
 Effect.gen(function* () {
-  // @case yielded-command | TS2488
+  // @case yielded-command | Type 'AnyNavigationCommand & { readonly [terminal]: "InventoryList" | "InventoryDetail" | "Settings" | "default"; readonly [navigationOwner]: (key: "InventoryList" | ... 2 more ... | "default") => "InventoryList" | ... 2 more ... | "default"; }' must have a '[Symbol.iterator]()' method that returns an iterator.
   yield* Nav.back
 })
-// @case command-pipe | Property 'pipe' does not exist
+// @case command-pipe | Property 'pipe' does not exist on type 'AnyNavigationCommand & { readonly [terminal]: "InventoryList" | "InventoryDetail" | "Settings" | "default"; readonly [navigationOwner]: (key: "InventoryList" | ... 2 more ... | "default") => "InventoryList" | ... 2 more ... | "default"; }'.
 Nav.back.pipe(Effect.asVoid)
 InventoryList.implement({
   actions: (action) => ({
@@ -89,19 +97,19 @@ InventoryList.implement({
       handler: () => Effect.fail("oops"),
     }),
     BadInput: action({
-      // @case undeclared-input | not assignable
+      // @case undeclared-input | Type 'undefined' is not assignable to type '{ by: number; }'.
       handler: (_input: { by: number }) => Effect.void,
     }),
     MissingReturn: action.navigates({
       handler: () =>
-        // @case dropped-navigation | not assignable
+        // @case dropped-navigation | Type 'Effect<void, never, never>' is not assignable to type 'AnyNavigationCommand | Effect<AnyNavigationCommand, unknown, unknown>'.
         Effect.gen(function* () {
           yield* Effect.void
           Nav.back
         }),
     }),
     Erased: action.navigates({
-      // @case erased-navigation | not assignable
+      // @case erased-navigation | Type 'Effect<void, never, never>' is not assignable to type 'AnyNavigationCommand | Effect<AnyNavigationCommand, unknown, unknown>'.
       handler: (): Effect.Effect<void> => Effect.succeed(Nav.back),
     }),
     BadRecovery: action.navigates({
@@ -123,26 +131,28 @@ InventoryList.implement({
 })
 const storeView = storeBinding.useService(StoreCounter)
 if (storeView.status === "ready") {
-  // @case transformed-store-input | not assignable to parameter of type 'string'
+  // @case transformed-store-input | Argument of type 'number' is not assignable to parameter of type 'string'.
   storeView.actions.Set.run(2)
 }
 const codecView = codecReflex.useScreen(Count)
 if (codecView.status === "ready") {
-  // @case transformed-effect-input | not assignable to parameter of type 'string'
+  // @case transformed-effect-input | Argument of type 'number' is not assignable to parameter of type 'string'.
   codecView.actions.Set.run(2)
 }
-// @case json-date | Store state must be JSON; provide project
-defineStoreNode({
+const DateNode = defineStoreNode({
   name: "Date",
   store: () => createStore(() => ({ now: new Date() })),
   actions: () => ({}),
 })
-// @case json-function | Store state must be JSON; provide project
-defineStoreNode({
+// @case json-date | Store Date state must be JSON; provide project
+defineStoreApp({ name: "dates", services: [DateNode] })
+const FunctionNode = defineStoreNode({
   name: "Function",
   store: () => createStore(() => ({ f: () => 1 })),
   actions: () => ({}),
 })
+// @case json-function | Store Function state must be JSON; provide project
+defineStoreApp({ name: "functions", services: [FunctionNode] })
 const Counter = defineStoreNode({
   name: "Counter",
   store: () => createStore(() => ({ count: 0 })),
@@ -152,7 +162,7 @@ const Counter = defineStoreNode({
         _,
         {
           store,
-          // @case no-fail | Property 'fail' does not exist
+          // @case no-fail | Property 'fail' does not exist on type 'Context<StoreApi<{ count: number; }>, undefined>'.
           fail: _fail,
         },
       ) => store.setState({ count: 0 }),
@@ -167,7 +177,7 @@ const Counter = defineStoreNode({
 })
 // @case duplicate-service | Counter is declared more than once
 defineStoreApp({ name: "x", services: [Counter, Counter] })
-// @case multiple-roles | Choose navigation or screens, not both
+// @case multiple-roles | No overload matches this call.
 defineApp({
   name: "x",
   navigation: Nav.implement([InventoryListLive, InventoryDetailLive, SettingsLive], {
@@ -177,14 +187,14 @@ defineApp({
 })
 Screen("Invalid", {
   state: Schema.Struct({ count: Schema.Number }),
-  // @case initial-schema | not assignable to type 'number'
+  // @case initial-schema | Type 'string' is not assignable to type 'number'.
   initial: () => ({ count: "one" }),
 })
-// @case includes-typo | qty
+// @case includes-typo | Object literal may only specify known properties, and 'qty' does not exist in type 'Partial<NoInfer<{ readonly id: string; readonly title: string; readonly quantity: number; }>>'.
 live.focused(InventoryList, { _tag: "ready", products: includes({ id: "p", qty: 5 }) })
 // @case match-variant | State match fields must belong to one variant
 live.focused(InventoryList, { _tag: "loading", products: includes({ id: "p" }) })
-// @case unknown-scenario | not assignable
+// @case unknown-scenario | Type '"typo"' is not assignable to type 'ScNames<App<"inventory", (Definition<typeof InventoryList, { readonly OpenProduct: Action<{ readonly productId: string; }, never, { readonly navigator: "InventoryList" | "InventoryDetail" | "Settings" | "default"; readonly [navigationOwner]: (key: "InventoryList" | ... 2 more ... | "default") => "InventoryList" | .....'.
 createTestApp(app, { scenario: "typo" })
 // @case extension-default | withScenarios defaultScenario must exist
 defineStoreApp({ name: "empty" }).withScenarios({ extra: {} }, { defaultScenario: "missing" })
@@ -215,16 +225,19 @@ path("/:id", { typo: "id" })
 path("/:id" as string)
 // @case numeric-url | URL param id must encode a string; use a string codec
 route<{ id: number }>()("/:id")
-// @case registration-missing | Settings
+// @case registration-missing | Argument of type '{ InventoryList: "/"; InventoryDetail: "/:productId"; }' is not assignable to parameter of type '{ readonly InventoryList: "/"; readonly InventoryDetail: "/:productId"; } & ValidateRoutes<App<"inventory", (Definition<typeof InventoryList, { readonly OpenProduct: Action<{ readonly productId: string; }, never, { ...; }, { ...; } | ... 1 more ... | { ...; }>; readonly OpenSettings: Action<...>; readonly Refresh: A...'.
 createReflexRouter(app, { InventoryList: "/", InventoryDetail: "/:productId" })
 const router = createReflexRouter(app, {
   InventoryList: "/",
   InventoryDetail: "/:productId",
   Settings: "/settings",
 })
-// @case component-missing | Settings
-router.routes({ InventoryList: {}, InventoryDetail: {} })
-// @case href-union | not assignable
+// @case component-missing | Argument of type '{ InventoryList: { Component: () => null; }; InventoryDetail: { Component: () => null; }; }' is not assignable to parameter of type '{ InventoryList: HostRouteOptions; InventoryDetail: HostRouteOptions; Settings: HostRouteOptions; }'.
+router.routes({
+  InventoryList: { Component: () => null },
+  InventoryDetail: { Component: () => null },
+})
+// @case href-union | Type '"Settings"' is not assignable to type '"InventoryDetail"'.
 router.href(Math.random() ? InventoryDetail : Settings, { productId: "p" })
 const ParamFree = defineStoreNode({
   name: "ParamFree",
@@ -235,15 +248,15 @@ const service = createReflex(defineStoreApp({ name: "plain", services: [ParamFre
   ParamFree,
 )
 if (service.status === "ready") {
-  // @case zero-arity | Expected 0 arguments, but got 1
+  // @case zero-arity | Expected 0 arguments, but got 1.
   service.actions.Reset.run({})
 }
 const NeedsNav = InventoryList.implement({
   actions: (action) => ({ Go: action.navigates({ handler: () => Effect.succeed(Nav.back) }) }),
 })
-// @case missing-navigator | Action Go of app 'no-nav' requires a navigator
+// @case missing-navigator | No overload matches this call.
 defineApp({ name: "no-nav", screens: [NeedsNav] })
-// @case missing-service | Scenario 'missing' must provide
+// @case missing-service | No overload matches this call.
 defineApp({
   name: "coverage",
   screens: [InventoryListLive],
@@ -251,7 +264,7 @@ defineApp({
   defaultScenario: "missing",
 })
 const importedFixtureLayer = fixtureApi({ products: seedProducts })
-// @case missing-fixture | Scenario 'missing-fixture' must provide
+// @case missing-fixture | Type '{ layer: Layer<InventoryApi, never, FixtureService<"InventoryFixture">>; fixtures: []; }' is not assignable to type '{ readonly layer: Layer<InventoryApi, never, FixtureService<"InventoryFixture">>; readonly fixtures: readonly []; } & { readonly "Scenario 'missing-fixture' must provide": SettingsStore | FixtureService<...>; }'.
 app.withScenarios({ "missing-fixture": { layer: importedFixtureLayer, fixtures: [] } })
 const needsApi = Effect.gen(function* () {
   yield* InventoryApi
@@ -263,11 +276,11 @@ const NeedsServices = defineFixture({
   actions: (action) => ({ Load: action({ handler: () => needsApi }) }),
 })
 const fixtureApp = defineStoreApp({ name: "fixture-coverage" })
-// @case fixture-action-service | Scenario 'missing' must provide
+// @case fixture-action-service | Property '"Scenario 'missing' must provide"' is missing in type '{ fixtures: [Definition<never, { readonly Load: Action<undefined, never, InventoryApi, number>; }, number, InventoryApi, "fixture"> & Effect.Effect<...> & { ...; }]; }' but required in type '{ readonly "Scenario 'missing' must provide": InventoryApi; }'.
 fixtureApp.withScenarios({ missing: { fixtures: [NeedsServices] } })
 // @case role-collision | ParamFree is declared more than once
 defineStoreApp({ name: "collision", screens: [ParamFree], services: [ParamFree] })
-// @case missing-default | defaultScenario
+// @case missing-default | Property 'defaultScenario' is missing in type '{ name: "two"; scenarios: { one: {}; two: {}; }; }' but required in type '{ defaultScenario: "one" | "two"; }'.
 defineApp({ name: "two", scenarios: { one: {}, two: {} } })
 // @case record-alias | Navigation key Second must match contract name InventoryDetail
 defineNavigation({ InventoryDetail, Second: InventoryDetail })
@@ -278,20 +291,20 @@ const NoNavigationFixture = defineFixture({
   state: Schema.Number,
   initial: () => 0,
   actions: (action) => ({
-    // @case fixture-navigates | Property 'navigates' does not exist
+    // @case fixture-navigates | Property 'navigates' does not exist on type 'PlainEffectActionBuilder<number, number, never>'.
     Go: action.navigates({ handler: () => Effect.succeed(Nav.back) }),
   }),
 })
 const readonlyView = codecReflex.useScreen(Count)
 if (readonlyView.status === "ready") {
-  // @case readonly-state | read-only property
+  // @case readonly-state | Cannot assign to 'count' because it is a read-only property.
   readonlyView.state.count = 2
 }
 const serviceDefinition = defineStoreNode({
   name: "TransformedError",
   store: () => createStore(() => ({ count: 0 })),
   actions: (action) => ({
-    // @case transformed-error-encoder | projectError
+    // @case transformed-error-encoder | Property 'projectError' is missing in type '{ error: z.ZodPipe<z.ZodString, z.ZodTransform<number, string>>; handler: () => void; }' but required in type '{ projectError: (error: number) => string; }'.
     Save: action({ error: z.string().transform(Number), handler: () => {} }),
   }),
 })
@@ -300,12 +313,12 @@ void serviceDefinition
 const UnknownInput = defineStoreNode({
   name: "UnknownInput",
   store: () => createStore(() => ({ count: 0 })),
-  actions: (action) => ({ Send: action({ input: z.unknown(), handler: () => {} }) }),
+  actions: (action) => ({ Send: action({ input: z.json(), handler: () => {} }) }),
 })
 const unknownView = createReflex(
   defineStoreApp({ name: "unknown", services: [UnknownInput] }),
 ).useService(UnknownInput)
 if (unknownView.status === "ready") {
-  // @case unknown-input-presence | Expected 1 arguments, but got 0
+  // @case unknown-input-presence | Expected 1 arguments, but got 0.
   unknownView.actions.Send.run()
 }

@@ -1,8 +1,8 @@
 import { List, Detail } from "./app.ts"
-import { reflex } from "./routes.ts"
+import { useScreenStatus, Link, useScreen } from "./routes.ts"
 
 export function ListView() {
-  const view = reflex.useScreen(List)
+  const view = useScreenStatus(List)
   if (view.status === "error") {
     return (
       <button
@@ -31,14 +31,14 @@ export function ListView() {
       >
         Add one
       </button>
-      <reflex.Link to={Detail} params={{ id: "one" }}>
+      <Link to={Detail} params={{ id: "one" }}>
         Open detail
-      </reflex.Link>
+      </Link>
     </main>
   )
 }
 export function DetailView() {
-  const { state, actions } = reflex.useScreenSuspense(Detail)
+  const { state, actions } = useScreen(Detail)
   return (
     <main>
       <h1>Detail {state.id}</h1>
@@ -52,7 +52,7 @@ export function DetailView() {
       >
         Add one
       </button>
-      <reflex.Link to={List}>List</reflex.Link>
+      <Link to={List}>List</Link>
     </main>
   )
 }

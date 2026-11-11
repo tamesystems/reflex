@@ -1,4 +1,4 @@
-# Reflex userland API specification, revision 2
+# Reflex userland API specification, revision 3 (implementation contract)
 
 Status: proposed target API; **no runtime implementation is changed or claimed**.
 Revision 1 baseline: `9debc24` on `origin/userland-api-spec`. Rubric:
@@ -23,7 +23,8 @@ executable-spec tsconfig substitutes target declarations without touching those 
 Run `bun docs/design/prototypes/check.ts`. It checks example/spec drift, invokes tsc,
 checks target declaration bodies (excluding upstream dependency diagnostics by path),
 asserts each negative marker at its **file and next-line location**, rejects unexpected
-diagnostics, and measures the 0/10/50/100-screen graph with 0/1/10 hooks per screen.
+diagnostics, checks that every public value export is exercised by an example, and measures the
+0/100/200/400-screen graph with 0/1/10 hooks per screen.
 Normal examples use skipLibCheck, matching the repository. The separate body check
 turns it off: errors in dependencies do not become evidence against our declarations,
 and errors in our declarations cannot be hidden. No positive example uses `any`,
@@ -49,16 +50,13 @@ because this change may not edit package.json or scripts/.
    A one-step `Screen.define(name, {state, initial, actions})` returns a combined
    constructor/implementation when there is no implementation selection. It has the
    same app-bound consumer API. Its identity is still its actual runtime constructor.
-2. **Drop Self.** Authored split contracts use `declare private readonly nominal: undefined`.
-   This distinguishes independent same-shape classes; Self adds no protection. TS cannot
-   inspect a private member, and subclasses inherit it. We choose the cheaper honest
-   limit: runtime registration/lookup uses **exact constructor equality**, never
-   `instanceof`, `prototype` ancestry or string name equality. Missing-private-line
-   contracts and inherited subclasses can be structurally assignable statically;
-   `static-limits.ts` preserves these counterexamples. A missing private line is lintable,
-   not a claimed compiler diagnostic. A registered constructor's subclass is a distinct,
-   unregistered contract. JS class names may differ from declared names: registration
-   keys and diagnostics use the declared string; identities use constructors.
+2. **Structural types, exact runtime identity.** Contracts need no hand-written private
+   nominal field. TypeScript classes and stores are structural; a subclass or an independently
+   declared same-shape contract can be statically assignable. Registration and lookup use
+   exact constructors/definition objects, never prototype ancestry or names. Composition
+   rejects duplicate declared names, including navigation screens versus ambient services.
+   Runtime errors name the declared contract and explain how to register it. The limit is
+   demonstrated in static-limits.ts; no static nominality is claimed.
 3. **One role model.** Both Effect and store apps compose `screens` and `services`;
    Effect apps with core navigation select `navigation` instead of `screens`.
    `useService(Definition)` reads an ambient session-owned service in every host.
@@ -74,7 +72,7 @@ because this change may not edit package.json or scripts/.
    (the extra-implementation identity check is a runtime obligation). One session owns
    one route registry across normal hooks, Suspense and navigation preparation.
 5. **Commands are returned, never yielded.** `Nav.push`, `Nav.back`, `Nav.stay` are data.
-   `action.navigates` must return `Effect<NavigationCommand>`; a missing return, discarded
+   `action.navigates` returns a bare `NavigationCommand` or `Effect<NavigationCommand>`; a missing return, discarded
    command or an `Effect<void>` helper in this tier fails compilation. `action` and
    `onFocus` infer success/error before checking: visible command successes produce
    `Use action.navigates for actions that navigate`; undeclared errors produce
@@ -84,8 +82,8 @@ because this change may not edit package.json or scripts/.
    `pipe`; `yield* Nav.back` produces **TS2488**, with no invented custom diagnostic.
 6. **Static erasure is real.** TS permits an Effect command to be widened to `Effect<void>`
    and accepts unused expression statements in a plain action. Types cannot recover this.
-   Require a lint rule for command expressions, commands erased through void-returning
-   helpers, and yielded commands. Runtime tracks command creation by operation: exactly
+   A command-erasure lint rule is explicitly follow-up work, not a shipped part of this
+   revision. It must cover command expressions, void-returning helpers and yielded commands. Runtime tracks command creation by operation: exactly
    one command must be returned for a navigating action; unused/multiple commands are
    defects, even if hidden by void. Commands made outside an invocation cannot be
    dispatched. A plain action or onFocus returning a hidden command is a defect, not
@@ -99,8 +97,9 @@ because this change may not edit package.json or scripts/.
    or one action that performs all domain I/O and returns its final destination.
    Redirect-on-refusal becomes a refused state plus a separate redirect action; a journey
    can await refusal and drive that next action. Navigation is not an imperative service.
-8. **Correlated complete argument tuples.** `push` and `href` take a union of whole tuples,
-   not a generic target plus a separately inferred params object. Initial routes are
+8. **Correlated arguments.** `push` infers the target first and checks params with
+   NoInfer against that target. It does not print the union of every screen on an input
+   mismatch. `href` accepts a union of complete tuples. Initial routes are
    a union of whole `{screen, params}` objects or a param-free contract. `Link` props are
    likewise a union. Narrow a union target first, or carry the entire correlated tuple.
    Navigation and initial routes take **decoded** params. href, Link and advanced URL
@@ -108,14 +107,15 @@ because this change may not edit package.json or scripts/.
    push and a string for href. No params means zero arguments, not `{}`.
 9. **Store inference and codecs.** `StateOf<T>` derives the return of getState, never
    infers state from `T extends Store<S>`. NoInfer prevents project/availability/builders
-   from changing it. Parameterized store factories may need one definition-site params
-   annotation; the web Detail file demonstrates the TS inference boundary, without a
-   call-site generic. Infer the whole Effect codec or Standard Schema validator; use
+   from changing it. Destructured parameterized factories infer their params directly
+   from the validator. JSON-state checking occurs at composition, naming the store and
+   suggesting project; it does not intersect the factory spec and break param inference. Infer the whole Effect codec or Standard Schema validator; use
    decoded output for handlers and encoded input for consumers. Standard Schema only
    validates: it cannot invert an arbitrary transform. Transformed store errors require
    projectError to explicitly encode their decoded domain error; the codecs example does
    so. An automatic inverse for Standard Schema is **unproven and not promised**.
-   Effect codecs have their own encode operation. jsonCodec preserves its source C (including Type and Encoded) and returns a
+   Opaque validators use standardInput(validator, jsonSchema), including for error and
+   param validators. Effect codecs have their own encode operation. jsonCodec preserves its source C (including Type and Encoded) and returns a
    Schema.Codec<C.Type, Wire> for the explicit JSON wire representation;
    its explicit wire encoder may need a typed helper at this advanced boundary.
 10. **Publication is validated.** JSON-shaped interfaces pass a shape compatibility check;
@@ -152,7 +152,10 @@ because this change may not edit package.json or scripts/.
     compiles a common-layer app and two extensions, checking their defaults. Missing service diagnostics currently expose the service identifier;
     the exact runtime message must name its Context key, e.g.
     `App inventory scenario live-services must provide inventory/InventoryApi.`
-14. **Provider is app-bound.** Ordinary `<reflex.Provider>` needs no app prop. Only a
+14. **Provider is app-bound.** Export destructured Provider/useScreen/useService/Link/href
+    bindings so eslint-plugin-react-hooks recognizes the hooks. Ordinary `<Provider>`
+    needs no app prop. Provider bridge="development" opens the development bridge on
+    mount and closes it on unmount, including Fast Refresh. Only a
     compatible withScenarios variant passes `app={instrumented}`. Runtime checks original
     descriptor identity. `fallback` renders while starting, including when outside the
     router. A failure stores the cause then rethrows during render to the nearest React
@@ -184,7 +187,9 @@ because this change may not edit package.json or scripts/.
 17. **Single route registry and atomic navigation.** Key `(constructor, history entry
     key)` stores generation, encoded params hash, pending promise, scope, node and leases.
     A second lookup reuses the pending build. Conflicting params are an error. Normal
-    hooks acquire at commit; Suspense may request at render, but the session owns the
+    useScreen suspends by default and sends failures to the route ErrorBoundary.
+    useScreenStatus is the opt-in pending/error/ready API. Normal hooks acquire at
+    commit; Suspense may request at render, but the session owns the
     provisional scope. Abandoned work has a deadline. Provisional and committed entries
     share bounded capacity; unreachable forward entries are released, reset/teardown
     drains all entries exactly once. A failed build is evicted before retry; normal hooks
@@ -207,10 +212,13 @@ because this change may not edit package.json or scripts/.
     excluded grammar. Runtime validates encode output and decode output against that
     screen's **encoded** schema before decoded navigation args enter core logic. Extra
     query keys are ignored; arrays need the explicit codec policy.
-19. **Host idioms.** Both hosts offer `<reflex.Link to={Detail} params={{id}} />` and
-    `reflex.href(Detail, {id})`. Expo owns its files/Stack and puts Suspense/error boundaries
+19. **Host idioms.** Both hosts offer `<Link to={Detail} params={{id}} />` and
+    `href(Detail, {id})`, accepting the host link props minus owned navigation fields. Expo owns its files/Stack and puts Suspense/error boundaries
     per screen, never around the entire Stack. React Router routes accepts host options
-    `{ Component, loader, action, errorElement, shouldRevalidate, lazy }` per screen;
+    (RouteObject fields minus owned path/index/children/id/rendering wrappers) per screen;
+    Component, element or lazy is required, and handle and other host fields pass through.
+    Each screen has its own Suspense and error element; resetting the error element
+    evicts the failed route lease and retries it. Expo accepts pathname as well as path;
     registration owns path, wrapper and focus key. Wrappers report the actual matched
     location/history key; no useResolvedPath substitute. A lazy result may supply host
     components/data handlers but cannot replace the owned route wrapper/path. Framework
@@ -223,16 +231,22 @@ because this change may not edit package.json or scripts/.
     tiers/one-step.ts; move to tiers/selected.ts when selection becomes necessary;
     advanced.ts adds explicit scoped ownership. The first plain counter is router-free:
     services:[Counter] plus useService(Counter). Routing comes later in the web sample.
-    Journey actions have one map: detail.actions.Save(), .Save.expectError(),
-    .Save.expectRefusal(), .Save.start(). A TypedClient is JourneyClient with outcome
-    mode, not a parallel interface. Shared stories accept Pick of the capabilities they
+    Journey actions have one mode: .Save.run() returns an outcome, and
+    .Save.expectCompleted()/expectError()/expectRefusal() assert it. expectRefusal returns
+    status and reason. .Save.start() returns a tracked operation. There is no TypedClient
+    or forScenario. session.open(Detail, params) mounts a host/store route. explore is
+    public, with typed invariants and knownInputs. The advanced protocol test seam accepts
+    malformed requests, operation ids and exposes events for assertions. Shared stories accept Pick of the capabilities they
     use. Both fixture and real-service calls compile. Use await using or pool+afterEach;
-    no unowned test session. advanceTime takes Duration.Input. Match timeouts name the
+    no unowned test session. advanceTime takes Duration.Input and requires a virtualTime
+    scenario, including every member when the scenario name is a union. Match timeouts name the
     contract, requested match, timeout and **last state seen**, including pending/error.
 21. **Export reduction.** No Self, resolve, root node map, queued-navigation layer,
     public /internal entries, duplicated mountOwned/routeCodec/developmentBridge functions,
     StateSource, or parallel Bridge types. runtime/advanced owns mountOwned;
-    effect/advanced owns mountEffect. live owns Bridge and live/dev implements
+    effect/advanced owns mountEffect; it returns an OwnedNode with typed state, changes
+    and actions and requires Scope. createRuntime(app, { scenario }) makes mountOwned
+    reachable. Registry and adapter APIs are explicitly integration plumbing. live owns Bridge and live/dev implements
     developmentBridge; expo/dev re-exports it. Root/advanced files under api/ are the
     exhaustive target author surface, not wildcard compatibility barrels. Controller,
     protocol, RPC, CLI and navigation integration APIs remain outside this redesign.
@@ -247,18 +261,21 @@ negative cases and the slope harness. Reviewer probes p1–p10, store-inference,
 extra, long-path and fixes.ts were read; their counterexamples are represented by
 static-limits.ts, codecs.ts, the negative cases and the generated scale graph.
 
-The proposed performance gate is **at most 2,000 additional instantiations per screen**
-between 10→50 and 50→100, including a unique useScreen consumer, plus **100 per repeated
-identical useScreen call**. It is enforced in check.ts, in addition to recording the
-baseline. These are provisional upper gates, not a claim that 1,999 is cheap. Compare
-same compiler/dependencies and graph; lower the gate after representative implementation
-measurements. A count of repeated identical calls measures compiler caching, not the
-cost of a new contract selection. The harness reports 0/1/10 hooks and both slopes so
-that caching cannot disguise the unique-consumer cost. No claim is made about editor
-latency from tsc counts alone. Results are recorded in prototypes/results.json.
+The type-performance workload contains distinct union states, input codecs, guarded
+reducers, params, navigation and route registrations. It reports TypeScript check time
+and instantiations at 0/100/200/400 screens, with 0/1/10 hooks per screen. Feature bindings
+from(Definition) capture a selected definition directly and expose zero-argument hooks. Lookup uses an
+indexed definition table for ordinary hooks. The from(Definition) tier checks exact
+membership at runtime and uses only that definition in its hook types, avoiding an
+N-member overload intersection or repeated app-membership computation.
+The gates are 25 ms per added screen (100→200 and 200→400 with one hook) and 5 ms per
+additional narrowed hook, allowing scheduling noise. These are batch checker measurements,
+not editor latency measurements. Results are printed by the checker and recorded in
+prototypes/results.json when REFLEX_RECORD_TYPE_PERF=1 is set.
 
 Static misuse rows below are generated from @case annotations. The checker asserts
-marker **text plus exact source line** and rejects additional diagnostics. Ordinary TS
+the complete custom message or a full TypeScript diagnostic sentence **plus exact source
+line**, rejects fragment-only markers and rejects additional diagnostics. Ordinary TS
 messages are used when the surface cannot supply a marker. The old row numbers are
 superseded by stable case IDs. In particular old rows 19/21 now use inferred error channels;
 old row 20 honestly uses the TS parameter incompatibility; old row 35 honestly uses the
@@ -266,83 +283,105 @@ missing component property; none relies on exactOptionalPropertyTypes wording.
 
 ### Verified negative cases
 
-| Case                      | Expected marker or diagnostic fragment                                                | Executable source                           |
-| ------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------- |
-| role-fixture              | `InventoryFixture is not a screen of app 'inventory'`                                 | [case](prototypes/negative/cases.ts#L35)    |
-| nominal                   | `This InventoryDetail is a different contract from app 'inventory''s InventoryDetail` | [case](prototypes/negative/cases.ts#L44)    |
-| screen-service            | `InventoryDetail is not a service of app 'inventory'`                                 | [case](prototypes/negative/cases.ts#L46)    |
-| fixture-service           | `InventoryFixture is not a service of app 'inventory'`                                | [case](prototypes/negative/cases.ts#L48)    |
-| absent-fixture            | `InventoryFixture is not a fixture of this scenario of app 'inventory'`               | [case](prototypes/negative/cases.ts#L51)    |
-| union-fixture             | `InventoryFixture is not a fixture of this scenario of app 'inventory'`               | [case](prototypes/negative/cases.ts#L55)    |
-| duplicate-implementation  | `InventoryList is declared more than once`                                            | [case](prototypes/negative/cases.ts#L57)    |
-| missing-implementation    | `InventoryDetail`                                                                     | [case](prototypes/negative/cases.ts#L59)    |
-| unknown-params            | `productId`                                                                           | [case](prototypes/negative/cases.ts#L61)    |
-| union-push                | `not assignable`                                                                      | [case](prototypes/negative/cases.ts#L63)    |
-| no-params                 | `not assignable`                                                                      | [case](prototypes/negative/cases.ts#L65)    |
-| decoded-command           | `not assignable to type 'number'`                                                     | [case](prototypes/negative/cases.ts#L67)    |
-| encoded-href              | `not assignable to type 'string'`                                                     | [case](prototypes/negative/cases.ts#L69)    |
-| union-href                | `not assignable`                                                                      | [case](prototypes/negative/cases.ts#L72)    |
-| initial-correlation       | `not assignable`                                                                      | [case](prototypes/negative/cases.ts#L74)    |
-| yielded-command           | `TS2488`                                                                              | [case](prototypes/negative/cases.ts#L77)    |
-| command-pipe              | `Property 'pipe' does not exist`                                                      | [case](prototypes/negative/cases.ts#L80)    |
-| plain-navigation          | `Use action.navigates for actions that navigate`                                      | [case](prototypes/negative/cases.ts#L85)    |
-| undeclared-error          | `Declare action failures with error:`                                                 | [case](prototypes/negative/cases.ts#L89)    |
-| undeclared-input          | `not assignable`                                                                      | [case](prototypes/negative/cases.ts#L93)    |
-| dropped-navigation        | `not assignable`                                                                      | [case](prototypes/negative/cases.ts#L98)    |
-| erased-navigation         | `not assignable`                                                                      | [case](prototypes/negative/cases.ts#L105)   |
-| refusal-command           | `Navigation refusal recovery must return void`                                        | [case](prototypes/negative/cases.ts#L110)   |
-| focus-error               | `Handle onFocus failures into state`                                                  | [case](prototypes/negative/cases.ts#L117)   |
-| focus-navigation          | `Use action.navigates for actions that navigate`                                      | [case](prototypes/negative/cases.ts#L122)   |
-| transformed-store-input   | `not assignable to parameter of type 'string'`                                        | [case](prototypes/negative/cases.ts#L127)   |
-| transformed-effect-input  | `not assignable to parameter of type 'string'`                                        | [case](prototypes/negative/cases.ts#L132)   |
-| json-date                 | `Store state must be JSON; provide project`                                           | [case](prototypes/negative/cases.ts#L135)   |
-| json-function             | `Store state must be JSON; provide project`                                           | [case](prototypes/negative/cases.ts#L141)   |
-| no-fail                   | `Property 'fail' does not exist`                                                      | [case](prototypes/negative/cases.ts#L156)   |
-| rich-error                | `Store error must be JSON; provide projectError`                                      | [case](prototypes/negative/cases.ts#L161)   |
-| store-command             | `Store handlers cannot return NavigationCommand`                                      | [case](prototypes/negative/cases.ts#L164)   |
-| duplicate-service         | `Counter is declared more than once`                                                  | [case](prototypes/negative/cases.ts#L169)   |
-| multiple-roles            | `Choose navigation or screens, not both`                                              | [case](prototypes/negative/cases.ts#L171)   |
-| initial-schema            | `not assignable to type 'number'`                                                     | [case](prototypes/negative/cases.ts#L181)   |
-| includes-typo             | `qty`                                                                                 | [case](prototypes/negative/cases.ts#L184)   |
-| match-variant             | `State match fields must belong to one variant`                                       | [case](prototypes/negative/cases.ts#L186)   |
-| unknown-scenario          | `not assignable`                                                                      | [case](prototypes/negative/cases.ts#L188)   |
-| extension-default         | `withScenarios defaultScenario must exist`                                            | [case](prototypes/negative/cases.ts#L190)   |
-| extension-repeat          | `Scenario live-services already exists; choose a new name`                            | [case](prototypes/negative/cases.ts#L192)   |
-| repeated-placeholder      | `Repeated path placeholder id`                                                        | [case](prototypes/negative/cases.ts#L195)   |
-| group                     | `Excluded route grammar; use routeCodec`                                              | [case](prototypes/negative/cases.ts#L197)   |
-| catchall                  | `Excluded route grammar; use routeCodec`                                              | [case](prototypes/negative/cases.ts#L199)   |
-| spread                    | `Excluded route grammar; use routeCodec`                                              | [case](prototypes/negative/cases.ts#L201)   |
-| optional-grammar          | `Excluded route grammar; use routeCodec`                                              | [case](prototypes/negative/cases.ts#L203)   |
-| optional-placeholder      | `Optional route param tab cannot be a path placeholder`                               | [case](prototypes/negative/cases.ts#L205)   |
-| unmatched-placeholder     | `Path placeholder other has no matching param; add a params mapping`                  | [case](prototypes/negative/cases.ts#L207)   |
-| missing-placeholder       | `Required route param id must appear as a path placeholder`                           | [case](prototypes/negative/cases.ts#L209)   |
-| mapping-duplicates        | `URL param mapping targets must be unique`                                            | [case](prototypes/negative/cases.ts#L211)   |
-| mapping-keys              | `URL param mapping names must be schema fields`                                       | [case](prototypes/negative/cases.ts#L213)   |
-| dynamic-path              | `Route path must be a literal; use advanced routeCodec for dynamic paths`             | [case](prototypes/negative/cases.ts#L215)   |
-| numeric-url               | `URL param id must encode a string; use a string codec`                               | [case](prototypes/negative/cases.ts#L217)   |
-| registration-missing      | `Settings`                                                                            | [case](prototypes/negative/cases.ts#L219)   |
-| component-missing         | `Settings`                                                                            | [case](prototypes/negative/cases.ts#L226)   |
-| href-union                | `not assignable`                                                                      | [case](prototypes/negative/cases.ts#L228)   |
-| zero-arity                | `Expected 0 arguments, but got 1`                                                     | [case](prototypes/negative/cases.ts#L239)   |
-| missing-navigator         | `Action Go of app 'no-nav' requires a navigator`                                      | [case](prototypes/negative/cases.ts#L245)   |
-| missing-service           | `Scenario 'missing' must provide`                                                     | [case](prototypes/negative/cases.ts#L247)   |
-| missing-fixture           | `Scenario 'missing-fixture' must provide`                                             | [case](prototypes/negative/cases.ts#L255)   |
-| fixture-action-service    | `Scenario 'missing' must provide`                                                     | [case](prototypes/negative/cases.ts#L267)   |
-| role-collision            | `ParamFree is declared more than once`                                                | [case](prototypes/negative/cases.ts#L269)   |
-| missing-default           | `defaultScenario`                                                                     | [case](prototypes/negative/cases.ts#L271)   |
-| record-alias              | `Navigation key Second must match contract name InventoryDetail`                      | [case](prototypes/negative/cases.ts#L273)   |
-| effect-rich-state         | `Effect state must encode JSON; use jsonCodec`                                        | [case](prototypes/negative/cases.ts#L275)   |
-| fixture-navigates         | `Property 'navigates' does not exist`                                                 | [case](prototypes/negative/cases.ts#L282)   |
-| readonly-state            | `read-only property`                                                                  | [case](prototypes/negative/cases.ts#L288)   |
-| transformed-error-encoder | `projectError`                                                                        | [case](prototypes/negative/cases.ts#L295)   |
-| unknown-input-presence    | `Expected 1 arguments, but got 0`                                                     | [case](prototypes/negative/cases.ts#L310)   |
-| link-required             | `params`                                                                              | [case](prototypes/negative/links.tsx#L24)   |
-| link-name                 | `not assignable`                                                                      | [case](prototypes/negative/links.tsx#L26)   |
-| expo-link-name            | `not assignable`                                                                      | [case](prototypes/negative/links.tsx#L28)   |
-| link-union                | `not assignable`                                                                      | [case](prototypes/negative/links.tsx#L31)   |
-| initial-union             | `not assignable`                                                                      | [case](prototypes/negative/links.tsx#L34)   |
-| expo-href-union           | `not assignable`                                                                      | [case](prototypes/negative/links.tsx#L37)   |
-| owned-params              | `Expected 3 arguments, but got 2`                                                     | [case](prototypes/negative/ownership.ts#L5) |
+| ID                        | Required diagnostic                                                                                                                                                                                                                                                                                                                                                                                                                                       | Source                                      |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| role-fixture              | `InventoryFixture is not a screen of app 'inventory'`                                                                                                                                                                                                                                                                                                                                                                                                     | [case](prototypes/negative/cases.ts#L35)    |
+| nominal                   | `InventoryDetail is declared more than once`                                                                                                                                                                                                                                                                                                                                                                                                              | [case](prototypes/negative/cases.ts#L45)    |
+| screen-service            | `InventoryDetail is not a service of app 'inventory'`                                                                                                                                                                                                                                                                                                                                                                                                     | [case](prototypes/negative/cases.ts#L54)    |
+| fixture-service           | `InventoryFixture is not a service of app 'inventory'`                                                                                                                                                                                                                                                                                                                                                                                                    | [case](prototypes/negative/cases.ts#L56)    |
+| absent-fixture            | `InventoryFixture is not a fixture of this scenario of app 'inventory'`                                                                                                                                                                                                                                                                                                                                                                                   | [case](prototypes/negative/cases.ts#L59)    |
+| union-fixture             | `InventoryFixture is not a fixture of this scenario of app 'inventory'`                                                                                                                                                                                                                                                                                                                                                                                   | [case](prototypes/negative/cases.ts#L63)    |
+| duplicate-implementation  | `InventoryList is declared more than once`                                                                                                                                                                                                                                                                                                                                                                                                                | [case](prototypes/negative/cases.ts#L65)    |
+| missing-implementation    | `InventoryDetail requires one implementation`                                                                                                                                                                                                                                                                                                                                                                                                             | [case](prototypes/negative/cases.ts#L67)    |
+| unknown-params            | `Argument of type '{}' is not assignable to parameter of type '{ readonly productId: string; }'.`                                                                                                                                                                                                                                                                                                                                                         | [case](prototypes/negative/cases.ts#L69)    |
+| union-push                | `Expected 1 arguments, but got 2.`                                                                                                                                                                                                                                                                                                                                                                                                                        | [case](prototypes/negative/cases.ts#L71)    |
+| no-params                 | `Expected 1 arguments, but got 2.`                                                                                                                                                                                                                                                                                                                                                                                                                        | [case](prototypes/negative/cases.ts#L73)    |
+| decoded-command           | `Type 'string' is not assignable to type 'number'.`                                                                                                                                                                                                                                                                                                                                                                                                       | [case](prototypes/negative/cases.ts#L75)    |
+| encoded-href              | `Type 'number' is not assignable to type 'string'.`                                                                                                                                                                                                                                                                                                                                                                                                       | [case](prototypes/negative/cases.ts#L77)    |
+| union-href                | `Expected 1 arguments, but got 2.`                                                                                                                                                                                                                                                                                                                                                                                                                        | [case](prototypes/negative/cases.ts#L80)    |
+| initial-correlation       | `Type 'string' is not assignable to type 'number'.`                                                                                                                                                                                                                                                                                                                                                                                                       | [case](prototypes/negative/cases.ts#L82)    |
+| yielded-command           | `Type 'AnyNavigationCommand & { readonly [terminal]: "InventoryList" \| "InventoryDetail" \| "Settings" \| "default"; readonly [navigationOwner]: (key: "InventoryList" \| ... 2 more ... \| "default") => "InventoryList" \| ... 2 more ... \| "default"; }' must have a '[Symbol.iterator]()' method that returns an iterator.`                                                                                                                         | [case](prototypes/negative/cases.ts#L85)    |
+| command-pipe              | `Property 'pipe' does not exist on type 'AnyNavigationCommand & { readonly [terminal]: "InventoryList" \| "InventoryDetail" \| "Settings" \| "default"; readonly [navigationOwner]: (key: "InventoryList" \| ... 2 more ... \| "default") => "InventoryList" \| ... 2 more ... \| "default"; }'.`                                                                                                                                                         | [case](prototypes/negative/cases.ts#L88)    |
+| plain-navigation          | `Use action.navigates for actions that navigate`                                                                                                                                                                                                                                                                                                                                                                                                          | [case](prototypes/negative/cases.ts#L93)    |
+| undeclared-error          | `Declare action failures with error:`                                                                                                                                                                                                                                                                                                                                                                                                                     | [case](prototypes/negative/cases.ts#L97)    |
+| undeclared-input          | `Type 'undefined' is not assignable to type '{ by: number; }'.`                                                                                                                                                                                                                                                                                                                                                                                           | [case](prototypes/negative/cases.ts#L101)   |
+| dropped-navigation        | `Type 'Effect<void, never, never>' is not assignable to type 'AnyNavigationCommand \| Effect<AnyNavigationCommand, unknown, unknown>'.`                                                                                                                                                                                                                                                                                                                   | [case](prototypes/negative/cases.ts#L106)   |
+| erased-navigation         | `Type 'Effect<void, never, never>' is not assignable to type 'AnyNavigationCommand \| Effect<AnyNavigationCommand, unknown, unknown>'.`                                                                                                                                                                                                                                                                                                                   | [case](prototypes/negative/cases.ts#L113)   |
+| refusal-command           | `Navigation refusal recovery must return void`                                                                                                                                                                                                                                                                                                                                                                                                            | [case](prototypes/negative/cases.ts#L118)   |
+| focus-error               | `Handle onFocus failures into state`                                                                                                                                                                                                                                                                                                                                                                                                                      | [case](prototypes/negative/cases.ts#L125)   |
+| focus-navigation          | `Use action.navigates for actions that navigate`                                                                                                                                                                                                                                                                                                                                                                                                          | [case](prototypes/negative/cases.ts#L130)   |
+| transformed-store-input   | `Argument of type 'number' is not assignable to parameter of type 'string'.`                                                                                                                                                                                                                                                                                                                                                                              | [case](prototypes/negative/cases.ts#L135)   |
+| transformed-effect-input  | `Argument of type 'number' is not assignable to parameter of type 'string'.`                                                                                                                                                                                                                                                                                                                                                                              | [case](prototypes/negative/cases.ts#L140)   |
+| json-date                 | `Store Date state must be JSON; provide project`                                                                                                                                                                                                                                                                                                                                                                                                          | [case](prototypes/negative/cases.ts#L148)   |
+| json-function             | `Store Function state must be JSON; provide project`                                                                                                                                                                                                                                                                                                                                                                                                      | [case](prototypes/negative/cases.ts#L155)   |
+| no-fail                   | `Property 'fail' does not exist on type 'Context<StoreApi<{ count: number; }>, undefined>'.`                                                                                                                                                                                                                                                                                                                                                              | [case](prototypes/negative/cases.ts#L166)   |
+| rich-error                | `Store error must be JSON; provide projectError`                                                                                                                                                                                                                                                                                                                                                                                                          | [case](prototypes/negative/cases.ts#L171)   |
+| store-command             | `Store handlers cannot return NavigationCommand`                                                                                                                                                                                                                                                                                                                                                                                                          | [case](prototypes/negative/cases.ts#L174)   |
+| duplicate-service         | `Counter is declared more than once`                                                                                                                                                                                                                                                                                                                                                                                                                      | [case](prototypes/negative/cases.ts#L179)   |
+| multiple-roles            | `No overload matches this call.`                                                                                                                                                                                                                                                                                                                                                                                                                          | [case](prototypes/negative/cases.ts#L181)   |
+| initial-schema            | `Type 'string' is not assignable to type 'number'.`                                                                                                                                                                                                                                                                                                                                                                                                       | [case](prototypes/negative/cases.ts#L191)   |
+| includes-typo             | `Object literal may only specify known properties, and 'qty' does not exist in type 'Partial<NoInfer<{ readonly id: string; readonly title: string; readonly quantity: number; }>>'.`                                                                                                                                                                                                                                                                     | [case](prototypes/negative/cases.ts#L194)   |
+| match-variant             | `State match fields must belong to one variant`                                                                                                                                                                                                                                                                                                                                                                                                           | [case](prototypes/negative/cases.ts#L196)   |
+| unknown-scenario          | `Type '"typo"' is not assignable to type 'ScNames<App<"inventory", (Definition<typeof InventoryList, { readonly OpenProduct: Action<{ readonly productId: string; }, never, { readonly navigator: "InventoryList" \| "InventoryDetail" \| "Settings" \| "default"; readonly [navigationOwner]: (key: "InventoryList" \| ... 2 more ... \| "default") => "InventoryList" \| .....'.`                                                                       | [case](prototypes/negative/cases.ts#L198)   |
+| extension-default         | `withScenarios defaultScenario must exist`                                                                                                                                                                                                                                                                                                                                                                                                                | [case](prototypes/negative/cases.ts#L200)   |
+| extension-repeat          | `Scenario live-services already exists; choose a new name`                                                                                                                                                                                                                                                                                                                                                                                                | [case](prototypes/negative/cases.ts#L202)   |
+| repeated-placeholder      | `Repeated path placeholder id`                                                                                                                                                                                                                                                                                                                                                                                                                            | [case](prototypes/negative/cases.ts#L205)   |
+| group                     | `Excluded route grammar; use routeCodec`                                                                                                                                                                                                                                                                                                                                                                                                                  | [case](prototypes/negative/cases.ts#L207)   |
+| catchall                  | `Excluded route grammar; use routeCodec`                                                                                                                                                                                                                                                                                                                                                                                                                  | [case](prototypes/negative/cases.ts#L209)   |
+| spread                    | `Excluded route grammar; use routeCodec`                                                                                                                                                                                                                                                                                                                                                                                                                  | [case](prototypes/negative/cases.ts#L211)   |
+| optional-grammar          | `Excluded route grammar; use routeCodec`                                                                                                                                                                                                                                                                                                                                                                                                                  | [case](prototypes/negative/cases.ts#L213)   |
+| optional-placeholder      | `Optional route param tab cannot be a path placeholder`                                                                                                                                                                                                                                                                                                                                                                                                   | [case](prototypes/negative/cases.ts#L215)   |
+| unmatched-placeholder     | `Path placeholder other has no matching param; add a params mapping`                                                                                                                                                                                                                                                                                                                                                                                      | [case](prototypes/negative/cases.ts#L217)   |
+| missing-placeholder       | `Required route param id must appear as a path placeholder`                                                                                                                                                                                                                                                                                                                                                                                               | [case](prototypes/negative/cases.ts#L219)   |
+| mapping-duplicates        | `URL param mapping targets must be unique`                                                                                                                                                                                                                                                                                                                                                                                                                | [case](prototypes/negative/cases.ts#L221)   |
+| mapping-keys              | `URL param mapping names must be schema fields`                                                                                                                                                                                                                                                                                                                                                                                                           | [case](prototypes/negative/cases.ts#L223)   |
+| dynamic-path              | `Route path must be a literal; use advanced routeCodec for dynamic paths`                                                                                                                                                                                                                                                                                                                                                                                 | [case](prototypes/negative/cases.ts#L225)   |
+| numeric-url               | `URL param id must encode a string; use a string codec`                                                                                                                                                                                                                                                                                                                                                                                                   | [case](prototypes/negative/cases.ts#L227)   |
+| registration-missing      | `Argument of type '{ InventoryList: "/"; InventoryDetail: "/:productId"; }' is not assignable to parameter of type '{ readonly InventoryList: "/"; readonly InventoryDetail: "/:productId"; } & ValidateRoutes<App<"inventory", (Definition<typeof InventoryList, { readonly OpenProduct: Action<{ readonly productId: string; }, never, { ...; }, { ...; } \| ... 1 more ... \| { ...; }>; readonly OpenSettings: Action<...>; readonly Refresh: A...'.` | [case](prototypes/negative/cases.ts#L229)   |
+| component-missing         | `Argument of type '{ InventoryList: { Component: () => null; }; InventoryDetail: { Component: () => null; }; }' is not assignable to parameter of type '{ InventoryList: HostRouteOptions; InventoryDetail: HostRouteOptions; Settings: HostRouteOptions; }'.`                                                                                                                                                                                            | [case](prototypes/negative/cases.ts#L236)   |
+| href-union                | `Type '"Settings"' is not assignable to type '"InventoryDetail"'.`                                                                                                                                                                                                                                                                                                                                                                                        | [case](prototypes/negative/cases.ts#L241)   |
+| zero-arity                | `Expected 0 arguments, but got 1.`                                                                                                                                                                                                                                                                                                                                                                                                                        | [case](prototypes/negative/cases.ts#L252)   |
+| missing-navigator         | `No overload matches this call.`                                                                                                                                                                                                                                                                                                                                                                                                                          | [case](prototypes/negative/cases.ts#L258)   |
+| missing-service           | `No overload matches this call.`                                                                                                                                                                                                                                                                                                                                                                                                                          | [case](prototypes/negative/cases.ts#L260)   |
+| missing-fixture           | `Type '{ layer: Layer<InventoryApi, never, FixtureService<"InventoryFixture">>; fixtures: []; }' is not assignable to type '{ readonly layer: Layer<InventoryApi, never, FixtureService<"InventoryFixture">>; readonly fixtures: readonly []; } & { readonly "Scenario 'missing-fixture' must provide": SettingsStore \| FixtureService<...>; }'.`                                                                                                        | [case](prototypes/negative/cases.ts#L268)   |
+| fixture-action-service    | `Property '"Scenario 'missing' must provide"' is missing in type '{ fixtures: [Definition<never, { readonly Load: Action<undefined, never, InventoryApi, number>; }, number, InventoryApi, "fixture"> & Effect.Effect<...> & { ...; }]; }' but required in type '{ readonly "Scenario 'missing' must provide": InventoryApi; }'.`                                                                                                                         | [case](prototypes/negative/cases.ts#L280)   |
+| role-collision            | `ParamFree is declared more than once`                                                                                                                                                                                                                                                                                                                                                                                                                    | [case](prototypes/negative/cases.ts#L282)   |
+| missing-default           | `Property 'defaultScenario' is missing in type '{ name: "two"; scenarios: { one: {}; two: {}; }; }' but required in type '{ defaultScenario: "one" \| "two"; }'.`                                                                                                                                                                                                                                                                                         | [case](prototypes/negative/cases.ts#L284)   |
+| record-alias              | `Navigation key Second must match contract name InventoryDetail`                                                                                                                                                                                                                                                                                                                                                                                          | [case](prototypes/negative/cases.ts#L286)   |
+| effect-rich-state         | `Effect state must encode JSON; use jsonCodec`                                                                                                                                                                                                                                                                                                                                                                                                            | [case](prototypes/negative/cases.ts#L288)   |
+| fixture-navigates         | `Property 'navigates' does not exist on type 'PlainEffectActionBuilder<number, number, never>'.`                                                                                                                                                                                                                                                                                                                                                          | [case](prototypes/negative/cases.ts#L295)   |
+| readonly-state            | `Cannot assign to 'count' because it is a read-only property.`                                                                                                                                                                                                                                                                                                                                                                                            | [case](prototypes/negative/cases.ts#L301)   |
+| transformed-error-encoder | `Property 'projectError' is missing in type '{ error: z.ZodPipe<z.ZodString, z.ZodTransform<number, string>>; handler: () => void; }' but required in type '{ projectError: (error: number) => string; }'.`                                                                                                                                                                                                                                               | [case](prototypes/negative/cases.ts#L308)   |
+| unknown-input-presence    | `Expected 1 arguments, but got 0.`                                                                                                                                                                                                                                                                                                                                                                                                                        | [case](prototypes/negative/cases.ts#L323)   |
+| invalid-action            | `Actions must be built for this state with the action builder`                                                                                                                                                                                                                                                                                                                                                                                            | [case](prototypes/negative/fixes.ts#L14)    |
+| wrong-action-state        | `Actions must be built for this state with the action builder`                                                                                                                                                                                                                                                                                                                                                                                            | [case](prototypes/negative/fixes.ts#L17)    |
+| bigint-input              | `Input must encode JSON; use jsonCodec`                                                                                                                                                                                                                                                                                                                                                                                                                   | [case](prototypes/negative/fixes.ts#L22)    |
+| bigint-error              | `Error must encode JSON; use jsonCodec`                                                                                                                                                                                                                                                                                                                                                                                                                   | [case](prototypes/negative/fixes.ts#L31)    |
+| bigint-params             | `Params must encode JSON; use jsonCodec`                                                                                                                                                                                                                                                                                                                                                                                                                  | [case](prototypes/negative/fixes.ts#L39)    |
+| store-bigint-input        | `Input must encode JSON; use jsonCodec`                                                                                                                                                                                                                                                                                                                                                                                                                   | [case](prototypes/negative/fixes.ts#L48)    |
+| common-layer-input        | `Property '"Scenario 'default' must provide"' is missing in type '{ name: "common-input"; screens: [Definition<typeof First, { readonly Add: Action<undefined, never, never, number>; }, number, never, "screen"> & { readonly name: "First"; readonly paramsType: {}; readonly encodedParams: {}; }]; layer: Layer.Layer<...>; }' but required in type '{ readonly "Scenario 'default' must provide": Needed; }'.`                                       | [case](prototypes/negative/fixes.ts#L59)    |
+| self-provided-layer       | `Property '"Scenario 'self' must provide"' is missing in type '{ layer: Layer.Layer<Needed, never, Needed>; }' but required in type '{ readonly "Scenario 'self' must provide": Needed; }'.`                                                                                                                                                                                                                                                              | [case](prototypes/negative/fixes.ts#L61)    |
+| absent-scenarios-coverage | `Property '"Scenario 'default' must provide"' is missing in type '{ name: "uncovered"; screens: [Definition<typeof First, { readonly Load: Action<undefined, never, Needed, number>; }, number, Needed, "screen"> & { ...; }]; }' but required in type '{ readonly "Scenario 'default' must provide": Needed; }'.`                                                                                                                                        | [case](prototypes/negative/fixes.ts#L66)    |
+| screen-role               | `screens accepts only screens or stores`                                                                                                                                                                                                                                                                                                                                                                                                                  | [case](prototypes/negative/fixes.ts#L74)    |
+| service-role              | `services accepts only services or stores`                                                                                                                                                                                                                                                                                                                                                                                                                | [case](prototypes/negative/fixes.ts#L76)    |
+| effect-store-app          | `defineStoreApp accepts only stores`                                                                                                                                                                                                                                                                                                                                                                                                                      | [case](prototypes/negative/fixes.ts#L78)    |
+| ambient-params            | `Ambient services must not require params`                                                                                                                                                                                                                                                                                                                                                                                                                | [case](prototypes/negative/fixes.ts#L86)    |
+| foreign-navigator         | `No overload matches this call.`                                                                                                                                                                                                                                                                                                                                                                                                                          | [case](prototypes/negative/fixes.ts#L93)    |
+| real-time-advance         | `advanceTime requires a virtualTime scenario`                                                                                                                                                                                                                                                                                                                                                                                                             | [case](prototypes/negative/fixes.ts#L97)    |
+| no-render-source          | `Type '{}' is not assignable to type 'HostRouteOptions'.`                                                                                                                                                                                                                                                                                                                                                                                                 | [case](prototypes/negative/fixes.ts#L100)   |
+| nav-role-collision        | `First is declared more than once`                                                                                                                                                                                                                                                                                                                                                                                                                        | [case](prototypes/negative/fixes.ts#L102)   |
+| store-invalid-action      | `Actions must be built for this state with the action builder`                                                                                                                                                                                                                                                                                                                                                                                            | [case](prototypes/negative/fixes.ts#L110)   |
+| foreign-store-override    | `Scenario stores must belong to this app`                                                                                                                                                                                                                                                                                                                                                                                                                 | [case](prototypes/negative/fixes.ts#L122)   |
+| wrong-store-factory       | `Type 'StoreApi<string>' is not assignable to type 'StoreApi<number>'.`                                                                                                                                                                                                                                                                                                                                                                                   | [case](prototypes/negative/fixes.ts#L125)   |
+| store-bigint-params       | `Params must encode JSON; use jsonCodec`                                                                                                                                                                                                                                                                                                                                                                                                                  | [case](prototypes/negative/fixes.ts#L133)   |
+| navigator-subset          | `No overload matches this call.`                                                                                                                                                                                                                                                                                                                                                                                                                          | [case](prototypes/negative/fixes.ts#L140)   |
+| link-required             | `Type '{ to: typeof InventoryDetail; }' is not assignable to type 'IntrinsicAttributes & ((({ to: typeof InventoryList; children?: ReactNode; replace?: boolean; className?: string; } & { params?: never; }) \| ({ ...; } & { ...; }) \| ({ ...; } & { ...; })) & Omit<...>)'.`                                                                                                                                                                          | [case](prototypes/negative/links.tsx#L24)   |
+| link-name                 | `Type 'string' is not assignable to type 'typeof InventoryList \| typeof InventoryDetail \| typeof Settings'.`                                                                                                                                                                                                                                                                                                                                            | [case](prototypes/negative/links.tsx#L26)   |
+| expo-link-name            | `Type 'string' is not assignable to type 'typeof InventoryList \| typeof InventoryDetail \| typeof Settings'.`                                                                                                                                                                                                                                                                                                                                            | [case](prototypes/negative/links.tsx#L28)   |
+| link-union                | `Type '"Settings"' is not assignable to type '"InventoryDetail"'.`                                                                                                                                                                                                                                                                                                                                                                                        | [case](prototypes/negative/links.tsx#L31)   |
+| initial-union             | `Type '"Settings"' is not assignable to type '"InventoryDetail"'.`                                                                                                                                                                                                                                                                                                                                                                                        | [case](prototypes/negative/links.tsx#L34)   |
+| expo-href-union           | `Type '"Settings"' is not assignable to type '"InventoryDetail"'.`                                                                                                                                                                                                                                                                                                                                                                                        | [case](prototypes/negative/links.tsx#L37)   |
+| owned-params              | `Expected 3 arguments, but got 2.`                                                                                                                                                                                                                                                                                                                                                                                                                        | [case](prototypes/negative/ownership.ts#L5) |
 
 ### Runtime obligations and unproven acceptance cases
 
@@ -352,40 +391,40 @@ and LiveController where the protocol exposes it. It would be dishonest to asser
 marker for a Promise's behavior, disposal, a React boundary or a device fingerprint.
 The compiled abort-ignoring case is an acceptance program, not runtime evidence.
 
-| Case                            | Required rejection or observable result                                                                                                                                                                              | Phase                                                    |
-| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
-| missing-nominal/subclass        | Exact constructor registry rejects an unregistered Subclass; message names InventoryDetail and suggests registering its own contract. Missing private line remains statically assignable; lint documents this limit. | Runtime obligation + static counterexample               |
-| class/string mismatch           | DifferentClassName diagnostics name DeclaredName; identity remains its constructor.                                                                                                                                  | Runtime obligation                                       |
-| extra implementation            | Reject foreign or extra definitions, even when every required contract also has an implementation.                                                                                                                   | Runtime obligation                                       |
-| duplicate dynamic definitions   | App x declares Counter more than once; keep one definition. Check all screens, services and effective fixtures.                                                                                                      | Runtime obligation                                       |
-| shared contract in navigations  | Reject a contract registered in two session navigation owners; separate app values may reuse contracts.                                                                                                              | Runtime obligation; advanced multi-owner typing unproven |
-| fixture service key             | App inventory scenario live-services must provide inventory/InventoryApi. Static coverage names the identifier; Context key string interpolation is unproven.                                                        | Runtime obligation                                       |
-| invalid initial refinement      | Counter initial.count must be an integer; fix initial(). Never install the invalid node.                                                                                                                             | Runtime obligation                                       |
-| invalid projected number        | Counter state.count must be a finite JSON number; fix the projection.                                                                                                                                                | Runtime obligation                                       |
-| malformed URL                   | InventoryDetail route params.productId are invalid; correct the URL. Preserve previous committed focus.                                                                                                              | Runtime obligation                                       |
-| wrong route file                | useScreen(Settings) in InventoryDetail's entry reports expected InventoryDetail, received Settings, and the route key.                                                                                               | Runtime obligation                                       |
-| no Suspense boundary            | React/lint reports missing per-screen boundary; no library compile marker is promised.                                                                                                                               | Unproven lint/integration obligation                     |
-| normal rejected build           | Observe status:error, retry once, get a fresh build; pending lease and subscription are released once.                                                                                                               | Runtime obligation                                       |
-| Suspense rejected build         | Boundary sees build error; resetting it retries the same registry entry with a new promise, without affecting sibling screens.                                                                                       | Runtime obligation                                       |
-| startup failure                 | Fallback while starting; status observer sees failed; nearest error boundary receives cause; reset/remount retries.                                                                                                  | Runtime obligation                                       |
-| Provider identity               | Provider app must share the binding's app identity; use app.withScenarios. Structural same-name apps fail runtime validation.                                                                                        | Runtime obligation                                       |
-| unused/erased command           | Reject unused, multiple, void-erased, service/fixture or onFocus commands; require action.navigates and Nav.stay. Lint must catch discarded expressions and TS2488 misuse earlier.                                   | Runtime obligation + unproven lint                       |
-| abort-ignoring Promise          | Run acceptance/cancellation.ts: cancel/reset while gate waits, release gate, operation stays cancelled and new state remains count:0; observe no old-generation state.changed.                                       | Runtime obligation; program compiles                     |
-| ignored raw notification        | After reset, invoke an old raw store subscriber and late factory resolution; neither may publish. Dispose late factory exactly once.                                                                                 | Runtime obligation                                       |
-| fork after close                | Fork scoped fiber then close; join observes interruption. Escaped daemon write receives SessionChanged/closed capability and never publishes.                                                                        | Runtime obligation                                       |
-| concurrent reset                | Queue reset A then B; returned A client is stale after B, B remains usable; no orphaned sessions/scopes.                                                                                                             | Runtime obligation                                       |
-| reset while pending             | Old action outcome cancelled before reset resolves; returned client/controls name the new generation; reacquire handles.                                                                                             | Runtime obligation                                       |
-| disposed view run               | Counter.Add belongs to a closed session; reacquire Counter from the current session. No dispatch or notification occurs.                                                                                             | Runtime obligation                                       |
-| disposed journey/read           | Old client, node, action function and narrowed state reader all reject SessionChanged; dispose itself remains idempotent.                                                                                            | Runtime obligation                                       |
-| stale matched variant           | A narrowed journey read checks its phase again, never asserts an editing state after loading.                                                                                                                        | Runtime obligation                                       |
-| matcher timeout                 | InventoryList did not match requested products within 5 seconds; last state: {…}. Include last pending/error state too.                                                                                              | Runtime obligation                                       |
-| fingerprint extension           | connectJourney accepts base descriptor with test scenarios added and rejects a changed selected action/schema. Repeated withScenarios never mutates earlier defaults.                                                | Runtime obligation                                       |
-| production exclusion            | Metro/Vite production graphs contain no fixtures/test provider or bridge dialler/token. Keep ADR 0017 development gates. No real credentials in public env/AsyncStorage.                                             | Runtime obligation                                       |
-| advanced codec                  | Catchall encode/decode validates encoded schema, rejects arrays/invalid output as specified, and never guesses decoded URL values.                                                                                   | Runtime obligation                                       |
-| transformed store error         | Validate explicit projectError output and detach it; automatic inversion of Standard Schema transforms is unavailable.                                                                                               | Runtime obligation                                       |
-| redacted/encoded consumer state | Validate actual encode/redaction behavior and custom wire codecs; consumer-state.ts verifies the derived encoded/read-only/redacted types.                                                                           | Runtime obligation; static types verified                |
-| common layer extensions         | Runtime provisioning agrees with the retained common output; two extensions/defaults compile in consumer-state.ts.                                                                                                   | Runtime obligation; static coverage verified             |
-| resource/type budgets           | Prove registry deadlines and limits under abort/reset; implement within the 7,600-line allocation, without hiding logic in tests.                                                                                    | Runtime obligation; implementation size unproven         |
+| Case                            | Required rejection or observable result                                                                                                                                                                        | Phase                                                    |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| missing-nominal/subclass        | Exact constructor registry rejects an unregistered Subclass; message names InventoryDetail and suggests registering its own contract. TypeScript remains structural; no hand-written private line is required. | Runtime obligation + static counterexample               |
+| class/string mismatch           | DifferentClassName diagnostics name DeclaredName; identity remains its constructor.                                                                                                                            | Runtime obligation                                       |
+| extra implementation            | Reject foreign or extra definitions, even when every required contract also has an implementation.                                                                                                             | Runtime obligation                                       |
+| duplicate dynamic definitions   | App x declares Counter more than once; keep one definition. Check all screens, services and effective fixtures.                                                                                                | Runtime obligation                                       |
+| shared contract in navigations  | Reject a contract registered in two session navigation owners; separate app values may reuse contracts.                                                                                                        | Runtime obligation; advanced multi-owner typing unproven |
+| fixture service key             | App inventory scenario live-services must provide inventory/InventoryApi. Static coverage names the identifier; Context key string interpolation is unproven.                                                  | Runtime obligation                                       |
+| invalid initial refinement      | Counter initial.count must be an integer; fix initial(). Never install the invalid node.                                                                                                                       | Runtime obligation                                       |
+| invalid projected number        | Counter state.count must be a finite JSON number; fix the projection.                                                                                                                                          | Runtime obligation                                       |
+| malformed URL                   | InventoryDetail route params.productId are invalid; correct the URL. Preserve previous committed focus.                                                                                                        | Runtime obligation                                       |
+| wrong route file                | useScreen(Settings) in InventoryDetail's entry reports expected InventoryDetail, received Settings, and the route key.                                                                                         | Runtime obligation                                       |
+| no Suspense boundary            | React/lint reports missing per-screen boundary; no library compile marker is promised.                                                                                                                         | Unproven lint/integration obligation                     |
+| normal rejected build           | Observe status:error, retry once, get a fresh build; pending lease and subscription are released once.                                                                                                         | Runtime obligation                                       |
+| Suspense rejected build         | Boundary sees build error; resetting it retries the same registry entry with a new promise, without affecting sibling screens.                                                                                 | Runtime obligation                                       |
+| startup failure                 | Fallback while starting; status observer sees failed; nearest error boundary receives cause; reset/remount retries.                                                                                            | Runtime obligation                                       |
+| Provider identity               | Provider app must share the binding's app identity; use app.withScenarios. Structural same-name apps fail runtime validation.                                                                                  | Runtime obligation                                       |
+| unused/erased command           | Reject unused, multiple, void-erased, service/fixture or onFocus commands; require action.navigates and Nav.stay. Lint must catch discarded expressions and TS2488 misuse earlier.                             | Runtime obligation + unproven lint                       |
+| abort-ignoring Promise          | Run acceptance/cancellation.ts: cancel/reset while gate waits, release gate, operation stays cancelled and new state remains count:0; observe no old-generation state.changed.                                 | Runtime obligation; program compiles                     |
+| ignored raw notification        | After reset, invoke an old raw store subscriber and late factory resolution; neither may publish. Dispose late factory exactly once.                                                                           | Runtime obligation                                       |
+| fork after close                | Fork scoped fiber then close; join observes interruption. Escaped daemon write receives SessionChanged/closed capability and never publishes.                                                                  | Runtime obligation                                       |
+| concurrent reset                | Queue reset A then B; returned A client is stale after B, B remains usable; no orphaned sessions/scopes.                                                                                                       | Runtime obligation                                       |
+| reset while pending             | Old action outcome cancelled before reset resolves; returned client/controls name the new generation; reacquire handles.                                                                                       | Runtime obligation                                       |
+| disposed view run               | Counter.Add belongs to a closed session; reacquire Counter from the current session. No dispatch or notification occurs.                                                                                       | Runtime obligation                                       |
+| disposed journey/read           | Old client, node, action function and narrowed state reader all reject SessionChanged; dispose itself remains idempotent.                                                                                      | Runtime obligation                                       |
+| stale matched variant           | A narrowed journey read checks its phase again, never asserts an editing state after loading.                                                                                                                  | Runtime obligation                                       |
+| matcher timeout                 | InventoryList did not match requested products within 5 seconds; last state: {…}. Include last pending/error state too.                                                                                        | Runtime obligation                                       |
+| fingerprint extension           | connectJourney accepts base descriptor with test scenarios added and rejects a changed selected action/schema. Repeated withScenarios never mutates earlier defaults.                                          | Runtime obligation                                       |
+| production exclusion            | Metro/Vite production graphs contain no fixtures/test provider or bridge dialler/token. Keep ADR 0017 development gates. No real credentials in public env/AsyncStorage.                                       | Runtime obligation                                       |
+| advanced codec                  | Catchall encode/decode validates encoded schema, rejects arrays/invalid output as specified, and never guesses decoded URL values.                                                                             | Runtime obligation                                       |
+| transformed store error         | Validate explicit projectError output and detach it; automatic inversion of Standard Schema transforms is unavailable.                                                                                         | Runtime obligation                                       |
+| redacted/encoded consumer state | Validate actual encode/redaction behavior and custom wire codecs; consumer-state.ts verifies the derived encoded/read-only/redacted types.                                                                     | Runtime obligation; static types verified                |
+| common layer extensions         | Runtime provisioning agrees with the retained common output; two extensions/defaults compile in consumer-state.ts.                                                                                             | Runtime obligation; static coverage verified             |
+| resource/type budgets           | Prove registry deadlines and limits under abort/reset; implement within the 7,600-line allocation, without hiding logic in tests.                                                                              | Runtime obligation; implementation size unproven         |
 
 The implementation allocation remains 7,600 source lines across the seven packages
 (effect 2,350; runtime 2,550; react 600; expo 400; react-router 250; live 700; test 750).
@@ -445,9 +484,7 @@ import * as Schema from "effect/Schema"
 export class CounterContract extends Screen("Counter", {
   state: Schema.Struct({ count: Schema.Int }),
   initial: () => ({ count: 0 }),
-}) {
-  declare private readonly nominal: undefined
-}
+}) {}
 export const CounterLive = CounterContract.implement({
   actions: (action) => ({
     Increment: action.reduce({ reducer: (_, s) => ({ count: s.count + 1 }) }),
@@ -501,26 +538,26 @@ export const servicesJourney = async (
     _tag: "ready",
     products: includes({ id: "product-123", quantity: 5 }),
   })
-  await list.actions.OpenProduct({ productId: "product-123" })
+  await list.actions.OpenProduct.expectCompleted({ productId: "product-123" })
   const detail = await app.focused(InventoryDetail, {
     _tag: "editing",
     title: "Blue T-Shirt",
     quantity: 5,
   })
-  await detail.actions.SetQuantity({ quantity: 12 })
-  await detail.actions.Save()
+  await detail.actions.SetQuantity.expectCompleted({ quantity: 12 })
+  await detail.actions.Save.expectCompleted()
   await app.back()
   const updated = await app.focused(InventoryList, {
     _tag: "ready",
     products: includes({ id: "product-123", quantity: 12 }),
   })
-  await updated.actions.OpenProduct({ productId: "product-123" })
+  await updated.actions.OpenProduct.expectCompleted({ productId: "product-123" })
   const reopened = await app.focused(InventoryDetail, {
     _tag: "editing",
     quantity: 12,
     error: null,
   })
-  await reopened.actions.SetQuantity({ quantity: 19 })
+  await reopened.actions.SetQuantity.expectCompleted({ quantity: 19 })
   await failNextSave()
   await reopened.actions.Save.expectError()
   await app.focused(InventoryDetail, { _tag: "editing", quantity: 19, error: "Server error" })
@@ -529,12 +566,12 @@ export const servicesJourney = async (
     _tag: "ready",
     products: includes({ id: "product-123", quantity: 12 }),
   })
-  await saved.actions.OpenSettings()
+  await saved.actions.OpenSettings.expectCompleted()
   const settings = await app.focused(Settings, { _tag: "ready" })
-  await settings.actions.SetLowStockThreshold({ threshold: 3 })
+  await settings.actions.SetLowStockThreshold.expectCompleted({ threshold: 3 })
   await app.back()
   const refreshed = await app.focused(InventoryList, { lowStockThreshold: 3 })
-  await refreshed.actions.OpenSettings()
+  await refreshed.actions.OpenSettings.expectCompleted()
   await app.focused(Settings, { lowStockThreshold: 3 })
 }
 ```
@@ -545,7 +582,8 @@ export const servicesJourney = async (
 ```ts
 import { defineApp } from "@reflex/effect"
 import * as Layer from "effect/Layer"
-import { httpInventoryApi } from "./http-api.ts"
+import { ApiError, InventoryApi } from "./domain.ts"
+import * as Effect from "effect/Effect"
 import { memorySettings } from "./settings-store.ts"
 import { InventoryListLive } from "./features/inventory-list.ts"
 import { InventoryDetailLive } from "./features/inventory-detail.ts"
@@ -553,16 +591,28 @@ import { SettingsLive } from "./features/settings.ts"
 import { InventoryList } from "./screens.ts"
 import { Nav } from "./navigation.ts"
 
+export const productionServices = Layer.merge(
+  Layer.succeed(
+    InventoryApi,
+    InventoryApi.of({
+      list: Effect.succeed([]),
+      get: () => Effect.fail(new ApiError({ message: "No inventory API configured" })),
+      saveQuantity: () => Effect.fail(new ApiError({ message: "No inventory API configured" })),
+    }),
+  ),
+  memorySettings,
+)
+
 export default defineApp({
   name: "inventory",
   navigation: Nav.implement([InventoryListLive, InventoryDetailLive, SettingsLive], {
     initial: InventoryList,
   }),
-  defaultScenario: "live-services",
+  defaultScenario: "production",
   scenarios: {
-    "live-services": {
-      description: "Local HTTP inventory and in-memory settings",
-      layer: Layer.merge(httpInventoryApi("http://127.0.0.1:4318"), memorySettings),
+    production: {
+      description: "Offline inventory and in-memory settings",
+      layer: productionServices,
     },
   },
 })
@@ -630,7 +680,7 @@ import { Nav } from "../navigation.ts"
 
 const SAVE_TIMEOUT = "5 seconds"
 
-const save = InventoryDetail.when("editing").handler(({ state }) =>
+const save = InventoryDetail.when("editing").handler((_, { state }) =>
   Effect.gen(function* () {
     const api = yield* InventoryApi
     const current = yield* state.get
@@ -687,14 +737,14 @@ export const InventoryDetailLive = InventoryDetail.implement({
     Save: action.when("editing")({
       description: "Persist the quantity; gives up after 5 seconds",
       error: ApiError,
-      handler: (_, { state }) => save({ state }),
+      handler: save,
     }),
     SaveAndClose: action.when("editing").navigates({
       description: "Persist the quantity and return to the previous screen",
       error: ApiError,
       handler: (_, { state }) =>
         Effect.gen(function* () {
-          yield* save({ state })
+          yield* save(undefined, { state })
           return Nav.back
         }),
       onRefused: ({ reason }, { state }) =>
@@ -714,7 +764,7 @@ import * as Schema from "effect/Schema"
 import { InventoryApi, SettingsStore } from "../domain.ts"
 import { Nav } from "../navigation.ts"
 
-const load = InventoryList.handler(({ state }) =>
+const load = InventoryList.handler((_, { state }) =>
   Effect.gen(function* () {
     const api = yield* InventoryApi
     const settings = yield* SettingsStore
@@ -731,7 +781,7 @@ const load = InventoryList.handler(({ state }) =>
 )
 
 export const InventoryListLive = InventoryList.implement({
-  onFocus: load,
+  onFocus: (ctx) => load(undefined, ctx),
   actions: (action) => ({
     OpenProduct: action.when("ready").navigates({
       description: "Open a product's detail screen",
@@ -743,7 +793,7 @@ export const InventoryListLive = InventoryList.implement({
     }),
     Refresh: action({
       available: (state) => (state._tag === "loading" ? "Products are loading" : true),
-      handler: (_, { state }) => load({ state }),
+      handler: load,
     }),
   }),
 })
@@ -999,6 +1049,8 @@ export const Nav = defineNavigation({ InventoryList, InventoryDetail, Settings }
 ```ts
 import * as Layer from "effect/Layer"
 import app from "./app.ts"
+import { httpInventoryApi } from "./http-api.ts"
+import { memorySettings } from "./settings-store.ts"
 import { fixtureApi, fixtureSettings, seedProducts, InventoryFixture } from "./fixtures.ts"
 
 const services = (products: typeof seedProducts, saveDelay?: "1 second" | "30 seconds") =>
@@ -1006,23 +1058,28 @@ const services = (products: typeof seedProducts, saveDelay?: "1 second" | "30 se
     fixtureApi({ products, ...(saveDelay === undefined ? {} : { saveDelay }) }),
     fixtureSettings,
   )
-export default app.withScenarios(
-  {
-    "inventory-with-products": { description: "Three products", layer: services(seedProducts) },
-    "empty-inventory": { description: "No products", layer: services([]) },
-    "slow-network": {
-      description: "Save exceeds deadline",
-      layer: services(seedProducts, "30 seconds"),
-      virtualTime: true,
-    },
-    "sluggish-network": {
-      description: "Save in flight",
-      layer: services(seedProducts, "1 second"),
-      virtualTime: true,
-    },
+export const testScenarios = {
+  "live-services": {
+    layer: Layer.merge(httpInventoryApi("http://127.0.0.1:4318"), memorySettings),
+    fixtures: [],
   },
-  { defaultScenario: "inventory-with-products", fixtures: [InventoryFixture] },
-)
+  "inventory-with-products": { description: "Three products", layer: services(seedProducts) },
+  "empty-inventory": { description: "No products", layer: services([]) },
+  "slow-network": {
+    description: "Save exceeds deadline",
+    layer: services(seedProducts, "30 seconds"),
+    virtualTime: true,
+  },
+  "sluggish-network": {
+    description: "Save in flight",
+    layer: services(seedProducts, "1 second"),
+    virtualTime: true,
+  },
+} as const
+export default app.withScenarios(testScenarios, {
+  defaultScenario: "inventory-with-products",
+  fixtures: [InventoryFixture],
+})
 ```
 
 ### examples/inventory/src/screens.ts
@@ -1045,9 +1102,7 @@ const InventoryListState = Schema.Union([
 export class InventoryList extends Screen("InventoryList", {
   state: InventoryListState,
   initial: () => ({ _tag: "loading" }),
-}) {
-  declare private readonly nominal: undefined
-}
+}) {}
 
 const Loaded = {
   productId: Schema.String,
@@ -1066,9 +1121,7 @@ export class InventoryDetail extends Screen("InventoryDetail", {
   state: InventoryDetailState,
   params: { productId: Schema.String },
   initial: ({ productId }) => ({ _tag: "loading", productId }),
-}) {
-  declare private readonly nominal: undefined
-}
+}) {}
 
 const SettingsState = Schema.Union([
   Schema.TaggedStruct("loading", {}),
@@ -1081,9 +1134,7 @@ const SettingsState = Schema.Union([
 export class Settings extends Screen("Settings", {
   state: SettingsState,
   initial: () => ({ _tag: "loading" }),
-}) {
-  declare private readonly nominal: undefined
-}
+}) {}
 ```
 
 ### examples/inventory/src/settings-store.ts
@@ -1121,16 +1172,16 @@ test("one story through headless services", async () => {
   await using session = await createTestApp(app, { scenario: "inventory-with-products" })
   const fixture = await session.node(InventoryFixture)
   await servicesJourney(session, async () => {
-    await fixture.actions.FailNextSave()
+    await fixture.actions.FailNextSave.expectCompleted()
   })
 })
 
 test("slow save times out without losing edits", async () => {
   await using session = await createTestApp(app, { scenario: "slow-network" })
   const list = await session.focused(InventoryList, { _tag: "ready" })
-  await list.actions.OpenProduct({ productId: "product-123" })
+  await list.actions.OpenProduct.expectCompleted({ productId: "product-123" })
   const detail = await session.focused(InventoryDetail, { _tag: "editing" })
-  await detail.actions.SetQuantity({ quantity: 12 })
+  await detail.actions.SetQuantity.expectCompleted({ quantity: 12 })
   const saving = await detail.actions.Save.start()
   await session.focused(InventoryDetail, { _tag: "saving" })
   await session.advanceTime("5 seconds")
@@ -1147,7 +1198,7 @@ test.skipIf(process.env.REFLEX_LIVE !== "1")("the same story through the device"
   })
   const fixture = await session.node(InventoryFixture)
   await servicesJourney(session, async () => {
-    await fixture.actions.FailNextSave()
+    await fixture.actions.FailNextSave.expectCompleted()
   })
 })
 ```
@@ -1159,10 +1210,19 @@ test.skipIf(process.env.REFLEX_LIVE !== "1")("the same story through the device"
 import { expect } from "bun:test"
 import { defineStoreApp, defineStoreNode } from "@reflex/runtime"
 import { createTestApp } from "@reflex/test"
+import { protocolEvents } from "@reflex/test/advanced"
 import { createStore } from "zustand/vanilla"
 
 // Compile-only acceptance case until the target runtime exists. Ignores AbortSignal.
 export async function abortIgnoringPromise() {
+  let entered = () => {}
+  const suspended = new Promise<void>((resolve) => {
+    entered = resolve
+  })
+  let finished = () => {}
+  const settled = new Promise<void>((resolve) => {
+    finished = resolve
+  })
   let release = () => {}
   const gate = new Promise<void>((resolve) => {
     release = resolve
@@ -1173,8 +1233,10 @@ export async function abortIgnoringPromise() {
     actions: (action) => ({
       IgnoreAbort: action({
         handler: async (_, { store }) => {
+          entered()
           await gate
           store.setState({ count: 99 })
+          finished()
         },
       }),
     }),
@@ -1183,9 +1245,17 @@ export async function abortIgnoringPromise() {
   await using first = await createTestApp(app)
   const old = await first.node(Counter)
   const operation = await old.actions.IgnoreAbort.start()
+  await suspended
   const next = await first.reset("default")
+  const beforeRelease = protocolEvents(next).length
   release()
+  await settled
   await operation.cancelled()
+  expect(
+    protocolEvents(next)
+      .slice(beforeRelease)
+      .filter((event) => event.type === "state.changed"),
+  ).toEqual([])
   const fresh = await next.node(Counter)
   expect(await fresh.state()).toEqual({ count: 0 })
 }
@@ -1213,12 +1283,12 @@ export default function Layout() {
 ```tsx
 import { InventoryList } from "@reflex/example-inventory/screens.ts"
 import { isLowStock } from "@reflex/example-inventory/domain.ts"
-import { reflex } from "../src/routes.ts"
+import { useScreenStatus } from "../src/routes.ts"
 import { Pressable, Text } from "react-native"
 import { Action, Screen, styles } from "../src/ui.tsx"
 
 export default function InventoryListView() {
-  const node = reflex.useScreen(InventoryList)
+  const node = useScreenStatus(InventoryList)
   const { status, state, actions } = node
   if (status === "error") {
     return (
@@ -1281,12 +1351,12 @@ export default function InventoryListView() {
 <!-- file: examples/apps/mobile/app/inventory/[productId].tsx -->
 ```tsx
 import { InventoryDetail } from "@reflex/example-inventory/screens.ts"
-import { reflex } from "../../src/routes.ts"
+import { useScreenStatus } from "../../src/routes.ts"
 import { Text } from "react-native"
 import { Action, Screen, styles } from "../../src/ui.tsx"
 
 export default function InventoryDetailView() {
-  const node = reflex.useScreen(InventoryDetail)
+  const node = useScreenStatus(InventoryDetail)
   const { status, state, actions } = node
   if (status === "error") {
     return (
@@ -1337,12 +1407,12 @@ export default function InventoryDetailView() {
 import type { ErrorBoundaryProps } from "expo-router"
 import { Suspense } from "react"
 import { Settings } from "@reflex/example-inventory/screens.ts"
-import { reflex } from "../src/routes.ts"
+import { useScreen } from "../src/routes.ts"
 import { Text } from "react-native"
 import { Action, Screen, styles } from "../src/ui.tsx"
 
 function SettingsContent() {
-  const node = reflex.useScreenSuspense(Settings)
+  const node = useScreen(Settings)
   const { state, actions } = node
   if (state._tag === "loading") {
     return null
@@ -1385,7 +1455,6 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
 ```tsx
 import type { ReactNode } from "react"
 import * as Layer from "effect/Layer"
-import { developmentBridge } from "@reflex/expo/dev"
 import {
   fixtureApi,
   fixtureSettings,
@@ -1393,7 +1462,8 @@ import {
   seedProducts,
 } from "@reflex/example-inventory/fixtures.ts"
 import app from "../src/app.ts"
-import { reflex } from "../src/routes.ts"
+import { testScenarios } from "@reflex/example-inventory/scenarios.ts"
+import { Provider } from "../src/routes.ts"
 
 const e2e = {
   e2e: {
@@ -1401,13 +1471,15 @@ const e2e = {
     fixtures: [InventoryFixture],
   },
 }
-const instrumented = app.withScenarios(e2e, { defaultScenario: "e2e" })
-const bridge = developmentBridge()
+const instrumented = app.withScenarios(
+  { ...testScenarios, ...e2e },
+  { defaultScenario: "e2e", fixtures: [InventoryFixture] },
+)
 export function AppProvider({ children }: { children: ReactNode }) {
   return (
-    <reflex.Provider app={instrumented} fallback={null} bridge={bridge}>
+    <Provider app={instrumented} fallback={null} bridge="development">
       {children}
-    </reflex.Provider>
+    </Provider>
   )
 }
 ```
@@ -1462,15 +1534,13 @@ module.exports = {
 <!-- file: examples/apps/mobile/plain/app/_layout.tsx -->
 ```tsx
 import { Stack } from "expo-router"
-import { developmentBridge } from "@reflex/expo/dev"
-import { reflex } from "../routes.ts"
+import { Provider } from "../routes.ts"
 
-const bridge = developmentBridge()
 export default function Layout() {
   return (
-    <reflex.Provider fallback={null} bridge={bridge}>
+    <Provider fallback={null} bridge="development">
       <Stack />
-    </reflex.Provider>
+    </Provider>
   )
 }
 ```
@@ -1481,10 +1551,10 @@ export default function Layout() {
 ```tsx
 import { Pressable, Text, View } from "react-native"
 import { Counter } from "@reflex/example-plain"
-import { reflex } from "../routes.ts"
+import { useService } from "../routes.ts"
 
 export default function CounterView() {
-  const view = reflex.useService(Counter)
+  const view = useService(Counter)
   if (view.status === "error") {
     return (
       <Text
@@ -1538,6 +1608,8 @@ import "expo-router/entry"
 import { createReflex } from "@reflex/react"
 import app from "@reflex/example-plain"
 export const reflex = createReflex(app)
+
+export const { Provider, useScreen, useScreenStatus, useService } = reflex
 ```
 
 ### apps/mobile/provider.tsx
@@ -1545,15 +1617,13 @@ export const reflex = createReflex(app)
 <!-- file: examples/apps/mobile/provider.tsx -->
 ```tsx
 import type { ReactNode } from "react"
-import { developmentBridge } from "@reflex/expo/dev"
-import { reflex } from "./src/routes.ts"
+import { Provider } from "./src/routes.ts"
 
-const bridge = developmentBridge()
 export function AppProvider({ children }: { children: ReactNode }) {
   return (
-    <reflex.Provider fallback={null} bridge={bridge}>
+    <Provider fallback={null} bridge="development">
       {children}
-    </reflex.Provider>
+    </Provider>
   )
 }
 ```
@@ -1567,7 +1637,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage"
 import * as Effect from "effect/Effect"
 import * as Redacted from "effect/Redacted"
 import * as Schema from "effect/Schema"
-import inventory from "@reflex/example-inventory"
+import inventory, { productionServices } from "@reflex/example-inventory"
 import { SettingsStore } from "@reflex/example-inventory/domain.ts"
 import { httpInventoryApi } from "@reflex/example-inventory/http-api.ts"
 
@@ -1617,12 +1687,13 @@ const baseUrl = __DEV__ ? process.env.EXPO_PUBLIC_INVENTORY_API : undefined
 const deviceScenarios = {
   "device-services": {
     description: "Development HTTP and device settings",
-    layer: Layer.merge(httpInventoryApi(baseUrl ?? "http://127.0.0.1:4318"), storage),
+    layer:
+      baseUrl === undefined ? productionServices : Layer.merge(httpInventoryApi(baseUrl), storage),
     fixtures: [],
   },
 }
 const deviceApp = inventory.withScenarios(deviceScenarios, {
-  defaultScenario: baseUrl === undefined ? "live-services" : "device-services",
+  defaultScenario: baseUrl === undefined ? "production" : "device-services",
 })
 
 export default deviceApp
@@ -1640,6 +1711,8 @@ export const reflex = createReflexExpo(app, {
   InventoryDetail: "/inventory/[productId]",
   Settings: "/settings",
 })
+
+export const { Provider, useScreen, useScreenStatus, useService, Link, href } = reflex
 ```
 
 ### apps/mobile/src/ui.tsx
@@ -1769,8 +1842,7 @@ export default defineStoreApp({ name: "web-counter", screens: [List, Detail] })
 import { Suspense } from "react"
 import { createRoot } from "react-dom/client"
 import { createBrowserRouter, RouterProvider } from "react-router"
-import { developmentBridge } from "@reflex/live/dev"
-import { reflex } from "./routes.ts"
+import { Provider, reflex } from "./routes.ts"
 import { ListView, DetailView } from "./views.tsx"
 
 const router = createBrowserRouter(
@@ -1783,17 +1855,16 @@ const router = createBrowserRouter(
     },
   }),
 )
-const bridge = developmentBridge()
 const root = document.getElementById("root")
 if (root === null) {
   throw new Error("Missing root element")
 }
 createRoot(root).render(
-  <reflex.Provider fallback={null} bridge={bridge}>
+  <Provider fallback={null} bridge="development">
     <Suspense fallback={<p>Loading…</p>}>
       <RouterProvider router={router} />
     </Suspense>
-  </reflex.Provider>,
+  </Provider>,
 )
 ```
 
@@ -1805,6 +1876,8 @@ import { createReflexRouter } from "@reflex/react-router"
 import app from "./app.ts"
 
 export const reflex = createReflexRouter(app, { List: "/", Detail: "/detail/:id" })
+
+export const { Provider, useScreen, useScreenStatus, useService, Link, href } = reflex
 ```
 
 ### apps/web/src/views.tsx
@@ -1812,10 +1885,10 @@ export const reflex = createReflexRouter(app, { List: "/", Detail: "/detail/:id"
 <!-- file: examples/apps/web/src/views.tsx -->
 ```tsx
 import { List, Detail } from "./app.ts"
-import { reflex } from "./routes.ts"
+import { useScreenStatus, Link, useScreen } from "./routes.ts"
 
 export function ListView() {
-  const view = reflex.useScreen(List)
+  const view = useScreenStatus(List)
   if (view.status === "error") {
     return (
       <button
@@ -1844,14 +1917,14 @@ export function ListView() {
       >
         Add one
       </button>
-      <reflex.Link to={Detail} params={{ id: "one" }}>
+      <Link to={Detail} params={{ id: "one" }}>
         Open detail
-      </reflex.Link>
+      </Link>
     </main>
   )
 }
 export function DetailView() {
-  const { state, actions } = reflex.useScreenSuspense(Detail)
+  const { state, actions } = useScreen(Detail)
   return (
     <main>
       <h1>Detail {state.id}</h1>
@@ -1865,7 +1938,7 @@ export function DetailView() {
       >
         Add one
       </button>
-      <reflex.Link to={List}>List</reflex.Link>
+      <Link to={List}>List</Link>
     </main>
   )
 }
@@ -1890,9 +1963,7 @@ export class Count extends Screen("Count", {
   state: Schema.Struct({ count: Schema.Number }),
   params: { count: Schema.NumberFromString },
   initial: ({ count }) => ({ count }),
-}) {
-  declare private readonly nominal: undefined
-}
+}) {}
 export const Nav = defineNavigation({ Count })
 export const CountLive = Count.implement({
   actions: (action) => ({
@@ -1914,7 +1985,7 @@ Nav.push(Count, { count: 2 })
 reflex.href(Count, { count: "2" })
 const effectBinding = createReflex(app)
 export function useSetCount() {
-  const view = effectBinding.useScreen(Count)
+  const view = effectBinding.useScreenStatus(Count)
   return async () => {
     if (view.status !== "ready") {
       return null
@@ -1968,9 +2039,7 @@ export const StoreCounter = defineStoreNode({
 export const storeApp = defineStoreApp({ name: "store-codecs", services: [StoreCounter] })
 export const storeBinding = createReflex(storeApp)
 
-export class WireCount extends Screen("WireCount", { state: wire, initial: () => 1 }) {
-  declare private readonly nominal: undefined
-}
+export class WireCount extends Screen("WireCount", { state: wire, initial: () => 1 }) {}
 ```
 
 ### consumer-state.ts
@@ -1991,15 +2060,13 @@ import { memorySettings } from "./examples/inventory/src/settings-store.ts"
 export class EncodedState extends Screen("EncodedState", {
   state: Schema.NumberFromString,
   initial: () => 1,
-}) {
-  declare private readonly nominal: undefined
-}
+}) {}
 export const EncodedLive = EncodedState.implement({
   actions: (action) => ({ Increment: action.reduce({ reducer: (_, n) => n + 1 }) }),
 })
 const reflex = createReflex(defineApp({ name: "encoded-state", screens: [EncodedLive] }))
 export function EncodedView() {
-  const view = reflex.useScreen(EncodedState)
+  const view = reflex.useScreenStatus(EncodedState)
   if (view.status === "ready") {
     const encoded: string = view.state
     void encoded
@@ -2034,13 +2101,11 @@ void newDefault
 export class Secret extends Screen("Secret", {
   state: Schema.Struct({ token: Schema.Redacted(Schema.String) }),
   initial: () => ({ token: Redacted.make("fixture-only") }),
-}) {
-  declare private readonly nominal: undefined
-}
+}) {}
 const SecretLive = Secret.implement({ actions: () => ({}) })
 const secretBinding = createReflex(defineApp({ name: "secret", screens: [SecretLive] }))
 export function SecretView() {
-  const view = secretBinding.useScreen(Secret)
+  const view = secretBinding.useScreenStatus(Secret)
   if (view.status === "ready") {
     const safe: "<redacted>" = view.state.token
     void safe
@@ -2114,14 +2179,14 @@ export async function resetAndReacquire() {
   await using initial = await createTestApp(app)
   const next = await initial.reset("empty-inventory")
   const list = await next.focused(InventoryList, { _tag: "ready" })
-  await list.actions.OpenSettings()
+  await list.actions.OpenSettings.expectCompleted()
   // initial and its handles are invalid now. Ownership stays with initial's disposer.
 }
 export async function fixtureStory() {
   await using session = await createTestApp(app, { scenario: "inventory-with-products" })
   const fixture = await session.node(InventoryFixture)
   await servicesJourney(session, async () => {
-    await fixture.actions.FailNextSave()
+    await fixture.actions.FailNextSave.expectCompleted()
   })
 }
 export async function realServiceStory(failNextSave: () => Promise<void>) {
@@ -2159,12 +2224,12 @@ InventoryList.implement({
     }),
   }),
 })
-// Private declarations are inherited. Registry lookup must use exact constructors.
+// TypeScript is structural. Registry lookup must use exact constructors.
 export class Subclass extends InventoryDetail {}
 const assignable: typeof InventoryDetail = Subclass
 void assignable
-// Private nominal line cannot be inspected structurally by a library.
-export class MissingNominal extends Screen("MissingNominal", {
+// Empty subclasses do not create a new static identity.
+export class StructuralScreen extends Screen("StructuralScreen", {
   state: Schema.Number,
   initial: () => 0,
 }) {}
@@ -2172,9 +2237,7 @@ export class MissingNominal extends Screen("MissingNominal", {
 export class DifferentClassName extends Screen("DeclaredName", {
   state: Schema.Number,
   initial: () => 0,
-}) {
-  declare private readonly nominal: undefined
-}
+}) {}
 // A 60-segment root route is accepted without TS2589 (tail accumulator parser).
 export const longPath = createReflexRouter(app, {
   Count:
@@ -2183,106 +2246,251 @@ export const longPath = createReflexRouter(app, {
 longPath.href(Count, { count: "1" })
 ```
 
-## 5. Changes against review items 1–31
+## 5. Implementation boundary requirements
 
-| Item | Revision and evidence                                                                                                                                                                                                                                                                                  |
-| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 1    | getState-derived StateOf, NoInfer for store projections, availability and builders; plain/live stores and JSON interface compile. Parameterized factories document their one annotation.                                                                                                               |
-| 2    | Whole codec/validator inference separates handler decoded output and consumer encoded input; codecs.ts covers action input, errors, jsonCodec, navigation and URL params. Store transformed errors explicitly project because Standard Schema cannot invert them.                                      |
-| 3    | JsonShape compatibility accepts interfaces; Date/functions fail in asserted cases. Runtime publication validates richer constraints.                                                                                                                                                                   |
-| 4    | Contextual `includes<E>` uses Partial<NoInfer<E>>; typo and cross-variant match cases assert actual diagnostics.                                                                                                                                                                                       |
-| 5    | Links and href accept contracts in both host declarations; web views demonstrate Link and codecs.ts demonstrates href.                                                                                                                                                                                 |
-| 6    | Full tuple unions for push/href and complete initial-route objects, including zero params; union and encoded/decoded negative cases compile-fail.                                                                                                                                                      |
-| 7    | action.navigates requires a returned command and Nav.stay; plain action/onFocus use inferred-success markers. Erasure remains a documented lint/runtime limit, including services/fixtures.                                                                                                            |
-| 8    | Guarded state writes explicitly fail with StateChanged; builders exclude it from domain error declarations and convert it to refusal. Runtime conversion remains acceptance work.                                                                                                                      |
-| 9    | Tail accumulator parser rejects repeats, excluded grammar, optional path fields, non-string encodings and mapping errors with interpolated names; long path compiles.                                                                                                                                  |
-| 10   | Removed Self; private line preserves independent nominal classes. Chose exact runtime constructors and documented inherited/missing-line static limits and class/string name mismatch.                                                                                                                 |
-| 11   | Generation isolation/revoked writes/filtered notifications specified; abort-ignoring Promise acceptance program compiles but awaits runtime implementation.                                                                                                                                            |
-| 12   | App/extension-level fixture defaults with per-scenario overrides; normalized memberships preserve previous extension defaults. scenarios.ts lists defaults once.                                                                                                                                       |
-| 13   | App-bound Provider, optional compatible extension prop, fallback, boundary startup behavior, observable statuses and onBackgroundError defined consistently.                                                                                                                                           |
-| 14   | screens/services in both backends; useService throughout the plain examples and declarations.                                                                                                                                                                                                          |
-| 15   | error/status:error/expectError; reset returns new controls/client; Duration.Input; one mountOwned, mountEffect, one shared routeCodec, one bridge helper re-export and Bridge type; TypedClient aliases JourneyClient mode; store command returns rejected.                                            |
-| 16   | Screen.define one-step tier added; first ten actual lines per tier appear in three compiled small files.                                                                                                                                                                                               |
-| 17   | First plain counter uses services and useService with no Reflex router binding; web routing follows it.                                                                                                                                                                                                |
-| 18   | Inferred-then-checked handler and lifecycle errors verified at source lines. Same-name identity marker corrected; TS2488 accepted; missing navigator names action/app. Missing component/input use honest TS diagnostics. Context key message and last-state timeout specified as runtime obligations. |
-| 19   | React Router host route options preserved, loader/errorElement authored; paths/wrappers stay registered. Framework/route-module mode explicitly excluded.                                                                                                                                              |
-| 20   | Removed Stack-wide Suspense; Settings owns its boundary. Error-boundary retry is a runtime acceptance case.                                                                                                                                                                                            |
-| 21   | Effect namespace imports, tryPromise, fromJsonString, Duration.Input; removed untyped JSON.parse and hard-coded production credential.                                                                                                                                                                 |
-| 22   | One terminal command, void refusal recovery; explicit state/action replacement workflows for multi-step and refusal redirects.                                                                                                                                                                         |
-| 23   | Shared story takes Pick<JourneyClientFor, focused/back>; fixture and live-services calls compile; reset.ts reacquires after returned reset.                                                                                                                                                            |
-| 24   | One journey action map with call/expectError/expectRefusal/start members; removed five parallel maps.                                                                                                                                                                                                  |
-| 25   | Every created/connected test session is await using; resource owner remains disposable across resets.                                                                                                                                                                                                  |
-| 26   | Fingerprint excludes scenario metadata; withScenarios immutable/additive/default-preserving semantics and repeated-extension fixture normalization specified. Transport behavior remains runtime acceptance work.                                                                                      |
-| 27   | Pending view has state:null/actions:null and normal build errors have the same slots; mobile destructuring and ready narrowing compile.                                                                                                                                                                |
-| 28   | Production app.ts uses real services only; scenarios.ts imports fixtures and only tests/E2E use it. E2E alias remains separate. Bundle proof is runtime work.                                                                                                                                          |
-| 29   | `__DEV__` gate, bounded versioned settings, no embedded production token, credential warning, scenario descriptions, complete Metro resolver/watchFolders/module paths and consistent import style restored.                                                                                           |
-| 30   | Navigation record retained and alias keys rejected; only implementation selection uses a tuple with duplicate checking.                                                                                                                                                                                |
-| 31   | Complete compiled codec transformations, store domain error, loader/errorElement, advanced catchall codec, and returned-reset client files added.                                                                                                                                                      |
+- Every action input/error and route param must encode JSON. Diagnostics say
+  Input/Error/Params must encode JSON; use jsonCodec. Consumer errors expose the
+  published <redacted> marker, never the Effect Redacted wrapper.
+- Provision stages are fixtures → common layer → scenario layer → handlers. A layer
+  cannot satisfy its own inputs; check inputs against the preceding stage. Coverage
+  excludes Scope because each action owns a child scope. Omitting scenarios still
+  checks production coverage and preserves the literal default scenario name.
+- Action values carry their decoded state and a private runtime builder brand. Reject
+  Save: 123 and reducers moved between incompatible state types. Composition enforces
+  screen/service/store roles and duplicate names across navigation and ambient roles.
+- Navigation identity includes contract names even without an explicit key; runtime
+  validates the exact owner. Foreign-owner errors name the action and navigator and
+  explain which navigation to use. push infers its target before checking params.
+- Ambient services cannot require unprovided params. Store projections and param JSON
+  are checked at composition without disrupting destructured factory inference.
+- Scenario store overrides are definition-keyed: stores: [Counter.withStore(factory)].
+  Factories retain store and params types; overrides must belong to the app.
+- The E2E provider installs exported testScenarios so device journeys can reset to
+  fixture scenarios. With no API env var, production uses offline/production-safe
+  services. A loopback HTTP endpoint is never an implicit production fallback.
+- HTTP services use HttpClient.filterStatusOk, HttpClientResponse.schemaBodyJson and
+  catchTags, retaining the response-size and timeout bounds.
+- Public phantom requirements/publicState/paramsType/encodedParams/role/contract
+  fields must be packed under one symbol key. Coverage has one implementation.
+  Constructor-family aliases are optional where cheap; Effect-free store composition
+  remains separate so adopting stores does not import Effect.
+- Runtime diagnostics need a message catalogue exercised through both SessionController
+  and LiveController. The command-erasure lint rule is explicit follow-up work.
+- Real-package compilation of the exact authored examples is an implementation
+  acceptance requirement; declaration-only compilation cannot establish runtime parity.
 
-## 6. Scores and validation report
+The target declarations and examples below are still proposed, not a shipped API.
+The symbol-metadata packing, HTTP rewrite, complete type-export example coverage,
+runtime message catalogue and real-package harness are not yet implemented in this
+reference checkpoint. These are outstanding implementation requirements, not silently
+removed capabilities. The command-erasure lint rule alone is deliberately follow-up.
 
-The target remains **9 on each factor**, not a self-certified reviewer result. Honest
-predictions for an independent review of this revision:
+## 6. Validation
 
-| Factor                      | Predicted score | Remaining reason to withhold 9 where applicable                                                      |
-| --------------------------- | --------------: | ---------------------------------------------------------------------------------------------------- |
-| Common-case brevity         |               9 | One-step screen and router-free store counter.                                                       |
-| Inference                   |               9 | No call-site generics; parameterized factories and advanced wire helpers use definition annotations. |
-| End-to-end typing           |               9 | Encoded/redacted consumer-state examples compile.                                                    |
-| Misuse resistance           |             8.5 | Command erasure and lifecycle safety depend on unimplemented lint/runtime guards.                    |
-| Naming and consistency      |               9 | Shared vocabulary, roles and command surface.                                                        |
-| Layering and escape hatches |               9 | Common layer coverage and repeated extensions compile.                                               |
-| Errors                      |             8.5 | Marker locations asserted; service key strings/runtime sentences still unexecuted.                   |
-| Host idiom fit              |               9 | Host options, namespace Effect imports and screen-level Suspense.                                    |
-| No leaked internals         |               9 | Examples use public entries and no unchecked decoded-value assertions.                               |
-| Testability                 |               9 | Shared capability story, one action map and reset/reacquire ownership.                               |
-| Examples                    |               9 | Entire authored graph and JS configuration typecheck; runtime acceptance distinguished.              |
-| Type performance            |               9 | Screen slope passes the gate; editor latency is still unmeasured.                                    |
+Run bun docs/design/prototypes/check.ts for the executable target. This validates the
+proposed declarations and compiled examples; it does not validate the package runtime.
+The implementation migration must additionally compile these exact examples against real
+package exports and run the runtime/browser/production-exclusion suites. Do not mark this
+reference implemented until that evidence exists.
 
-This design does **not yet meet 9 on every factor**. The remaining lint/runtime evidence
-above is concrete acceptance work, not hidden
-behind predicted implementation success. No runtime test count is claimed for this target.
-Repository `bun run check` validates compatibility with the unchanged implementation.
-The executable-spec results and final validation command outcomes are recorded below.
+### Restored capabilities
 
-### Recorded validation, TypeScript 5.9.3
+<!-- file: examples/capabilities.tsx -->
+```tsx
+import { expect } from "bun:test"
+import { Screen, defineApp, defineNavigation } from "@reflex/effect"
+import { defineStoreApp, defineStoreNode, standardInput } from "@reflex/runtime"
+import { createRuntime, mountOwned } from "@reflex/runtime/advanced"
+import { createReflex } from "@reflex/react"
+import { createReflexRouter } from "@reflex/react-router"
+import { createReflexExpo } from "@reflex/expo"
+import { createTestApp, explore } from "@reflex/test"
+import { createProtocolTestSession } from "@reflex/test/advanced"
+import * as Effect from "effect/Effect"
+import * as Redacted from "effect/Redacted"
+import * as Schema from "effect/Schema"
+import { createStore } from "zustand/vanilla"
+import { z } from "zod"
 
-`bun docs/design/prototypes/check.ts` passes. **44 authored files** are mirrored exactly:
-42 TS/TSX files and the Metro JavaScript file typecheck; the JSON config parses.
-All **75 executable negative cases** assert their marker text and exact source line,
-and the table's marker and link are checked against the same source. The checker itself
-is typechecked. Declaration-body checking reports no target declaration errors.
+class Detail extends Screen("Detail", {
+  state: Schema.Struct({ id: Schema.String, count: Schema.Number }),
+  params: { id: Schema.String },
+  initial: ({ id }) => ({ id, count: 0 }),
+}) {}
+const Nav = defineNavigation({ Detail })
+const save = (
+  input: number,
+  { state }: import("@reflex/effect").EffectContext<typeof Detail.state.Type>,
+) => state.update((s) => ({ ...s, count: input }))
+const detail = Detail.implement({
+  actions: (a) => ({
+    Save: a({ input: Schema.Number, handler: save }),
+    Back: a.navigates({ handler: () => Nav.back }),
+    Scoped: a({ handler: () => Effect.asVoid(Effect.forkScoped(Effect.void)) }),
+    SecretError: a({
+      error: Schema.Redacted(Schema.String),
+      handler: () => Effect.fail(Redacted.make("private")),
+    }),
+  }),
+})
+export const app = defineApp({
+  name: "capabilities",
+  navigation: Nav.implement([detail], { initial: { screen: Detail, params: { id: "first" } } }),
+})
+const { Provider, useScreen, useScreenStatus, Link, href, from } = createReflexRouter(app, {
+  Detail: "/:id",
+})
+const feature = from(detail)
+export function DetailView() {
+  const { state, actions } = useScreen(Detail)
+  const count = feature.useNodeState((s) => s.count)
+  const saveAction = feature.useAction("Save")
+  return (
+    <Provider bridge="development">
+      <Link
+        to={Detail}
+        params={{ id: state.id }}
+        title={href(Detail, { id: state.id })}
+        onClick={() => {
+          void saveAction.run(count + 1)
+          void actions.Back.run()
+        }}
+      >
+        Detail
+      </Link>
+    </Provider>
+  )
+}
+export function OptionalStatus() {
+  return useScreenStatus(Detail).status
+}
+export const expo = createReflexExpo(app, { Detail: { pathname: "/[id]" } })
+const Counter = defineStoreNode({
+  name: "Counter",
+  store: () => createStore(() => ({ count: 0 })),
+  actions: (a) => ({
+    Set: a({
+      input: standardInput(z.number(), { type: "number" }),
+      handler: (count, { store }) => store.setState({ count }),
+    }),
+  }),
+})
+export const storeApp = defineStoreApp({ name: "overrides", services: [Counter] }).withScenarios({
+  seeded: { stores: [Counter.withStore(() => createStore(() => ({ count: 5 })))] },
+})
+export const { useService } = createReflex(storeApp)
+export async function journey() {
+  await using session = await createTestApp(app)
+  const node = await session.focused(Detail)
+  const outcome = await node.actions.SecretError.run()
+  if (outcome.status === "error") {
+    const marker: "<redacted>" = outcome.error
+    expect(marker).toBe("<redacted>")
+  }
+  const refused = await node.actions.Back.expectRefusal()
+  expect(refused.reason).toBeString()
+}
+export async function storeOverride() {
+  await using session = await createTestApp(storeApp, { scenario: "seeded" })
+  const counter = await session.node(Counter)
+  expect(await counter.state()).toEqual({ count: 5 })
+}
+export async function advanced() {
+  await using runtime = await createRuntime(storeApp)
+  const node = mountOwned(runtime, Counter)
+  const stop = node.changes.subscribe((state) => {
+    const count: number = state.count
+    void count
+  })
+  await node.actions.Set.run(node.state.count + 1)
+  stop()
+  await node.dispose()
+}
+export async function exploreCounter() {
+  await explore(storeApp, {
+    steps: 10,
+    knownInputs: { Counter: { Set: [1, 2] } },
+    invariant: async (session) => {
+      const node = await session.node(Counter)
+      expect((await node.state()).count).toBeGreaterThanOrEqual(0)
+    },
+  })
+}
+export async function protocol() {
+  await using session = await createProtocolTestSession(storeApp)
+  await session.request("app.dispatch", { action: 123 })
+  await session.request("app.wait", { operationId: "missing" })
+  expect(session.events().map((event) => event.type)).toEqual([])
+}
+const HostDetail = defineStoreNode({
+  name: "HostDetail",
+  params: z.object({ id: z.string() }),
+  store: ({ id }) => createStore(() => ({ id })),
+  actions: () => ({}),
+})
+export async function openStoreRoute() {
+  const app = defineStoreApp({ name: "host-routed", screens: [HostDetail] })
+  await using session = await createTestApp(app)
+  const detail = await session.open(HostDetail, { id: "one" })
+  expect(await detail.state()).toEqual({ id: "one" })
+}
+```
 
-| Graph                               | Instantiations |
-| ----------------------------------- | -------------: |
-| Harness                             |          1,088 |
-| Complete authored API/example graph |         90,535 |
-| Negative graph                      |         77,643 |
+### Integration plumbing
 
-| Screens | Definitions/app only | One unique hook per screen | Ten identical hooks per screen |
-| ------- | -------------------: | -------------------------: | -----------------------------: |
-| 0       |                  449 |                        449 |                            449 |
-| 10      |               16,316 |                     19,834 |                         19,834 |
-| 50      |               58,556 |                     74,794 |                         74,794 |
-| 100     |              115,856 |                    147,994 |                        147,994 |
+<!-- file: examples/plumbing.ts -->
+```ts
+import { createReflex } from "@reflex/react"
+import { createRouteAdapter } from "@reflex/react/advanced"
+import { createRouteRegistry } from "@reflex/runtime/advanced"
+import { createSessionOwner } from "@reflex/live/advanced"
+import { connectBridge } from "@reflex/live"
+import { developmentBridge } from "@reflex/live/dev"
+import { createTestAppPool } from "@reflex/test"
+import { createJourneyClient, type JourneyTransport } from "@reflex/test/advanced"
+import { defineService } from "@reflex/effect"
+import * as Schema from "effect/Schema"
+import app from "./examples/plain/src/app.ts"
 
-The definition/app slope is **1,056** (10→50) and **1,146** (50→100) instantiations per
-screen. Including one unique hook makes those slopes **1,374** and **1,464**. The
-marginal unique-hook slope is **318**, compared with the reviewers' roughly 660; the
-whole-app declaration graph differs, so this is a workload comparison, not a controlled
-before/after benchmark. Repeating an identical hook adds **0 measured instantiations**
-because TypeScript caches it. That does not establish zero editor or checker work.
-The proposed **2,000 per-screen / 100 per repeated-hook gates pass**.
-
-The first implementation of this executable target failed the screen gate (about 10,000
-per screen). Duplicate detection now maps definitions to a tuple of names before tail
-recursion, avoiding recursively copying full definitions. Hook signatures are generated
-once as an overload intersection at binding creation, with a diagnostic fallback for
-misuse, rather than re-instantiating the complete app union at each call. The 100-screen
-measurement validates this specific overload design; no claim is made about arbitrary
-thousands of screens or editor completion latency.
-
-`bun run check` passes: formatting/lint, documentation snippets, root/mobile/web typechecks,
-**631 tests passed, 3 platform-specific skips, 0 failures**. These tests validate the
-unchanged implementation, not the proposed runtime. `git diff --check` is clean.
-No packages, live examples or apps changed, and no PR was opened.
+// Registry and adapter ports are integration plumbing, not the application-author tier.
+export async function registryLifecycle(contract: object) {
+  const registry = createRouteRegistry(
+    new Map([[contract, async (params: unknown) => ({ params })]]),
+  )
+  const lease = registry.acquire(contract, "history-entry", {})
+  const release = lease.retain()
+  await lease.ready
+  await lease.retry()
+  release()
+  await registry.discard("history-entry")
+  await registry.dispose()
+}
+export const HostAdapter = createRouteAdapter(createReflex(app), {
+  useLocation: () => ({ key: "host-key", contract: {}, params: {}, navigationType: "POP" }),
+})
+export async function bridgeLifecycle(setting: string) {
+  const owner = createSessionOwner(async () => connectBridge(setting))
+  await owner.close()
+  // The React Provider owns this lifecycle in the normal host tier.
+  const bridge = developmentBridge()
+  await bridge?.close()
+}
+export async function remoteJourney(transport: JourneyTransport) {
+  await using journey = createJourneyClient(app, "default", transport)
+  await journey.reset("default")
+}
+export async function pooledJourney() {
+  const pool = createTestAppPool()
+  try {
+    await pool.open(app)
+  } finally {
+    await pool.disposeAll()
+  }
+}
+export const Metrics = defineService({
+  name: "Metrics",
+  state: Schema.Number,
+  initial: () => 0,
+  actions: (a) => ({ Increment: a.reduce({ reducer: (_, n) => n + 1 }) }),
+})
+```

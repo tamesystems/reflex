@@ -1,8 +1,7 @@
 import { Suspense } from "react"
 import { createRoot } from "react-dom/client"
 import { createBrowserRouter, RouterProvider } from "react-router"
-import { developmentBridge } from "@reflex/live/dev"
-import { reflex } from "./routes.ts"
+import { Provider, reflex } from "./routes.ts"
 import { ListView, DetailView } from "./views.tsx"
 
 const router = createBrowserRouter(
@@ -15,15 +14,14 @@ const router = createBrowserRouter(
     },
   }),
 )
-const bridge = developmentBridge()
 const root = document.getElementById("root")
 if (root === null) {
   throw new Error("Missing root element")
 }
 createRoot(root).render(
-  <reflex.Provider fallback={null} bridge={bridge}>
+  <Provider fallback={null} bridge="development">
     <Suspense fallback={<p>Loading…</p>}>
       <RouterProvider router={router} />
     </Suspense>
-  </reflex.Provider>,
+  </Provider>,
 )

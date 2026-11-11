@@ -1,6 +1,7 @@
 import type * as Effect from "effect/Effect"
 import type * as Schema from "effect/Schema"
 import type * as Scope from "effect/Scope"
+import type { OwnedNode } from "./runtime-advanced"
 import type * as M from "./model"
 export type {
   StateAccess,
@@ -12,7 +13,7 @@ export type {
 } from "./model"
 export declare function mountEffect<D extends M.AnyDef>(
   definition: D,
-): Effect.Effect<{ dispose(): Effect.Effect<void> }, never, D["requirements"] | Scope.Scope>
+): Effect.Effect<OwnedNode<D>, never, D["requirements"] | Scope.Scope>
 export declare function jsonCodec<C extends M.Codec, W>(
   codec: C,
   wire: {

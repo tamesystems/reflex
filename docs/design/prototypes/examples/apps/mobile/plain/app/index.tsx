@@ -1,9 +1,9 @@
 import { Pressable, Text, View } from "react-native"
 import { Counter } from "@reflex/example-plain"
-import { reflex } from "../routes.ts"
+import { useService } from "../routes.ts"
 
 export default function CounterView() {
-  const view = reflex.useService(Counter)
+  const view = useService(Counter)
   if (view.status === "error") {
     return (
       <Text

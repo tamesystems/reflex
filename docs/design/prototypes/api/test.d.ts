@@ -21,3 +21,24 @@ export declare function createTestAppPool(): {
   open: typeof createTestApp
   disposeAll(): Promise<void>
 }
+
+export declare function explore<A extends M.AnyApp, K extends M.ScNames<A> = M.DefaultOf<A>>(
+  app: A,
+  options: {
+    scenario?: K
+    steps?: number
+    seed?: number
+    invariant(session: M.JourneyClient<A, K>): Promise<void>
+    knownInputs?: {
+      [N in M.Names<A["screens"] | A["services"]>]?: {
+        [Action in keyof M.Actions<
+          M.Selected<A["screens"] | A["services"], { name: N }>
+        >]?: M.Actions<M.Selected<A["screens"] | A["services"], { name: N }>>[Action] extends {
+          input: infer I
+        }
+          ? readonly I[]
+          : never
+      }
+    }
+  },
+): Promise<void>

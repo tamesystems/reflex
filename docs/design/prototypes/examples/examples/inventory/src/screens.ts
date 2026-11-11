@@ -14,9 +14,7 @@ const InventoryListState = Schema.Union([
 export class InventoryList extends Screen("InventoryList", {
   state: InventoryListState,
   initial: () => ({ _tag: "loading" }),
-}) {
-  declare private readonly nominal: undefined
-}
+}) {}
 
 const Loaded = {
   productId: Schema.String,
@@ -35,9 +33,7 @@ export class InventoryDetail extends Screen("InventoryDetail", {
   state: InventoryDetailState,
   params: { productId: Schema.String },
   initial: ({ productId }) => ({ _tag: "loading", productId }),
-}) {
-  declare private readonly nominal: undefined
-}
+}) {}
 
 const SettingsState = Schema.Union([
   Schema.TaggedStruct("loading", {}),
@@ -50,6 +46,4 @@ const SettingsState = Schema.Union([
 export class Settings extends Screen("Settings", {
   state: SettingsState,
   initial: () => ({ _tag: "loading" }),
-}) {
-  declare private readonly nominal: undefined
-}
+}) {}

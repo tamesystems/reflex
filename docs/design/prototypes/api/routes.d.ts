@@ -60,7 +60,7 @@ export interface RouteCodec<P> {
   encode(params: P): string
 }
 export declare function routeCodec<P>(spec: RouteCodec<P>): RouteCodec<P>
-type ByName<D, N> = D extends unknown ? (M.Names<D> extends N ? D : never) : never
+type ByName<D, N> = M.DefinitionMap<D>[N & keyof M.DefinitionMap<D>]
 type Validate<D, R> = {
   [N in M.Names<D>]: N extends keyof R
     ? R[N] extends RouteCodec<M.URLParams<ByName<D, N>>>
@@ -69,7 +69,9 @@ type Validate<D, R> = {
         ? CheckPath<M.URLParams<ByName<D, N>>, R[N], M.Empty>
         : R[N] extends { path: infer P extends string; params: infer Map }
           ? CheckPath<M.URLParams<ByName<D, N>>, P, Map>
-          : M.Msg<"Use a literal route or routeCodec">
+          : R[N] extends { pathname: infer P extends string; params?: infer Map }
+            ? CheckPath<M.URLParams<ByName<D, N>>, P, Map>
+            : M.Msg<"Use a literal route or routeCodec">
     : M.Msg<`${N} needs a route registration`>
 }
 export type ValidateRoutes<A extends M.AnyApp, R> = Validate<A["screens"], R>

@@ -23,12 +23,12 @@ InventoryList.implement({
     }),
   }),
 })
-// Private declarations are inherited. Registry lookup must use exact constructors.
+// TypeScript is structural. Registry lookup must use exact constructors.
 export class Subclass extends InventoryDetail {}
 const assignable: typeof InventoryDetail = Subclass
 void assignable
-// Private nominal line cannot be inspected structurally by a library.
-export class MissingNominal extends Screen("MissingNominal", {
+// Empty subclasses do not create a new static identity.
+export class StructuralScreen extends Screen("StructuralScreen", {
   state: Schema.Number,
   initial: () => 0,
 }) {}
@@ -36,9 +36,7 @@ export class MissingNominal extends Screen("MissingNominal", {
 export class DifferentClassName extends Screen("DeclaredName", {
   state: Schema.Number,
   initial: () => 0,
-}) {
-  declare private readonly nominal: undefined
-}
+}) {}
 // A 60-segment root route is accepted without TS2589 (tail accumulator parser).
 export const longPath = createReflexRouter(app, {
   Count:

@@ -4,7 +4,7 @@ import * as Schema from "effect/Schema"
 import { InventoryApi, SettingsStore } from "../domain.ts"
 import { Nav } from "../navigation.ts"
 
-const load = InventoryList.handler(({ state }) =>
+const load = InventoryList.handler((_, { state }) =>
   Effect.gen(function* () {
     const api = yield* InventoryApi
     const settings = yield* SettingsStore
@@ -21,7 +21,7 @@ const load = InventoryList.handler(({ state }) =>
 )
 
 export const InventoryListLive = InventoryList.implement({
-  onFocus: load,
+  onFocus: (ctx) => load(undefined, ctx),
   actions: (action) => ({
     OpenProduct: action.when("ready").navigates({
       description: "Open a product's detail screen",
@@ -33,7 +33,7 @@ export const InventoryListLive = InventoryList.implement({
     }),
     Refresh: action({
       available: (state) => (state._tag === "loading" ? "Products are loading" : true),
-      handler: (_, { state }) => load({ state }),
+      handler: load,
     }),
   }),
 })
