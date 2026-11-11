@@ -1,4 +1,9 @@
-import { defineApp, defineNavigation, Screen as screenContract } from "@reflex/effect"
+import {
+  defineApp,
+  defineService,
+  defineNavigation,
+  Screen as screenContract,
+} from "@reflex/effect"
 import { defineStoreNode, standardInput } from "@reflex/runtime"
 import * as Layer from "effect/Layer"
 import * as Schema from "effect/Schema"
@@ -86,14 +91,14 @@ export const contracts = async (node: NonNullable<ReturnType<typeof Detail.resol
     { Home: "/", Detail: { pathname: "/detail/[id]", params: { id: "id" } } },
   )
   await explore(app, {
-    knownInputs: { Detail: { SetQuantity: [{ quantity: 1 }] } },
+    inputs: { Detail: { SetQuantity: [{ quantity: 1 }] } },
   })
   await explore(app, {
     // @ts-expect-error Exploration inputs derive from the node's actions.
-    knownInputs: { Detail: { SetQuantity: [{ quantity: "wrong" }] } },
+    inputs: { Detail: { SetQuantity: [{ quantity: "wrong" }] } },
   })
   // @ts-expect-error Unknown action.
-  await explore(app, { knownInputs: { Detail: { Save: [{}] } } })
+  await explore(app, { inputs: { Detail: { Save: [{}] } } })
   await node.actions.SetQuantity({ quantity: 2 })
   await pool.disposeAll()
 }

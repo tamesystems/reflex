@@ -1361,6 +1361,13 @@ test(
     expect(tree.out).not.toContain("InventoryFixture")
     const list = cli("ls")
     expect(list.code).toBe(0)
-    expect(JSON.parse(list.out)).toMatchObject({ state: { _tag: "ready", products: [] } })
+    expect(JSON.parse(list.out)).toMatchObject({
+      state: {
+        _tag: "ready",
+        products: expect.arrayContaining([
+          { id: "product-123", title: "Blue T-Shirt", quantity: 5 },
+        ]),
+      },
+    })
   }),
 )

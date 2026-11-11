@@ -20,14 +20,20 @@
       "react/jsx-runtime": ["./node_modules/@types/react/jsx-runtime.d.ts"],
       "@reflex/live": ["../../packages/live/src/index.ts"],
       "@reflex/react": ["../../packages/react/src/index.ts"],
+      "@reflex/live/session": ["../../packages/live/src/session.ts"],
       "@reflex/navigation": ["../../packages/navigation/src/index.ts"],
       "@reflex/react/advanced": ["../../packages/react/src/advanced.ts"],
+      "@reflex/expo/internal": ["../../packages/expo/src/internal.ts"],
+      "@reflex/effect/internal": ["../../packages/effect/src/internal.ts"],
+      "@reflex/runtime/internal": ["../../packages/runtime/src/internal.ts"],
       "@reflex/effect/advanced": ["../../packages/effect/src/advanced.ts"],
       "@inventory-provider": ["./provider.tsx"],
-      "@reflex/runtime/advanced": ["../../packages/runtime/src/advanced.ts"],
-      "@reflex/live/advanced": ["../../packages/live/src/advanced.ts"],
+      "@reflex/expo/dev": ["../../packages/expo/src/dev.ts"],
+      "@reflex/live/dev": ["../../packages/live/src/dev.ts"],
+      "@reflex/react/internal": ["../../packages/react/src/internal.ts"],
+      "@reflex/react-router/advanced": ["../../packages/react-router/src/advanced.ts"],
       "@reflex/expo/advanced": ["../../packages/expo/src/advanced.ts"],
-      "@reflex/expo/dev": ["../../packages/expo/src/dev.ts"]
+      "@reflex/expo/testing": ["../../packages/expo/src/testing.tsx"]
     },
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
@@ -37,5 +43,14 @@
     "useUnknownInCatchVariables": true,
     "verbatimModuleSyntax": true
   },
-  "include": ["app", "src", "e2e/*.ts", "hermes-smoke/*.ts", "plain", "../../packages/react/src"]
+  "include": [
+    "app",
+    "src",
+    "e2e/*.ts",
+    "hermes-smoke/*.ts",
+    "plain",
+    "../../packages/react/src",
+    "test",
+    "e2e/**/*.tsx"
+  ]
 }

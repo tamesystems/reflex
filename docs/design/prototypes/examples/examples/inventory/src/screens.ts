@@ -47,3 +47,9 @@ export class Settings extends Screen("Settings", {
   state: SettingsState,
   initial: () => ({ _tag: "loading" }),
 }) {}
+
+export {
+  InventoryList as InventoryListScreen,
+  InventoryDetail as InventoryDetailScreen,
+  Settings as SettingsScreen,
+}

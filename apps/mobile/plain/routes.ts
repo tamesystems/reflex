@@ -1,5 +1,5 @@
 import { createReflex } from "@reflex/react"
-import { authoredApp as app } from "@reflex/example-plain"
+import app from "@reflex/example-plain"
 export const reflex = createReflex(app)
 
-export const { Provider, useScreen, useScreenStatus, useService } = reflex
+export const { Provider, useScreen, useScreenStatus, useService, useServiceStatus } = reflex

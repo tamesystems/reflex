@@ -189,6 +189,10 @@ export const useSelectedNode = (
   useNodeFocus(node, location !== null && focused)
   return { node, snapshot, lease }
 }
+export type Selection = (
+  contract: { name: string },
+  suspense: boolean,
+) => ReturnType<typeof useSelectedNode>
 const useSelectedState = (
   node: NodeHandle<unknown, Calls> | null,
   selector: (state: unknown) => unknown,
@@ -205,36 +209,48 @@ const useSelectedState = (
   }, [node, selector])
   return React.useSyncExternalStore(node?.subscribe ?? (() => () => undefined), getSelected)
 }
-const featureBinding = (
-  definition: Definition,
-  useSession: () => unknown,
-  resolve: (contract: { name: string }) => Definition,
-  useScreen: (contract: { name: string }) => unknown,
-  useScreenStatus: (contract: { name: string }) => unknown,
-) => {
-  return {
-    useScreen: () => useScreen(definition),
-    useScreenStatus: () => useScreenStatus(definition),
-    useNodeState: (selector: (state: unknown) => unknown) => {
-      useSession()
-      const { node } = useSelectedNode(resolve(definition), true)
-      return useSelectedState(node, selector)
-    },
-    useAction: (name: string) => {
-      useSession()
-      const { node } = useSelectedNode(resolve(definition), true)
-      const action = useAction(node, name)
-      const { runtime } = useRuntimeSession()
-      return {
+const useView = (selected: ReturnType<typeof useSelectedNode>) => {
+  const view = usePublishedView(selected.node)
+  if (selected.snapshot?.status === "error") {
+    return {
+      status: "error" as const,
+      state: null,
+      actions: null,
+      error: selected.snapshot.error,
+      retry: async () => {
+        await selected.lease?.retry()
+      },
+    }
+  }
+  return view
+}
+const featureBinding = (contract: { name: string }, select: Selection) => ({
+  useScreen: () => useView(select(contract, true)),
+  useScreenStatus: () => useView(select(contract, false)),
+  useNodeState: (selector: (state: unknown) => unknown) =>
+    useSelectedState(select(contract, true).node, selector),
+  useAction: (name: string) => {
+    const { node } = select(contract, true)
+    const action = useAction(node, name)
+    const { runtime } = useRuntimeSession()
+    return React.useMemo(
+      () => ({
         ...action,
         run: (...args: never[]) =>
-          published(action.run(...args), runtime, `${definition.name}.${name}`),
-      }
-    },
-  }
-}
+          published(action.run(...args), runtime, `${contract.name}.${name}`),
+      }),
+      [action, runtime, name],
+    )
+  },
+})
 /** App-bound hooks are created once at module scope. */
 export function createReflex<A extends App>(app: A): ReflexBinding<A> {
+  return createBinding(app)
+}
+export function createBinding<A extends App>(
+  app: A,
+  useHostSelection?: Selection,
+): ReflexBinding<A> {
   const host = appHost(app)
   // biome-ignore lint/correctness/noComponentHookFactories: Explicit app binding factory, called once at module scope.
   const useSession = () => useBoundSession(host)
@@ -249,36 +265,42 @@ export function createReflex<A extends App>(app: A): ReflexBinding<A> {
     if (!definition) {
       throw new Error(`${contract.name} is not a screen of app '${app.name}'`)
     }
+    if (
+      definition["~reflex"].contract !== undefined &&
+      definition["~reflex"].contract !== contract &&
+      "~reflex" in contract
+    ) {
+      throw new Error(
+        `Pass the contract \`${contract.name}\` from screens.ts, not its implementation`,
+      )
+    }
     if (!matchesContract(definition, contract)) {
       throw new Error(`Screen "${contract.name}" must use the app's registered contract`)
     }
     return definition
   }
-  // biome-ignore lint/correctness/noComponentHookFactories: Explicit app binding factory, called once at module scope.
-  const useScreenStatus = (contract: { name: string }) => {
+  const select =
+    useHostSelection ?? ((contract, suspense) => useSelectedNode(resolve(contract), suspense))
+  // biome-ignore lint/correctness/noComponentHookFactories: Explicit module-scope binding factory.
+  const useSelection: Selection = (contract, suspense) => {
     useSession()
-    const selected = useSelectedNode(resolve(contract), false)
-    const view = usePublishedView(selected.node)
-    if (selected.snapshot?.status === "error") {
-      return {
-        status: "error",
-        state: null,
-        actions: null,
-        error: selected.snapshot.error,
-        retry: async () => {
-          await selected.lease?.retry()
-        },
-      }
-    }
-    return view
+    return select(contract, suspense)
   }
-  // biome-ignore lint/correctness/noComponentHookFactories: Explicit app binding factory, called once at module scope.
-  const useScreen = (contract: { name: string }) => {
+  // biome-ignore lint/correctness/noComponentHookFactories: Explicit module-scope binding factory.
+  const useServiceStatus = (definition: Definition) => {
     useSession()
-    const { node } = useSelectedNode(resolve(contract), true)
-    return usePublishedView(node)
+    if (services.get(definition.name) !== definition) {
+      throw new Error(`${definition.name} is not a service of app '${app.name}'`)
+    }
+    return usePublishedView(useNodeHandle(definition))
   }
   return {
+    withApp: (next: A) => {
+      if (definitionIdentity(appHost(next)) !== definitionIdentity(host)) {
+        throw new Error(`Provider app must be a withScenarios variant of '${app.name}'`)
+      }
+      return createBinding(next, useHostSelection)
+    },
     useSession,
     // biome-ignore lint/correctness/noComponentHookFactories: Explicit app binding factory, called once at module scope.
     Provider: ({
@@ -296,23 +318,19 @@ export function createReflex<A extends App>(app: A): ReflexBinding<A> {
       )
       return <SessionProvider {...props} host={target} bridge={ownedBridge} />
     },
-    useScreen,
-    useScreenStatus,
-    useScreenSuspense: useScreen,
+    useScreen: (contract: { name: string }) => useView(useSelection(contract, true)),
+    useScreenStatus: (contract: { name: string }) => useView(useSelection(contract, false)),
+    useServiceStatus,
     useService: (definition: Definition) => {
       useSession()
       if (services.get(definition.name) !== definition) {
         throw new Error(`${definition.name} is not a service of app '${app.name}'`)
       }
-      return usePublishedView(useNodeHandle(definition))
+      return usePublishedView(useSelectedNode(definition, true, null).node)
     },
-    from: (definition: Definition) => {
-      if (screens.get(definition.name) !== definition) {
-        throw new Error(
-          `from requires the registered definition of ${definition.name} in app '${app.name}'`,
-        )
-      }
-      return featureBinding(definition, useSession, resolve, useScreen, useScreenStatus)
+    from: (contract: { name: string }) => {
+      resolve(contract)
+      return featureBinding(contract, useSelection)
     },
   } as unknown as ReflexBinding<A>
 }

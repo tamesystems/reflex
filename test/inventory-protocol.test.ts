@@ -8,9 +8,9 @@ const app = inventoryDefinition[APP_HOST_ADAPTER]
 import { QUANTITY_MAX } from "../examples/inventory/src/domain.ts"
 
 import { InventoryFixture } from "../examples/inventory/src/fixtures.ts"
-import { InventoryList } from "../examples/inventory/src/features/inventory-list.ts"
-import { InventoryDetail } from "../examples/inventory/src/features/inventory-detail.ts"
-import { Settings } from "../examples/inventory/src/features/settings.ts"
+import { InventoryListLive as InventoryList } from "../examples/inventory/src/features/inventory-list.ts"
+import { InventoryDetailLive as InventoryDetail } from "../examples/inventory/src/features/inventory-detail.ts"
+import { SettingsLive as Settings } from "../examples/inventory/src/features/settings.ts"
 
 const pool = createTestAppPool()
 afterEach(pool.disposeAll)
@@ -334,7 +334,7 @@ test("a route without params refuses junk from a deep link", async () => {
 
 test("the shared real-services behavior journey passes with guarded headless fixtures", async () => {
   const { servicesJourney } = await import("../examples/inventory/journeys/services.ts")
-  const { authoredApp } = await import("../examples/inventory/src/scenarios.ts")
+  const { default: authoredApp } = await import("../examples/inventory/src/scenarios.ts")
   await using session = await import("@reflex/test").then(({ createTestApp }) =>
     createTestApp(authoredApp),
   )

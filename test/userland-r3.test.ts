@@ -204,7 +204,11 @@ test("store error transforms are checked, published and narrowed", async () => {
     store: () => ({ getState: () => 0, subscribe: () => () => {} }),
     project: (s) => s,
     actions: (action) => ({
-      Reject: action({ error: Failure, handler: (_, { fail }) => fail("try again") }),
+      Reject: action({
+        error: Failure,
+        projectError: (error) => error.message,
+        handler: (_, { fail }) => fail({ _tag: "Rejected", message: "try again" }),
+      }),
       Parsed: action({
         input: standardInput(z.string().transform(Number)),
         handler: (value) => {
@@ -218,7 +222,7 @@ test("store error transforms are checked, published and narrowed", async () => {
   try {
     expect(await node.actions.Reject()).toMatchObject({
       status: "domain-error",
-      error: { tag: "Rejected", data: { _tag: "Rejected", message: "try again" } },
+      error: { tag: "Failure", data: "try again" },
     })
   } finally {
     node.dispose()

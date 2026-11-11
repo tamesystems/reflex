@@ -1,5 +1,6 @@
 export { createReflex } from "./binding.tsx"
 export type {
+  ActionView,
   NodeView,
   ActionViews,
   ReadyNodeView,

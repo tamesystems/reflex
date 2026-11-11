@@ -1,7 +1,7 @@
 import { Settings } from "../screens.ts"
 import * as Schema from "effect/Schema"
 import * as Effect from "effect/Effect"
-import { LOW_STOCK_THRESHOLD_MAX, SettingsStore } from "../domain.ts"
+import { ApiError, LOW_STOCK_THRESHOLD_MAX, SettingsStore } from "../domain.ts"
 
 export const SettingsLive = Settings.implement({
   onFocus: ({ state }) =>
@@ -12,6 +12,7 @@ export const SettingsLive = Settings.implement({
     }),
   actions: (action) => ({
     RaiseLowStockThreshold: action.when("ready")({
+      error: ApiError,
       available: (state) =>
         state.lowStockThreshold < LOW_STOCK_THRESHOLD_MAX ? true : "Threshold is at its maximum",
       handler: (_, { state }) =>
@@ -24,6 +25,7 @@ export const SettingsLive = Settings.implement({
         }),
     }),
     SetLowStockThreshold: action.when("ready")({
+      error: ApiError,
       input: Schema.Struct({
         threshold: Schema.Int.check(
           Schema.isBetween({ minimum: 0, maximum: LOW_STOCK_THRESHOLD_MAX }),
@@ -38,5 +40,3 @@ export const SettingsLive = Settings.implement({
     }),
   }),
 })
-
-export { SettingsLive as Settings }

@@ -1,14 +1,13 @@
+import { createMemorySettings } from "./settings-store.ts"
 import { defineFixture } from "@reflex/effect"
 import type * as Duration from "effect/Duration"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
-import * as Redacted from "effect/Redacted"
 import * as Schema from "effect/Schema"
-import { ApiError, InventoryApi, type Product, SettingsStore } from "./domain.ts"
+import { ApiError, InventoryApi, type Product } from "./domain.ts"
 
 /** Journeys look at the last few saves. Keeping more only costs copying. */
 const SAVED_HISTORY_MAX = 32
-const LOW_STOCK_THRESHOLD_DEFAULT = 10
 
 const FixtureState = Schema.Struct({
   saved: Schema.Array(Schema.Struct({ productId: Schema.String, quantity: Schema.Int })),
@@ -36,7 +35,7 @@ export const seedProducts: ReadonlyArray<Product> = [
 
 export interface ScenarioOptions {
   readonly products: ReadonlyArray<Product>
-  readonly saveDelay?: Duration.Input
+  readonly saveDelay?: Duration.Input | undefined
 }
 export const fixtureApi = (options: ScenarioOptions) =>
   Layer.effect(
@@ -78,16 +77,4 @@ export const fixtureApi = (options: ScenarioOptions) =>
     }),
   )
 
-export const fixtureSettings = Layer.sync(SettingsStore, () => {
-  let lowStockThreshold = LOW_STOCK_THRESHOLD_DEFAULT
-  return SettingsStore.of({
-    load: Effect.sync(() => ({
-      lowStockThreshold,
-      apiToken: Redacted.make("secret-fixture-token"),
-    })),
-    setLowStockThreshold: (value) =>
-      Effect.sync(() => {
-        lowStockThreshold = value
-      }),
-  })
-})
+export const fixtureSettings = createMemorySettings("secret-fixture-token")

@@ -67,15 +67,13 @@ export type Services<A> = A extends { services: infer V }
     : never
 export type Scenarios<A extends JourneyApp> = A["scenarioNames"][number]
 export type DefaultScenario<A extends JourneyApp> = A["defaultScenario"] & Scenarios<A>
+type DefaultFixtures<A> =
+  Extract<Meta<A>, { fixtures: unknown }> extends { fixtures: infer F } ? F : never
 type Fixtures<A extends JourneyApp, K extends Scenarios<A>> = K extends keyof A["scenarios"]
   ? A["scenarios"][K] extends { fixtures: readonly (infer F)[] }
     ? F
-    : A extends { readonly fixtures: infer F }
-      ? F
-      : never
-  : A extends { readonly fixtures: infer F }
-    ? F
-    : never
+    : DefaultFixtures<A>
+  : DefaultFixtures<A>
 type CommonFixtures<
   A extends JourneyApp,
   K extends Scenarios<A>,

@@ -20,7 +20,7 @@ const expo = createReflexExpo(app, {
   InventoryDetail: "/[productId]",
   Settings: "/settings",
 })
-// @case link-required | Type '{ to: typeof InventoryDetail; }' is not assignable to type 'IntrinsicAttributes & ((({ to: typeof InventoryList; children?: ReactNode; replace?: boolean; className?: string; } & { params?: never; }) | ({ ...; } & { ...; }) | ({ ...; } & { ...; })) & Omit<...>)'.
+// @case link-required | Type '{ to: typeof InventoryDetail; }' is not assignable to type
 const missing = <web.Link to={InventoryDetail} />
 // @case link-name | Type 'string' is not assignable to type 'typeof InventoryList | typeof InventoryDetail | typeof Settings'.
 const named = <web.Link to="InventoryDetail" params={{ productId: "p" }} />

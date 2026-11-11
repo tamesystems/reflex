@@ -1,6 +1,14 @@
 import type { ComponentType, ReactNode, ReactElement, ComponentProps } from "react"
 import type * as M from "./model"
 import type { Bridge, BackgroundReporter } from "./live"
+export type ActionView<F> = F extends (...args: infer I) => Promise<infer O>
+  ? {
+      run(...args: I): Promise<O>
+      readonly available: boolean
+      readonly pending: boolean
+      readonly reason: string | null
+    }
+  : never
 export type { NodeView, ReadyNodeView, ActionViews } from "./model"
 export interface SessionControls<A extends M.AnyApp> {
   readonly scenario: string
@@ -28,7 +36,6 @@ export interface ReflexBinding<A extends M.AnyApp, Table = M.DefinitionMap<A["sc
   }>
   useScreen: DiagnosticHook<A, Table, true>
   useScreenStatus: DiagnosticHook<A, Table, false>
-  useScreenSuspense: DiagnosticHook<A, Table, true>
   useService<D extends { readonly name: string }>(
     definition: D & M.Member<NoInfer<D>, A["services"], A["name"], "service">,
   ): M.NodeView<D>

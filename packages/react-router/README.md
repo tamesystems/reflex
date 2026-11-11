@@ -28,3 +28,8 @@ Core-owned React Router projection remains deferred (ADR 0018).
 
 Use `routeCodec` from `@reflex/react-router/advanced` for custom path grammar. A codec supplies path, decode and encode; it owns array
 policy and encoding. Ordinary registrations retain the literal placeholder checks.
+
+Route registration requires exactly the app's screen keys and rejects duplicate ordinary paths.
+Each route's `errorElement` supplies its complete failure UI. When omitted, the documented
+default displays the error and a Retry button that evicts the failed lease and resets the boundary.
+Pass `developmentBridge` from `@reflex/live/vite` as the Provider's `bridge` value; no alias is needed.

@@ -8,7 +8,8 @@
     ".": "./src/index.ts",
     "./internal": "./src/internal.ts",
     "./dev": "./src/dev.ts",
-    "./advanced": "./src/advanced.ts"
+    "./advanced": "./src/advanced.ts",
+    "./testing": "./src/testing.tsx"
   },
   "dependencies": {
     "@reflex/effect": "workspace:*",

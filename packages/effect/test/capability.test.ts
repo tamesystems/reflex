@@ -169,7 +169,7 @@ test("exploration finds a crash", async () => {
       Boom: action({ handler: () => Effect.die(new Error("boom")) }),
     }),
   })
-  const result = await explore(appFor(OnlyCrash, { n: 0 }), { runCount: 1, stepCount: 3 })
+  const result = await explore(appFor(OnlyCrash, { n: 0 }), { runCount: 1, steps: 3 })
   expect(result.failure?.message).toContain("Boom crashed")
   expect(result.failure?.steps.length).toBe(1)
 })
@@ -206,7 +206,7 @@ test("exploring finds work a step set off that crashed in the background", async
     }),
     scenarios: { default: { layer: Layer.empty } },
   })
-  const result = await explore(host, { runCount: 5, stepCount: 5 })
+  const result = await explore(host, { runCount: 5, steps: 5 })
   expect(result.failure?.message).toContain("focus failed")
   expect(result.failure?.steps.length).toBeGreaterThan(0)
 })
@@ -232,7 +232,7 @@ test("a crash on starting is found even with nothing to do afterwards", async ()
     ),
     scenarios: { default: { layer: Layer.empty } },
   })
-  const result = await explore(host, { runCount: 1, stepCount: 3 })
+  const result = await explore(host, { runCount: 1, steps: 3 })
   expect(result.failure?.message).toContain("focus failed")
 })
 

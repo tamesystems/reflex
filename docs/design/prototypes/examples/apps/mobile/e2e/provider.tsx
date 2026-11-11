@@ -1,28 +1,23 @@
-import type { ReactNode } from "react"
-import * as Layer from "effect/Layer"
-import {
-  fixtureApi,
-  fixtureSettings,
-  InventoryFixture,
-  seedProducts,
-} from "@reflex/example-inventory/fixtures.ts"
-import app from "../src/app.ts"
-import { testScenarios } from "@reflex/example-inventory/scenarios.ts"
-import { Provider } from "../src/routes.ts"
+import { developmentBridge } from "@reflex/expo/dev"
+import { reflex } from "../src/routes.ts"
+import { useState, type ReactNode } from "react"
+import { Text } from "react-native"
+import { testHost, instrumentedApp, E2EBridge } from "./instrumentation.tsx"
 
-const e2e = {
-  e2e: {
-    layer: Layer.merge(fixtureApi({ products: seedProducts }), fixtureSettings),
-    fixtures: [InventoryFixture],
-  },
-}
-const instrumented = app.withScenarios(
-  { ...testScenarios, ...e2e },
-  { defaultScenario: "e2e", fixtures: [InventoryFixture] },
-)
-export function AppProvider({ children }: { children: ReactNode }) {
+const { Provider } = reflex.withApp(instrumentedApp)
+
+export const AppProvider = ({ children }: { readonly children: ReactNode }) => {
+  const [scenario, setScenario] = useState<(typeof testHost.scenarioNames)[number]>(
+    __DEV__ && process.env.EXPO_PUBLIC_INVENTORY_API ? "device-services" : testHost.defaultScenario,
+  )
   return (
-    <Provider app={instrumented} fallback={null} bridge="development">
+    <Provider
+      app={instrumentedApp}
+      scenario={scenario}
+      bridge={developmentBridge}
+      fallback={<Text>Starting…</Text>}
+    >
+      <E2EBridge setScenario={setScenario} />
       {children}
     </Provider>
   )

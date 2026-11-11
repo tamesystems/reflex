@@ -12,19 +12,20 @@ placeholder checks share React Router's implementation; generated Expo Href type
 validate registered pathnames. The author root imports no Effect.
 
 ```tsx partial: app and Stack come from the host
+import { developmentBridge } from "@reflex/expo/dev"
 import { createReflexExpo } from "@reflex/expo"
 const { Provider, useScreen, useScreenStatus, Link, href } = createReflexExpo(app, {
   InventoryList: "/",
   InventoryDetail: "/inventory/[productId]",
   Settings: "/settings",
 })
-;<Provider bridge="development">
+;<Provider bridge={developmentBridge}>
   <Stack />
 </Provider>
 ```
 
-Provider includes the core Navigation projection and owns bridge lifetime. Metro aliases
-`@reflex/live/dev` to the Effect-free `@reflex/expo/dev` implementation. That helper gates
+Provider includes the core Navigation projection and owns bridge lifetime. Pass the
+Effect-free `developmentBridge` from `@reflex/expo/dev` directly, without Metro aliases. It gates
 the setting read and dialler behind **DEV**. Put a Suspense boundary in each screen
 using useScreen; useScreenStatus instead exposes pending/error/retry and acquires at
 commit. Effect and store screens use the same consumer definitions. Store screens
@@ -61,3 +62,8 @@ See [development.md](../../docs/development.md) for browser, live and Hermes che
 
 Registration requires URL string codecs, total registrations, unique mappings and
 matching placeholders. Projection mapping remains behind an internal symbol.
+
+`from(Contract)` uses the same route-aware selection for views, selectors and actions.
+`reflex.withApp(variant)` retains the projection when selecting test scenarios.
+E2E-only instrumentation can import `useTesting` from `@reflex/expo/testing` to observe
+the active runtime, stack reader and shown-token reader. Keep that entry out of production imports.

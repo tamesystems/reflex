@@ -44,7 +44,7 @@ run; raw stores independently retained by the app stay application-owned.
 `createReflex`, `createReflexRouter` and `createReflexExpo` bind one app at module scope.
 The bound Provider owns sessions and development bridge lifetime. `useScreen` suspends;
 `useScreenStatus` exposes pending/error/retry and acquires only at commit.
-`from(Definition)` narrows repeated selector/action hooks independently of app size.
+`from(Contract)` narrows repeated selector/action hooks independently of app size.
 `useService` handles ambient definitions. `withScenarios` preserves app identity.
 Session controls reject stale generations after reset.
 
@@ -122,6 +122,27 @@ per additional hook; instantiations were 561,961 / 1,189,761 / 2,865,361. Timing
 on the machine; instantiation counts are the stable root gate. Maintainer commands and
 current measurements belong in [development.md](../development.md), not scratch reports.
 
+## Review fix-up
+
+The bounded review pass follows the implementation deviations in the spec. Store override
+pairs carry a private brand and remain correlated over unions. Transformed store errors
+require a public encoder. Descriptor collections reflect runtime arrays; fixture and layer
+phantoms move behind the author symbol. App arguments validate layers and fixture roles.
+Store and Effect scenario extensions reject collisions, retain defaults and accept fixture
+options without changing the default. Routes require exact keys and distinct ordinary paths.
+
+from accepts contracts and shares each host's selection across all hook variants. Services
+have the same suspending/status pair as screens; the redundant Suspense alias is removed.
+ActionView is exported and unchanged action controls retain reference identity. Journeys
+have one action map and explore uses inputs/invariants/steps. React Router honors a supplied
+errorElement; its documented default owns retry only when none is supplied.
+
+Development bridges are explicit Bridge values imported from @reflex/expo/dev or
+@reflex/live/vite, without host aliases. The legacy string stub warns. withApp preserves
+identity and Expo projection when binding test variants. A public E2E-only Expo testing hook
+replaces imports of internal instrumentation. Examples use a real offline inventory service,
+shared memory settings and typed storage errors; type-only tests live outside app src.
+
 ## Consequences and retained internals
 
 The ordinary API follows one definition into UI and journeys without hand-written
@@ -146,16 +167,16 @@ files, comments and shared types) are:
 
 | Package      | Source lines |
 | ------------ | -----------: |
-| effect       |        3,780 |
-| runtime      |        4,013 |
-| react        |        1,115 |
-| expo         |          766 |
-| react-router |          290 |
-| live         |          833 |
-| test         |        1,595 |
-| Total        |       12,392 |
+| effect       |        3,822 |
+| runtime      |        4,027 |
+| react        |        1,204 |
+| expo         |          777 |
+| react-router |          298 |
+| live         |          838 |
+| test         |        1,564 |
+| Total        |       12,530 |
 
-The gap from the original allocation is 4,792 lines. It is retained implementation
+The gap from the original allocation is 4,930 lines. It is retained implementation
 cost, not a claim that the planning target was met.
 
 Mounting, state publication/encoding/redaction, scoped navigation, registry bounds,
@@ -188,17 +209,24 @@ Maintainer validation commands and performance budgets live in development.md.
 
 ## Acceptance evidence
 
-On Bun 1.4.4 / TypeScript 5.9.3, `bun run check` passes: 688 tests, four
-platform/device skips, all three typechecks, documentation examples and all 16 export
-sets. Root instantiations are 495,490 under the unchanged 505,132 ceiling.
+The fix-up passes `bun run check` on Bun 1.4.4 / TypeScript 5.9.3: 691 tests,
+four platform/device skips, all three typechecks, documentation snippets, 97 real-package
+negative diagnostic locations/messages, real/example/spec drift and all 16 export-name sets.
+Root instantiations are 504,864 under the unchanged 505,132 ceiling.
 
-Mobile e2e, e2e:plain, e2e:live and e2e:services and web e2e pass, including
-production bridge/token/instrumentation exclusions, the plain Effect-free graph, and
-HTTP/AsyncStorage persistence across reset/reload. The live run required one retry
-after Metro's selected port was occupied. Frozen installs at root/mobile/web pass.
-Both declaration and real-package harness performance modes pass: maximum added-screen
-costs are 5.8 and 6.8 ms, respectively, below 25 ms; additional narrowed hooks cost at
-most 0.067 and 0.089 ms, below 5 ms. Timings are local measurements, not new budgets.
+Mobile e2e, e2e:plain, e2e:live and e2e:services and web e2e pass, including production
+bridge/token/instrumentation exclusions, the plain Effect-free graph and HTTP/AsyncStorage
+persistence across reset/reload. All three frozen installs pass. The protocol package and
+CLI/MCP implementations are unchanged; the CLI example assertion now expects the real
+offline inventory's seeded products.
 
-The protocol package and CLI/MCP implementation are unchanged by this final cleanup.
-The six Ubuntu/Windows check, browser and Hermes jobs remain the remote landing gate.
+Review item 11 is incomplete. Export names are gated, but two-way declaration type parity
+is not: the independent reference declarations still differ from implementation types
+(including Bridge's callable shape and the authored descriptor metadata). The real-package
+scale run also fails the new instantiation gate: 43,517.9 instantiations per added screen
+against 12,000, although additional narrowed hooks remain within their 2,000 budget.
+Wall-clock measurements are informational. The root budget remains enforced by check;
+the scale mode remains an explicit `--real --performance` command. Do not treat this
+partial fix-up as satisfying the full item 11 acceptance contract.
+
+The six Ubuntu/Windows check, browser and Hermes jobs remain the remote gate.

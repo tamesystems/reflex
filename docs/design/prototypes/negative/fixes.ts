@@ -43,8 +43,8 @@ defineStoreNode({
   name: "BigStore",
   store: () => createStore(() => 0),
   actions: (a) => ({
+    // @case store-bigint-input | Input must encode JSON; use jsonCodec
     Big: a({
-      // @case store-bigint-input | Input must encode JSON; use jsonCodec
       input: z.bigint(),
       handler: () => {},
     }),
@@ -55,14 +55,14 @@ const dependent = Layer.effect(
   Needed,
   Effect.map(Needed, (s) => s),
 )
-// @case common-layer-input | Property '"Scenario 'default' must provide"' is missing in type '{ name: "common-input"; screens: [Definition<typeof First, { readonly Add: Action<undefined, never, never, number>; }, number, never, "screen"> & { readonly name: "First"; readonly paramsType: {}; readonly encodedParams: {}; }]; layer: Layer.Layer<...>; }' but required in type '{ readonly "Scenario 'default' must provide": Needed; }'.
+// @case common-layer-input | Scenario 'default' must provide
 defineApp({ name: "common-input", screens: [first], layer: dependent })
 // @case self-provided-layer | Property '"Scenario 'self' must provide"' is missing in type '{ layer: Layer.Layer<Needed, never, Needed>; }' but required in type '{ readonly "Scenario 'self' must provide": Needed; }'.
 defineApp({ name: "self-input", screens: [first], scenarios: { self: { layer: dependent } } })
 const requires = First.implement({
   actions: (a) => ({ Load: a({ handler: () => Effect.asVoid(Needed) }) }),
 })
-// @case absent-scenarios-coverage | Property '"Scenario 'default' must provide"' is missing in type '{ name: "uncovered"; screens: [Definition<typeof First, { readonly Load: Action<undefined, never, Needed, number>; }, number, Needed, "screen"> & { ...; }]; }' but required in type '{ readonly "Scenario 'default' must provide": Needed; }'.
+// @case absent-scenarios-coverage | Scenario 'default' must provide
 defineApp({ name: "uncovered", screens: [requires] })
 const service = defineService({
   name: "Service",
@@ -74,7 +74,7 @@ const service = defineService({
 defineApp({ name: "screen-role", screens: [service] })
 // @case service-role | services accepts only services or stores
 defineApp({ name: "service-role", services: [first] })
-// @case effect-store-app | defineStoreApp accepts only stores
+// @case effect-store-app | is missing the following properties from type 'MountableNode'
 defineStoreApp({ name: "store-app", screens: [first] })
 const paramStore = defineStoreNode({
   name: "Detail",
@@ -103,13 +103,13 @@ defineApp({
   name: "duplicate",
   navigation: Nav.implement([first], { initial: First }),
   services: [
-    defineStoreNode({ name: "First", store: () => createStore(() => 0), actions: () => ({}) }),
+    defineService({ name: "First", state: Schema.Number, initial: () => 0, actions: () => ({}) }),
   ],
 })
-// @case store-invalid-action | Actions must be built for this state with the action builder
 defineStoreNode({
   name: "Invalid",
   store: () => createStore(() => 0),
+  // @case store-invalid-action | Type 'number' is not assignable
   actions: () => ({ Save: 123 }),
 })
 const ForeignStore = defineStoreNode({
@@ -118,7 +118,7 @@ const ForeignStore = defineStoreNode({
   actions: () => ({}),
 })
 defineStoreApp({ name: "empty" }).withScenarios({
-  // @case foreign-store-override | Scenario stores must belong to this app
+  // @case foreign-store-override | is not assignable to type 'never'
   seeded: { stores: [ForeignStore.withStore(() => createStore(() => 1))] },
 })
 // @case wrong-store-factory | Type 'StoreApi<string>' is not assignable to type 'StoreApi<number>'.

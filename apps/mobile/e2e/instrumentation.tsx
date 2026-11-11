@@ -1,19 +1,21 @@
-import { useRuntime } from "@reflex/react/internal"
-import { useCoreStack, useShownToken } from "@reflex/expo/internal"
+import { useTesting } from "@reflex/expo/testing"
 import production from "../src/app.ts"
 import { testScenarios } from "@reflex/example-inventory/scenarios.ts"
 import { InventoryFixture } from "@reflex/example-inventory/fixtures.ts"
-import { APP_HOST_ADAPTER } from "@reflex/runtime/internal"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
 import { fixtureApi, fixtureSettings, seedProducts } from "@reflex/example-inventory/fixtures.ts"
 import { router } from "expo-router"
 import { useEffect } from "react"
 
+declare global {
+  var __failLateStart: () => void
+}
+
 export const LATE_FAILURE_SCENARIO = "e2e-late-failure"
 const lateFailure = Layer.effectDiscard(
   Effect.callback<never>((resume) => {
-    globals.__failLateStart = () => resume(Effect.die(new Error("late failure")))
+    globalThis.__failLateStart = () => resume(Effect.die(new Error("late failure")))
   }),
 )
 const app = production.withScenarios(testScenarios, {
@@ -29,21 +31,18 @@ const failureScenarios = {
   },
 } as const
 export const instrumentedApp = app.withScenarios(failureScenarios)
-export const testHost = instrumentedApp[APP_HOST_ADAPTER]
+export const testHost = instrumentedApp
 
 /** Lets the browser journey read and steer the core. Absent from other builds. */
-const globals = globalThis as Record<string, unknown>
 
 export const E2EBridge = ({
   setScenario,
 }: {
   readonly setScenario: (scenario: (typeof testHost.scenarioNames)[number]) => void
 }) => {
-  const runtime = useRuntime()
-  const stack = useCoreStack()
-  const shownToken = useShownToken()
+  const { runtime, stack, shownToken } = useTesting()
   useEffect(() => {
-    globals.__reflex = { router, runtime, stack, setScenario, shownToken }
+    Object.assign(globalThis, { __reflex: { router, runtime, stack, setScenario, shownToken } })
   }, [runtime, stack, setScenario, shownToken])
   return null
 }

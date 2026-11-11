@@ -31,9 +31,6 @@ export interface JourneyNode<D, M> {
   /** Read this exact node again, rather than retaining a captured snapshot. */
   state(): Promise<MatchedState<InferState<D>, M>>
   readonly actions: JourneyActions<InferActions<D>>
-  readonly expectFailure: CheckedActions<InferActions<D>, "domain-error">
-  readonly expectRefusal: CheckedActions<InferActions<D>, "refused">
-  readonly allowCancellation: CheckedActions<InferActions<D>, "completed" | "cancelled">
   readonly id: NodeId
 }
 
@@ -50,7 +47,6 @@ export type JourneyActions<A> = {
   readonly [K in keyof A]: A[K] extends (...args: infer Args) => Promise<infer O>
     ? ((...args: Args) => Promise<Extract<O, { status: "completed" }>>) & {
         run(...args: Args): Promise<import("./public-types.ts").ActionOutcome<PublishedError<O>>>
-        expectCompleted(...args: Args): Promise<void>
         expectError(
           ...args: Args
         ): Promise<{ readonly status: "error"; readonly error: PublishedError<O> }>

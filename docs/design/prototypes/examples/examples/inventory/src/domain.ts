@@ -36,7 +36,7 @@ export class SettingsStore extends Context.Service<
       readonly lowStockThreshold: number
       readonly apiToken: Redacted.Redacted<string>
     }>
-    setLowStockThreshold(value: number): Effect.Effect<void>
+    setLowStockThreshold(value: number): Effect.Effect<void, ApiError>
   }
 >()("inventory/SettingsStore") {}
 

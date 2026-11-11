@@ -100,15 +100,15 @@ export type ExplorationInputs<H> = {
 }
 export type ExploreOptions<H, K extends ScenarioName<H> = ScenarioName<H>> = Omit<
   WalkOptions,
-  "scenario" | "knownInputs" | "invariant" | "journeyInvariant"
+  "scenario" | "knownInputs" | "invariant" | "journeyInvariant" | "stepCount"
 > & {
   readonly scenario?: K
-  readonly invariant?: H extends JourneyApp & { readonly services: unknown }
-    ? (session: JourneyClientFor<H, Extract<K, Scenarios<H>>>) => Promise<void>
-    : (snapshot: InspectResult) => string | undefined
   readonly inputs?: ExplorationInputs<H>
-  readonly knownInputs?: ExplorationInputs<H>
-  readonly invariants?: ExplorationInvariants<H>
+  readonly invariants?:
+    | ExplorationInvariants<H>
+    | (H extends JourneyApp & { readonly services: unknown }
+        ? (session: JourneyClientFor<H, Extract<K, Scenarios<H>>>) => Promise<void>
+        : (snapshot: InspectResult) => string | undefined)
 }
 export const explore = async <
   H extends AppHost | JourneyApp,
@@ -122,11 +122,7 @@ export const explore = async <
   const host = (APP_HOST_ADAPTER in app ? app[APP_HOST_ADAPTER] : app) as AppHost
   const options = walkOptions(app, host, input)
   const runCount = requireCount("runCount", options.runCount ?? RUN_COUNT_DEFAULT, RUN_COUNT_MAX)
-  const stepCount = requireCount(
-    "stepCount",
-    options.steps ?? options.stepCount ?? STEP_COUNT_DEFAULT,
-    STEP_COUNT_MAX,
-  )
+  const stepCount = requireCount("steps", options.steps ?? STEP_COUNT_DEFAULT, STEP_COUNT_MAX)
   const firstSeed = requireSeed(options.seed ?? SEED_DEFAULT, runCount)
   const covered = new Set<string>()
   let actionsDispatched = 0
@@ -158,7 +154,7 @@ const walkOptions = <H extends AppHost | JourneyApp, K extends ScenarioName<H>>(
 ): WalkOptions => {
   const options: WalkOptions = {
     ...input,
-    knownInputs: Object.entries(input.inputs ?? input.knownInputs ?? {}).map(([key, inputs]) => {
+    knownInputs: Object.entries(input.inputs ?? {}).map(([key, inputs]) => {
       const nodes = ("nodes" in app ? app.nodes : {}) as Record<string, ConsumerDefinition>
       const definition = nodes[key]
       if (definition === undefined) {
@@ -178,20 +174,20 @@ const walkOptions = <H extends AppHost | JourneyApp, K extends ScenarioName<H>>(
       }
     }),
     journeyInvariant: async (session) => {
-      if ("services" in app && input.invariant !== undefined) {
+      if ("services" in app && typeof input.invariants === "function") {
         const journey = bindAppJourney(
           app as AuthorApp,
           session as unknown as AnySession,
           input.scenario ?? host.defaultScenario,
         )
-        await (input.invariant as (session: unknown) => Promise<void>)(journey)
+        await (input.invariants as (session: unknown) => Promise<void>)(journey)
       }
     },
     invariant: (snapshot) => {
       const failure =
-        "services" in app
+        "services" in app || typeof input.invariants !== "function"
           ? undefined
-          : (input.invariant as ((snapshot: InspectResult) => string | undefined) | undefined)?.(
+          : (input.invariants as ((snapshot: InspectResult) => string | undefined) | undefined)?.(
               snapshot,
             )
       if (failure !== undefined) {

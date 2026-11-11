@@ -1,3 +1,5 @@
+import type { NodeView, ReadyNodeView, ActionView } from "@reflex/react"
+import type { ActionOutcome } from "@reflex/runtime"
 import type { ReactNode } from "react"
 import { Pressable, StyleSheet, Text, View } from "react-native"
 
@@ -17,11 +19,7 @@ export function Action({
   run,
 }: {
   title: string
-  available: boolean
-  pending: boolean
-  reason: string | null
-  run: () => Promise<unknown>
-}) {
+} & ActionView<() => Promise<ActionOutcome<unknown>>>) {
   return (
     <Pressable
       accessibilityRole="button"
@@ -34,4 +32,29 @@ export function Action({
       <Text>{title}</Text>
     </Pressable>
   )
+}
+
+/** Share the opt-in status rendering across screens; domain loading stays in each view. */
+export function ScreenStatus<D>({
+  view,
+  children,
+}: {
+  view: NodeView<D>
+  children: (view: ReadyNodeView<D>) => ReactNode
+}) {
+  if (view.status === "pending") {
+    return null
+  }
+  if (view.status === "error") {
+    return (
+      <Text
+        onPress={() => {
+          void view.retry()
+        }}
+      >
+        {view.error.message} — Retry
+      </Text>
+    )
+  }
+  return children(view)
 }

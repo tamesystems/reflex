@@ -59,9 +59,15 @@ export const createStoreHost = <
   const defaults: Record<string, StoreScenario<N & RN>> = { default: {} }
   const scenarios = definition.scenarios ?? (defaults as S)
   const names = Object.keys(scenarios) as (keyof S & string)[]
+  if (names.length > 1 && definition.defaultScenario === undefined) {
+    throw new Error("Apps with multiple scenarios require defaultScenario")
+  }
   const defaultScenario = definition.defaultScenario ?? names[0]
   if (defaultScenario === undefined) {
     throw new Error("A store app needs at least one scenario")
+  }
+  if (!Object.hasOwn(scenarios, defaultScenario)) {
+    throw new Error(`withScenarios defaultScenario must exist: ${defaultScenario}`)
   }
   const host: Omit<StoreApp<N & RN, S, RN>, "withScenarios"> = {
     [DEFINITION_IDENTITY]: {},

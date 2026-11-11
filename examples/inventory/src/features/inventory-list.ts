@@ -37,5 +37,3 @@ export const InventoryListLive = InventoryList.implement({
     }),
   }),
 })
-
-export { InventoryListLive as InventoryList }

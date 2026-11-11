@@ -1,7 +1,10 @@
-import { Provider } from "../src/routes.ts"
+import { developmentBridge } from "@reflex/expo/dev"
+import { reflex } from "../src/routes.ts"
 import { useState, type ReactNode } from "react"
 import { Text } from "react-native"
 import { testHost, instrumentedApp, E2EBridge } from "./instrumentation.tsx"
+
+const { Provider } = reflex.withApp(instrumentedApp)
 
 export const AppProvider = ({ children }: { readonly children: ReactNode }) => {
   const [scenario, setScenario] = useState<(typeof testHost.scenarioNames)[number]>(
@@ -11,7 +14,7 @@ export const AppProvider = ({ children }: { readonly children: ReactNode }) => {
     <Provider
       app={instrumentedApp}
       scenario={scenario}
-      bridge="development"
+      bridge={developmentBridge}
       fallback={<Text>Starting…</Text>}
     >
       <E2EBridge setScenario={setScenario} />

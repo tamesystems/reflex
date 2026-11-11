@@ -5,7 +5,7 @@ import { createStore } from "zustand/vanilla"
 import { z } from "zod"
 import { createReflexExpo } from "@reflex/expo"
 import { InventoryList, InventoryDetail, type Settings } from "@reflex/example-inventory/screens.ts"
-import app from "./app.ts"
+import app from "../src/app.ts"
 import { routeCodec } from "@reflex/expo/advanced"
 const expo = createReflexExpo(app, {
   InventoryList: "/",

@@ -1,7 +1,7 @@
 import { descriptorFingerprint } from "./descriptor.ts"
 import type { ConsumerDefinition } from "./node-handle.ts"
 import { DEFINITION_IDENTITY, definitionIdentity } from "./definition-identity.ts"
-import { STORE_AUTHOR, type JsonShape } from "./store-node.ts"
+import { STORE_AUTHOR, STORE_OVERRIDE, type JsonShape } from "./store-node.ts"
 import {
   createStoreHost,
   type MountableNode,
@@ -42,11 +42,15 @@ type Unique<D extends readonly unknown[], Seen = never> = D extends readonly [
     ? { readonly "Duplicate definition name": never }
     : Unique<R, Seen | H["name"]>
   : unknown
+type IsUnion<T, C = T> = T extends C ? ([C] extends [T] ? false : true) : never
 type Named<D extends readonly MountableNode[]> = { readonly [N in D[number] as N["name"]]: N }
-type Override<D extends AuthorStore> = {
-  readonly definition: D
-  readonly factory: (...args: never[]) => ReturnType<D["createStore"]>
-}
+type Override<D extends AuthorStore> = D extends unknown
+  ? {
+      readonly [STORE_OVERRIDE]: true
+      readonly definition: D
+      readonly factory: (...args: never[]) => ReturnType<D["createStore"]>
+    }
+  : never
 type Scenario<D extends AuthorStore> = {
   readonly description?: string
   readonly stores?: readonly Override<D>[]
@@ -63,9 +67,11 @@ export type AuthorStoreApp<
   >,
   "withScenarios"
 > & {
-  readonly services: V[number]
+  readonly services: V
   withScenarios<const E extends Record<string, Scenario<D[number] | V[number]>>>(
-    extra: E,
+    extra: E & {
+      [K in keyof E & keyof S]: { readonly "Scenario already exists; choose a new name": never }
+    },
     options?: { readonly defaultScenario?: keyof (S & E) & string },
   ): AuthorStoreApp<D, V, S & E>
 }
@@ -83,7 +89,8 @@ export function defineStoreApp<
     readonly services?: V & Checks<V> & Ambient<V>
     readonly scenarios?: S
     readonly defaultScenario?: keyof S & string
-  } & Unique<readonly [...D, ...V]>,
+  } & Unique<readonly [...D, ...V]> &
+    (IsUnion<keyof S> extends true ? { readonly defaultScenario: keyof S & string } : unknown),
 ): AuthorStoreApp<D, V, S>
 export function defineStoreApp(spec: AuthorSpec): unknown {
   return authorApp(spec)
@@ -117,6 +124,9 @@ function authorApp(spec: AuthorSpec): unknown {
     Object.entries(scenarios).map(([name, scenario]) => {
       const stores = Object.fromEntries(
         (scenario.stores ?? []).map((override) => {
+          if (override[STORE_OVERRIDE] !== true) {
+            throw new Error("Scenario stores must use Definition.withStore(factory)")
+          }
           if (!definitions.includes(override.definition)) {
             throw new Error("Scenario stores must belong to this app")
           }
@@ -143,14 +153,20 @@ function authorApp(spec: AuthorSpec): unknown {
     withScenarios: (
       extra: Record<string, Scenario<AuthorStore>>,
       options?: { defaultScenario?: string },
-    ) =>
-      Object.assign(
+    ) => {
+      for (const name of Object.keys(extra)) {
+        if (Object.hasOwn(scenarios, name)) {
+          throw new Error(`Scenario ${name} already exists; choose a new name`)
+        }
+      }
+      return Object.assign(
         authorApp({
           ...spec,
           scenarios: { ...scenarios, ...extra },
           defaultScenario: options?.defaultScenario ?? app.defaultScenario,
         }) as object,
         { [DEFINITION_IDENTITY]: definitionIdentity(app) },
-      ),
+      )
+    },
   })
 }

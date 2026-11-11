@@ -1,10 +1,10 @@
-import { reflex } from "./routes.ts"
+import app from "../src/app.ts"
+import { reflex } from "../src/routes.ts"
 const { useSession, useService, Provider } = reflex
 import type { ComponentProps } from "react"
-import { InventoryDetailLive } from "@reflex/example-inventory/features/inventory-detail.ts"
 
 export const useContracts = () => {
-  const feature = reflex.from(InventoryDetailLive)
+  const feature = reflex.from(InventoryDetailScreen)
   const controls = useSession()
   void controls.reset("production")
   // @ts-expect-error Session resets derive scenario names from the app value.
@@ -35,7 +35,7 @@ import {
   InventoryList as InventoryListScreen,
 } from "@reflex/example-inventory/screens.ts"
 import { InventoryFixture } from "@reflex/example-inventory/fixtures.ts"
-import { useScreen } from "./routes.ts"
+import { useScreen } from "../src/routes.ts"
 // @ts-expect-error A bound URL registration is total over the app's screens.
 createReflexExpo(app, { InventoryList: "/" })
 export const useBoundContracts = () => {

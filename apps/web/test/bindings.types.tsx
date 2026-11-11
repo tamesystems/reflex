@@ -2,8 +2,8 @@ import { Screen, defineApp, defineService, defineFixture } from "@reflex/effect"
 import { createReflex } from "@reflex/react"
 import { createReflexRouter } from "@reflex/react-router"
 import * as Schema from "effect/Schema"
-import { Detail, type List } from "./app.ts"
-import { reflex } from "./routes.ts"
+import { Detail, type List } from "../src/app.ts"
+import { reflex } from "../src/routes.ts"
 
 class Count extends Screen("Count", {
   state: Schema.Struct({ count: Schema.Number }),
@@ -61,7 +61,7 @@ export function useTypedBindings() {
     const state: number = service.state
     void state
   }
-  const feature = core.from(CountLive)
+  const feature = core.from(Count)
   const selected: number = feature.useNodeState((state) => state.count)
   void selected
   void feature.useAction("Set").run("3")
@@ -129,3 +129,27 @@ void missing
 void named
 void uncorrelated
 void hostProps
+
+// @ts-expect-error from accepts contracts rather than selected implementations.
+core.from(CountLive)
+export const useInvalidImplementation = () => {
+  // @ts-expect-error useScreen accepts contracts rather than selected implementations.
+  core.useScreen(CountLive)
+}
+// @ts-expect-error from checks membership just like useScreen.
+core.from(Detail)
+// @ts-expect-error Registration keys must be exact, including widened input objects.
+createReflexRouter(app, { Count: "/:count", Typo: "/ignored" })
+const FirstPath = Screen.define("FirstPath", {
+  state: Schema.Number,
+  initial: () => 0,
+  actions: () => ({}),
+})
+const SecondPath = Screen.define("SecondPath", {
+  state: Schema.Number,
+  initial: () => 0,
+  actions: () => ({}),
+})
+const pathApp = defineApp({ name: "paths", screens: [FirstPath, SecondPath] })
+// @ts-expect-error Ordinary literal paths must be unique.
+createReflexRouter(pathApp, { FirstPath: "/", SecondPath: "/" })

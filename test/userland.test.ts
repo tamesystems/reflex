@@ -8,8 +8,8 @@ import { createStore } from "zustand/vanilla"
 import inventoryDefinition from "../examples/inventory/src/scenarios.ts"
 const app = inventoryDefinition
 const screens = inventoryDefinition[APP_HOST_ADAPTER].screens
-import { InventoryList } from "../examples/inventory/src/features/inventory-list.ts"
-import { InventoryDetail } from "../examples/inventory/src/features/inventory-detail.ts"
+import { InventoryListLive as InventoryList } from "../examples/inventory/src/features/inventory-list.ts"
+import { InventoryDetailLive as InventoryDetail } from "../examples/inventory/src/features/inventory-detail.ts"
 import { QUANTITY_MAX } from "../examples/inventory/src/domain.ts"
 import { ROUTE_MAPPING, SCREEN_BINDING } from "../packages/expo/src/route-token.ts"
 import { expoRoutes } from "../packages/expo/src/routes-effect.ts"

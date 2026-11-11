@@ -344,6 +344,7 @@ type JsonCheck<T, Message extends string> = [T] extends [undefined]
       : { readonly [K in Message]: never }
 
 export const STORE_AUTHOR = Symbol("reflex/store-author")
+export const STORE_OVERRIDE = Symbol("reflex/store-override")
 
 const asInput = <T, I>(input: StoreInput<T, I> | StandardValidator<T, I>): StoreInput<T, I> =>
   "jsonSchema" in input ? input : standardInput(input)
@@ -384,24 +385,20 @@ export interface StoreActionBuilder<S, T extends Store<S> = Store<S>> {
       readonly projectError: (error: StoreErrorOutput<NoInfer<E>>) => W
     },
   ): BuiltStoreAction<S, T, I, E, W>
-  // Compatibility: pre-A2 transformed failures were supplied in the validator's input form.
   <
     const I extends StoreInputOption = undefined,
     const E extends StoreErrorOption = undefined,
     O = void,
   >(
-    action: StoreActionSpec<
-      S,
-      T,
-      I,
-      E,
-      E extends StandardValidator<unknown, infer In> ? NoInfer<In> : never,
-      O
-    > & {
+    action: StoreActionSpec<S, T, I, E, StoreErrorOutput<NoInfer<E>>, O> & {
       readonly projectError?: never
-    } & (E extends undefined
-        ? unknown
-        : JsonCheck<StoreErrorOutput<E>, "Store error must be JSON; provide projectError">),
+    } & (E extends StandardValidator<infer Out, infer In>
+        ? [Out] extends [In]
+          ? [In] extends [Out]
+            ? JsonCheck<Out, "Store error must be JSON; provide projectError">
+            : { readonly "Transformed store errors require projectError": never }
+          : { readonly "Transformed store errors require projectError": never }
+        : unknown),
   ): BuiltStoreAction<S, T, I, E, StoreErrorOutput<E>>
 }
 
@@ -486,12 +483,13 @@ export const defineStoreNode = <
       params: undefined as DecodedStoreInput<Params>,
       encodedParams: undefined as EncodedStoreInput<Params>,
     },
-    withStore(
+    withStore<D>(
+      this: D,
       factory: (
         params: Params extends undefined ? Record<never, never> : DecodedStoreInput<Params>,
       ) => T,
     ) {
-      return { definition: this, factory }
+      return { [STORE_OVERRIDE]: true as const, definition: this, factory }
     },
     [DEFINITION_IDENTITY]: identity,
     "~reflex": {

@@ -156,6 +156,7 @@ runtime + live ◄── examples/live-counter
   `import.meta.env.DEV` (Vite) in UI builds.
 - `navigation` imports only protocol/runtime; no framework, router, Effect or platform.
 - `expo` adapts navigation ports to Expo Router and owns route-param integration.
+  Its public testing entry wraps sibling session/router instrumentation for E2E-only imports.
 - `react-router` imports only `@reflex/react`, React Router, live/session and runtime/protocol;
   it reports focus in existing routes and owns no navigation. It uses React to memoize URL bindings and delegates node/session ownership to
   `@reflex/react`; no Expo, React Native or Effect.

@@ -52,7 +52,7 @@ return <button disabled={!view.actions.Add.available} onClick={() => view.action
 
 `useScreen(Contract)` suspends and throws build failures to the nearest boundary.
 `useScreenStatus(Contract)` returns pending/error/ready, with `retry()` on errors, and
-acquires after commit. `useScreenSuspense` is the specified alias for `useScreen`.
+acquires after commit. `useScreen` is the specified alias for `useScreen`.
 The ready view has state and per-action `run`, `available`, `reason` and `pending`.
 `from(Definition)` captures one implementation for narrow `useNodeState(selector)` and
 `useAction(name)` hooks. No consumer generics or JSON parsing are needed.
@@ -130,8 +130,8 @@ are defects. All published messages must be safe.
 ```ts partial: app, Detail and the test runner's pool are application definitions
 const session = await pool.open(app, { scenario: "default" })
 const detail = await session.focused(Detail, { _tag: "editing" })
-await detail.actions.SetQuantity.expectCompleted({ quantity: 12 })
-await detail.actions.Save.expectCompleted()
+await detail.actions.SetQuantity({ quantity: 12 })
+await detail.actions.Save()
 ```
 
 `createTestApp(app)` returns an async-disposable journey, and `createTestAppPool()`
@@ -141,14 +141,14 @@ array members. `service`, `fixture` and `node` acquire ambient nodes; `open` mou
 host-owned screen. Store open params use encoded validator inputs because arbitrary
 Standard Schema transforms have no inverse; Effect params use decoded codec values.
 
-Ordinary action calls and `expectCompleted` assert completion. `run` exposes the outcome;
+Ordinary action calls assert completion. `run` exposes the outcome;
 `expectError` and `expectRefusal` assert deliberate alternatives. `start` returns an
 operation handle for cancellation and completion. Reset returns a new typed scenario
 client and revokes old handles while the original disposer retains ownership.
 `connectJourney(app, { target: "device", scenario })` runs the same story through the
 CLI's authenticated endpoint. `JourneyClientFor<typeof app>` derives story types.
 
-`explore(app, { knownInputs: { Detail: { SetQuantity: [{ quantity: 12 }] } }, invariant })`
+`explore(app, { inputs: { Detail: { SetQuantity: [{ quantity: 12 }] } }, invariants })`
 walks available actions with bounded replay/shrinking. An async invariant reads typed
 journey state. Protocol probes use `session.raw` or `createProtocolTestSession` from
 `@reflex/test/advanced`; custom transports use `createJourneyClient` from that entry.

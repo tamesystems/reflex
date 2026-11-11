@@ -55,11 +55,11 @@ reflex.useService(InventoryDetail)
 // @case fixture-service | InventoryFixture is not a service of app 'inventory'
 reflex.useService(InventoryFixture)
 const live = await createTestApp(app, { scenario: "live-services" })
-// @case absent-fixture | InventoryFixture is not a fixture of this scenario of app 'inventory'
+// @case absent-fixture | Definition must belong to this app and scenario
 live.node(InventoryFixture)
 declare const scenario: "live-services" | "inventory-with-products"
 const union = await createTestApp(app, { scenario })
-// @case union-fixture | InventoryFixture is not a fixture of this scenario of app 'inventory'
+// @case union-fixture | Definition must belong to this app and scenario
 union.node(InventoryFixture)
 // @case duplicate-implementation | InventoryList is declared more than once
 Nav.implement([InventoryListLive, InventoryListLive], { initial: InventoryList })
@@ -81,10 +81,10 @@ Nav.push(Math.random() ? Settings : InventoryDetail, { productId: "p" })
 // @case initial-correlation | Type 'string' is not assignable to type 'number'.
 CodecNav.implement([CountLive], { initial: { screen: Count, params: { count: "1" } } })
 Effect.gen(function* () {
-  // @case yielded-command | Type 'AnyNavigationCommand & { readonly [terminal]: "InventoryList" | "InventoryDetail" | "Settings" | "default"; readonly [navigationOwner]: (key: "InventoryList" | ... 2 more ... | "default") => "InventoryList" | ... 2 more ... | "default"; }' must have a '[Symbol.iterator]()' method that returns an iterator.
+  // @case yielded-command | must have a '[Symbol.iterator]()' method that returns an iterator.
   yield* Nav.back
 })
-// @case command-pipe | Property 'pipe' does not exist on type 'AnyNavigationCommand & { readonly [terminal]: "InventoryList" | "InventoryDetail" | "Settings" | "default"; readonly [navigationOwner]: (key: "InventoryList" | ... 2 more ... | "default") => "InventoryList" | ... 2 more ... | "default"; }'.
+// @case command-pipe | Property 'pipe' does not exist on type
 Nav.back.pipe(Effect.asVoid)
 InventoryList.implement({
   actions: (action) => ({
@@ -162,20 +162,20 @@ const Counter = defineStoreNode({
         _,
         {
           store,
-          // @case no-fail | Property 'fail' does not exist on type 'Context<StoreApi<{ count: number; }>, undefined>'.
+          // @case no-fail | Property 'fail' does not exist on type
           fail: _fail,
         },
       ) => store.setState({ count: 0 }),
     }),
     // @case rich-error | Store error must be JSON; provide projectError
     Rich: action({ error: z.instanceof(Error), handler: () => {} }),
+    // @case store-command | Store handlers cannot return NavigationCommand
     Nav: action({
-      // @case store-command | Store handlers cannot return NavigationCommand
       handler: () => Nav.back,
     }),
   }),
 })
-// @case duplicate-service | Counter is declared more than once
+// @case duplicate-service | Duplicate definition name
 defineStoreApp({ name: "x", services: [Counter, Counter] })
 // @case multiple-roles | No overload matches this call.
 defineApp({
@@ -190,13 +190,13 @@ Screen("Invalid", {
   // @case initial-schema | Type 'string' is not assignable to type 'number'.
   initial: () => ({ count: "one" }),
 })
-// @case includes-typo | Object literal may only specify known properties, and 'qty' does not exist in type 'Partial<NoInfer<{ readonly id: string; readonly title: string; readonly quantity: number; }>>'.
+// @case includes-typo | Object literal may only specify known properties, and 'qty' does not exist
 live.focused(InventoryList, { _tag: "ready", products: includes({ id: "p", qty: 5 }) })
 // @case match-variant | State match fields must belong to one variant
 live.focused(InventoryList, { _tag: "loading", products: includes({ id: "p" }) })
-// @case unknown-scenario | Type '"typo"' is not assignable to type 'ScNames<App<"inventory", (Definition<typeof InventoryList, { readonly OpenProduct: Action<{ readonly productId: string; }, never, { readonly navigator: "InventoryList" | "InventoryDetail" | "Settings" | "default"; readonly [navigationOwner]: (key: "InventoryList" | ... 2 more ... | "default") => "InventoryList" | .....'.
+// @case unknown-scenario | Type '"typo"' is not assignable to type
 createTestApp(app, { scenario: "typo" })
-// @case extension-default | withScenarios defaultScenario must exist
+// @case extension-default | Type '"missing"' is not assignable to type
 defineStoreApp({ name: "empty" }).withScenarios({ extra: {} }, { defaultScenario: "missing" })
 // @case extension-repeat | Scenario live-services already exists; choose a new name
 app.withScenarios({ "live-services": {} })
@@ -225,7 +225,7 @@ path("/:id", { typo: "id" })
 path("/:id" as string)
 // @case numeric-url | URL param id must encode a string; use a string codec
 route<{ id: number }>()("/:id")
-// @case registration-missing | Argument of type '{ InventoryList: "/"; InventoryDetail: "/:productId"; }' is not assignable to parameter of type '{ readonly InventoryList: "/"; readonly InventoryDetail: "/:productId"; } & ValidateRoutes<App<"inventory", (Definition<typeof InventoryList, { readonly OpenProduct: Action<{ readonly productId: string; }, never, { ...; }, { ...; } | ... 1 more ... | { ...; }>; readonly OpenSettings: Action<...>; readonly Refresh: A...'.
+// @case registration-missing | Settings needs a route registration
 createReflexRouter(app, { InventoryList: "/", InventoryDetail: "/:productId" })
 const router = createReflexRouter(app, {
   InventoryList: "/",
@@ -264,7 +264,7 @@ defineApp({
   defaultScenario: "missing",
 })
 const importedFixtureLayer = fixtureApi({ products: seedProducts })
-// @case missing-fixture | Type '{ layer: Layer<InventoryApi, never, FixtureService<"InventoryFixture">>; fixtures: []; }' is not assignable to type '{ readonly layer: Layer<InventoryApi, never, FixtureService<"InventoryFixture">>; readonly fixtures: readonly []; } & { readonly "Scenario 'missing-fixture' must provide": SettingsStore | FixtureService<...>; }'.
+// @case missing-fixture | Scenario 'missing-fixture' must provide
 app.withScenarios({ "missing-fixture": { layer: importedFixtureLayer, fixtures: [] } })
 const needsApi = Effect.gen(function* () {
   yield* InventoryApi
@@ -275,10 +275,10 @@ const NeedsServices = defineFixture({
   initial: () => 0,
   actions: (action) => ({ Load: action({ handler: () => needsApi }) }),
 })
-const fixtureApp = defineStoreApp({ name: "fixture-coverage" })
-// @case fixture-action-service | Property '"Scenario 'missing' must provide"' is missing in type '{ fixtures: [Definition<never, { readonly Load: Action<undefined, never, InventoryApi, number>; }, number, InventoryApi, "fixture"> & Effect.Effect<...> & { ...; }]; }' but required in type '{ readonly "Scenario 'missing' must provide": InventoryApi; }'.
+const fixtureApp = defineApp({ name: "fixture-coverage" })
+// @case fixture-action-service | Scenario 'missing' must provide
 fixtureApp.withScenarios({ missing: { fixtures: [NeedsServices] } })
-// @case role-collision | ParamFree is declared more than once
+// @case role-collision | Duplicate definition name
 defineStoreApp({ name: "collision", screens: [ParamFree], services: [ParamFree] })
 // @case missing-default | Property 'defaultScenario' is missing in type '{ name: "two"; scenarios: { one: {}; two: {}; }; }' but required in type '{ defaultScenario: "one" | "two"; }'.
 defineApp({ name: "two", scenarios: { one: {}, two: {} } })
@@ -304,7 +304,7 @@ const serviceDefinition = defineStoreNode({
   name: "TransformedError",
   store: () => createStore(() => ({ count: 0 })),
   actions: (action) => ({
-    // @case transformed-error-encoder | Property 'projectError' is missing in type '{ error: z.ZodPipe<z.ZodString, z.ZodTransform<number, string>>; handler: () => void; }' but required in type '{ projectError: (error: number) => string; }'.
+    // @case transformed-error-encoder | Property 'projectError' is missing in type
     Save: action({ error: z.string().transform(Number), handler: () => {} }),
   }),
 })

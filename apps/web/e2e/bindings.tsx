@@ -61,7 +61,7 @@ const reflex = createReflexRouter(app, {
 if (reflex.href(Probe, { id: "a b" }) !== "/a%20b") {
   throw new Error("routeCodec encoding failed")
 }
-const feature = reflex.from(ProbeLive)
+const feature = reflex.from(Probe)
 let selectionRenders = 0
 const Selected = React.memo(function Selected() {
   const count = feature.useNodeState((s) => s.count)

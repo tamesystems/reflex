@@ -90,9 +90,9 @@ The `bun test` suites, by kind:
   time, with ports faked (timers, the router, sockets).
 - **Journeys**, through `@reflex/test`: `createTestApp(app)` drives an app through the real
   protocol, serialized to JSON as a remote peer would see it. `advanceTime` moves virtual
-  time; nothing sleeps. `explore(host, { invariant })` walks random available actions with
+  time; nothing sleeps. `explore(host, { invariants })` walks random available actions with
   schema-generated inputs and shrinks a failure, within a budget of 200 replays. Give it
-  `knownInputs: { Node: { Action: [input] } }` for values a schema cannot know, such as ids that must exist: otherwise
+  `inputs: { Node: { Action: [input] } }` for values a schema cannot know, such as ids that must exist: otherwise
   a walk only ever finds the "not found" path.
 - **Process**, in `packages/cli/test`: each command is a real `reflex` process against a
   real daemon.
@@ -276,7 +276,7 @@ runs out of process. This journey runs in the Ubuntu and Windows browser CI jobs
 ## Userland API checks
 
 Judge changes against [api-principles.md](api-principles.md). `test/userland.types.ts`,
-`packages/live/test/typed-actions.types.ts` and `apps/mobile/src/api.types.ts` are typechecked
+`packages/live/test/typed-actions.types.ts` and `apps/mobile/test/api.types.ts` are typechecked
 negative/positive inference tests, not executable journeys. Keep expected errors on the
 actual invalid call. Record root diagnostics before and after with
 `bunx tsc --noEmit -p tsconfig.json --extendedDiagnostics`; all three typechecks still run
@@ -313,14 +313,17 @@ Root B2 diagnostics were 460,241 instantiations, 533,064 K memory, 1.66 s check 
 2.51 s total. These are historical local measurements; rerun the commands above for
 current results.
 
-The Provider selects `@reflex/live/dev`; Vite aliases it to `@reflex/live/vite`, and
-Metro aliases it to `@reflex/expo/dev`. Normal production imports exclude E2E modules.
+Pass `developmentBridge` from `@reflex/live/vite` or `@reflex/expo/dev` directly as
+the Provider's `bridge` value. Neither example needs a development bridge alias. Normal production imports exclude E2E modules.
 Run mobile e2e, e2e:plain, e2e:live, e2e:services and web e2e after binding changes.
 These cover production bridge/token/instrumentation exclusion and the plain Metro
 graph's Effect exclusion as well as browser behavior. All three frozen installs are
 required before checking a checkout.
 
-Current local root diagnostics: 495,490 instantiations under the unchanged 505,132
-ceiling. Both reference-declaration and real-package harness modes pass their screen
-and hook gates. Timing depends on scheduler load; rerun the commands above for local
-measurements. ADR 0020 records final source counts and retained internal shrink work.
+Current local root diagnostics after the review fix-up: 504,864 instantiations under the
+unchanged 505,132 ceiling. All 97 real-package negatives assert diagnostic locations and
+message fragments, and extracted examples are diffed against the real app files.
+The scale mode gates at 12,000 instantiations per added screen and 2,000 per extra narrowed
+hook; timings are informational. It currently fails the screen gate (43,517.9). Two-way
+reference declaration type parity also remains unfinished; the ordinary check currently
+compares export names. See ADR 0020 for this explicitly incomplete part of review item 11.

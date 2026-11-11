@@ -8,9 +8,6 @@ const original = config.resolver.resolveRequest
 const provider = process.env.REFLEX_E2E === "1" ? "e2e/provider.tsx" : "provider.tsx"
 /** @type {NonNullable<typeof original>} */
 const resolveRequest = (context, name, platform) => {
-  if (name === "@reflex/live/dev") {
-    return { type: "sourceFile", filePath: path.join(root, "packages/expo/src/dev.ts") }
-  }
   if (name === "@inventory-provider") {
     return { type: "sourceFile", filePath: path.join(__dirname, provider) }
   }

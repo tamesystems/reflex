@@ -78,5 +78,3 @@ export const InventoryDetailLive = InventoryDetail.implement({
     }),
   }),
 })
-
-export { InventoryDetailLive as InventoryDetail }

@@ -6,12 +6,12 @@ import {
   useIsFocused,
   type Href,
 } from "expo-router"
-import { createReflex } from "@reflex/react"
 import {
+  createBinding,
+  validateRouteKeys,
   screenDefinitions,
   matchesContract,
   useSelectedNode,
-  usePublishedView,
   useRuntimeSession,
   findRouteNode,
   type App,
@@ -68,9 +68,9 @@ export function createReflexExpo<A extends App, const R>(
   app: A,
   registration: R & ValidateRoutes<A, NoInfer<R>> & HostRoutes<NoInfer<R>>,
 ): ExpoBinding<A> {
-  const bound = createReflex(app)
   const { definitions, entryFor, resolve, encoded, href, routes } = createRoutes(app, registration)
   const useView = createView(definitions, entryFor, resolve, encoded)
+  const bound = createBinding(app, useView)
   // biome-ignore lint/correctness/noComponentHookFactories: Explicit module-scope binding factory.
   const Projection = () => {
     const session = useRuntimeSession()
@@ -80,6 +80,10 @@ export function createReflexExpo<A extends App, const R>(
   }
   return {
     ...bound,
+    withApp: (next: A) => {
+      bound.withApp(next)
+      return createReflexExpo(next, registration)
+    },
     // biome-ignore lint/correctness/noComponentHookFactories: Explicit module-scope binding factory.
     Provider: ({ children, ...props }: React.ComponentProps<typeof bound.Provider>) => (
       <bound.Provider {...props}>
@@ -87,9 +91,6 @@ export function createReflexExpo<A extends App, const R>(
         {children}
       </bound.Provider>
     ),
-    useScreen: (contract: { name: string }) => useView(contract, true),
-    useScreenSuspense: (contract: { name: string }) => useView(contract, true),
-    useScreenStatus: (contract: { name: string }) => useView(contract, false),
     href,
     // biome-ignore lint/correctness/noComponentHookFactories: Explicit module-scope binding factory.
     Link: ({ to, params, ...props }: { to: { name: string }; params?: Record<string, string> }) => (
@@ -101,6 +102,10 @@ export function createReflexExpo<A extends App, const R>(
 function createRoutes(app: App, registration: unknown) {
   const definitions = screenDefinitions(app)
   const entries = registration as Record<string, Registration>
+  validateRouteKeys(
+    definitions.map((d) => d.name),
+    entries,
+  )
   const entryFor = (name: string) => {
     const entry = entries[name]
     if (entry === undefined) {
@@ -110,6 +115,15 @@ function createRoutes(app: App, registration: unknown) {
   }
   const resolve = (contract: { name: string }) => {
     const definition = definitions.find((d) => d.name === contract.name)
+    if (
+      definition?.["~reflex"].contract !== undefined &&
+      definition["~reflex"].contract !== contract &&
+      "~reflex" in contract
+    ) {
+      throw new Error(
+        `Pass the contract \`${contract.name}\` from screens.ts, not its implementation`,
+      )
+    }
     if (!definition || !matchesContract(definition, contract)) {
       throw new Error(`Screen "${contract.name}" must use the app's registered contract`)
     }
@@ -221,19 +235,7 @@ function createView(
       definition,
       focused,
     )
-    const view = usePublishedView(selected.node)
-    if (selected.snapshot?.status === "error") {
-      return {
-        status: "error",
-        state: null,
-        actions: null,
-        error: selected.snapshot.error,
-        retry: async () => {
-          await selected.lease?.retry()
-        },
-      }
-    }
-    return view
+    return selected
   }
   return useView
 }

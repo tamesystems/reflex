@@ -103,24 +103,6 @@ const assertOutcome = (
     )
   }
 }
-const checked = <A>(actions: A, mode: "success" | "failure" | "refusal" | "cancellation"): A =>
-  Object.fromEntries(
-    Object.entries(
-      actions as Record<string, (...args: unknown[]) => Promise<ActionOutcome<unknown>>>,
-    ).map(([name, run]) => [
-      name,
-      async (...args: unknown[]) => {
-        const outcome = await run(...args)
-        assertOutcome(
-          name,
-          outcome,
-          mode === "failure" ? "domain-error" : mode === "refusal" ? "refused" : "completed",
-          mode === "cancellation",
-        )
-        return outcome
-      },
-    ]),
-  ) as A
 
 const operationHandle = (
   name: string,
@@ -207,9 +189,6 @@ const bindJourneyActions = <C extends ConsumerDefinition>(
             }
             return outcome
           },
-          expectCompleted: async (...args: unknown[]) => {
-            await call(...args)
-          },
           expectError: async (...args: unknown[]) => {
             const outcome = await run(...args)
             assertOutcome(name, outcome, "domain-error")
@@ -280,12 +259,6 @@ const bindSnapshot = <C extends ConsumerDefinition, M>(
       return state as MatchedState<InferState<C>, M>
     },
     actions: journeyActions,
-    expectFailure: checked(actions, "failure") as CheckedActions<InferActions<C>, "domain-error">,
-    expectRefusal: checked(actions, "refusal") as CheckedActions<InferActions<C>, "refused">,
-    allowCancellation: checked(actions, "cancellation") as CheckedActions<
-      InferActions<C>,
-      "completed" | "cancelled"
-    >,
   }
 }
 

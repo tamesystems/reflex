@@ -33,5 +33,5 @@
       "@reflex/react/internal": ["../../packages/react/src/internal.ts"]
     }
   },
-  "include": ["src", "vite.config.ts", "../../packages/react-router/src", "e2e"]
+  "include": ["src", "vite.config.ts", "../../packages/react-router/src", "e2e", "test"]
 }

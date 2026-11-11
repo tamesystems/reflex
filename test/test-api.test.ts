@@ -28,7 +28,7 @@ import * as Effect from "effect/Effect"
 import * as Duration from "effect/Duration"
 import * as Schema from "effect/Schema"
 import app from "../examples/inventory/src/app.ts"
-import { authoredApp as inventory } from "../examples/inventory/src/scenarios.ts"
+import inventory from "../examples/inventory/src/scenarios.ts"
 import { InventoryList, InventoryDetail } from "../examples/inventory/src/screens.ts"
 import { InventoryFixture } from "../examples/inventory/src/fixtures.ts"
 import { APP_HOST_ADAPTER } from "@reflex/runtime/internal"
@@ -208,7 +208,7 @@ test("keyed exploration checks ambient services and accepts the compiled journey
     steps: 1,
     runCount: 1,
     inputs: { Counter: { Set: [2] } },
-    invariant: async (session) => {
+    invariants: async (session) => {
       expect(await (await session.node(Counter)).state()).toHaveProperty("count")
     },
   })

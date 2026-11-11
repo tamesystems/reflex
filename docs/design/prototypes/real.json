@@ -32,7 +32,9 @@
       "@reflex/test": ["../../../packages/test/src/index.ts"],
       "@reflex/test/advanced": ["../../../packages/test/src/advanced.ts"],
       "@reflex/react/internal": ["../../../packages/react/src/internal.ts"],
-      "@reflex/expo/advanced": ["../../../packages/expo/src/advanced.ts"]
+      "@reflex/expo/advanced": ["../../../packages/expo/src/advanced.ts"],
+      "@reflex/expo/testing": ["../../../packages/expo/src/testing.tsx"],
+      "@reflex/live/vite": ["../../../packages/live/src/vite.ts"]
     }
   },
   "include": [
@@ -41,18 +43,19 @@
     "examples/examples/live-counter/src/**/*.ts",
     "examples/apps/web/src/**/*.ts",
     "examples/apps/web/src/**/*.tsx",
-    "../../../apps/web/src/api.types.ts",
-    "../../../apps/web/src/bindings.types.tsx",
+    "../../../apps/web/test/api.types.ts",
+    "../../../apps/web/test/bindings.types.tsx",
     "examples/apps/mobile/**/*.ts",
     "examples/apps/mobile/**/*.tsx",
-    "../../../apps/mobile/src/api.types.ts",
-    "../../../apps/mobile/src/expo.types.tsx",
+    "../../../apps/mobile/test/api.types.ts",
+    "../../../apps/mobile/test/expo.types.tsx",
     "examples/apps/mobile/**/*.js",
     "examples/examples/inventory/test/**/*.ts",
     "examples/examples/inventory/journeys/**/*.ts",
     "../../../packages/test/test/author.types.ts",
     "examples/reset.ts",
     "examples/capabilities.tsx",
-    ".generated/test-plumbing.ts"
+    ".generated/test-plumbing.ts",
+    "type-tests/**/*.ts"
   ]
 }

@@ -2,6 +2,7 @@ import { createReflex } from "@reflex/react"
 import {
   RouteContext,
   RouteRetryProvider,
+  validateRouteKeys,
   screenDefinitions,
   matchesContract,
   useRuntimeSession,
@@ -80,9 +81,12 @@ class ScreenBoundary extends React.Component<
     if (this.state.error === null) {
       return this.props.children
     }
+    if (this.props.fallback !== undefined) {
+      return this.props.fallback
+    }
     return (
       <>
-        {this.props.fallback ?? <p>{this.state.error.message}</p>}
+        <p>{this.state.error.message}</p>
         <button
           type="button"
           onClick={() => {
@@ -153,6 +157,10 @@ const validateRegistration = (
   screens: ReturnType<typeof screenDefinitions>,
   entries: Record<string, Registration>,
 ) => {
+  validateRouteKeys(
+    screens.map((d) => d.name),
+    entries,
+  )
   for (const definition of screens) {
     const entry = entries[definition.name]
     if (entry === undefined) {

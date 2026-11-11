@@ -52,10 +52,10 @@ const quantityNeverNegative = ({ node }: InspectResult) => {
 test("random walks hold the invariants and reach every screen's actions", async () => {
   const result = await explore(app, {
     runCount: 15,
-    stepCount: 25,
+    steps: 25,
     seed: 7,
-    knownInputs,
-    invariant: quantityNeverNegative,
+    inputs: knownInputs,
+    invariants: quantityNeverNegative,
   })
   expect(result.failure).toBeUndefined()
   expect(result.actionsCovered).toEqual(
@@ -77,9 +77,9 @@ test("walks survive virtual time", async () => {
   const result = await explore(app, {
     scenario: "slow-network",
     runCount: 5,
-    stepCount: 15,
+    steps: 15,
     seed: 3,
-    knownInputs,
+    inputs: knownInputs,
   })
   expect(result.failure).toBeUndefined()
 }, 30_000)
@@ -87,9 +87,9 @@ test("walks survive virtual time", async () => {
 test("a violated invariant is reported with a shrunk reproduction", async () => {
   const result = await explore(app, {
     runCount: 20,
-    stepCount: 25,
+    steps: 25,
     seed: 11,
-    invariant: ({ node }) => (node?.name === "Settings" ? "Reached Settings" : undefined),
+    invariants: ({ node }) => (node?.name === "Settings" ? "Reached Settings" : undefined),
   })
   expect(result.failure?.message).toBe("Reached Settings")
   expect(result.failure?.steps.map((step) => step.action).at(-1)).toMatch(/OpenSettings|Navigate/)
@@ -100,9 +100,9 @@ test("shrinking removes a push and its back together, across seeds", async () =>
   for (const seed of [7, 8, 11, 12]) {
     const result = await explore(app, {
       runCount: 20,
-      stepCount: 25,
+      steps: 25,
       seed,
-      invariant: ({ node }) => (node?.name === "Settings" ? "Reached Settings" : undefined),
+      invariants: ({ node }) => (node?.name === "Settings" ? "Reached Settings" : undefined),
     })
     expect(result.failure?.steps.length).toBeLessThanOrEqual(2)
   }
@@ -110,7 +110,7 @@ test("shrinking removes a push and its back together, across seeds", async () =>
 
 test("the run and step counts and the seed are checked", async () => {
   await expect(explore(app, { runCount: 0 })).rejects.toThrow("runCount")
-  await expect(explore(app, { stepCount: 1_001 })).rejects.toThrow("stepCount")
+  await expect(explore(app, { steps: 1_001 })).rejects.toThrow("steps")
   await expect(explore(app, { seed: 1.5 })).rejects.toThrow("seed")
   await expect(explore(app, { seed: Number.MAX_SAFE_INTEGER })).rejects.toThrow("seed")
 })
@@ -119,8 +119,8 @@ test("the invariant is checked before the first step", async () => {
   let checkCount = 0
   const result = await explore(app, {
     runCount: 1,
-    stepCount: 1,
-    invariant: () => {
+    steps: 1,
+    invariants: () => {
       checkCount++
       return checkCount === 1 ? "Bad from the start" : undefined
     },
@@ -132,8 +132,8 @@ test("a null among known inputs is used, not replaced by a generated one", async
   const inputs: Array<unknown> = []
   const result = await explore(hostWithInput(inputs), {
     runCount: 1,
-    stepCount: 3,
-    knownInputs: { Recording: { Go: [null] } },
+    steps: 3,
+    inputs: { Recording: { Go: [null] } },
   })
   expect(result.failure).toBeUndefined()
   expect(inputs.length).toBeGreaterThan(0)
@@ -141,7 +141,7 @@ test("a null among known inputs is used, not replaced by a generated one", async
 })
 
 test("a step that never finishes is a failure with its seed", async () => {
-  const result = await explore(hangingHost, { runCount: 1, stepCount: 1 })
+  const result = await explore(hangingHost, { runCount: 1, steps: 1 })
   expect(result.failure?.message).toContain("did not finish")
   expect(result.failure?.seed).toBe(1)
 }, 15_000)

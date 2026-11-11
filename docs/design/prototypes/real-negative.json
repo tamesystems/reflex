@@ -1,0 +1,4 @@
+{
+  "extends": "./real.json",
+  "include": ["negative/**/*.ts", "negative/**/*.tsx", "examples/globals.d.ts"]
+}

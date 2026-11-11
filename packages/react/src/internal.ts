@@ -2,6 +2,7 @@
 export { useRuntime, useRuntimeSession, useRouteLease } from "./react.tsx"
 export * from "./route-binding.ts"
 export {
+  createBinding,
   RouteContext,
   RouteRetryProvider,
   useRouteRetry,
@@ -12,5 +13,5 @@ export {
   useSelectedNode,
 } from "./binding.tsx"
 export type * from "./binding-types.ts"
-export { routeCodec } from "./routes.ts"
+export { routeCodec, validateRouteKeys } from "./routes.ts"
 export type { RouteCodec, ValidateRoutes, CheckPath } from "./routes.ts"

@@ -15,7 +15,7 @@ again and rechecks the keys/tag that narrowed it. Match timeouts print the last 
 
 The node has one actions map:
 
-- `await node.actions.Save()` and `.Save.expectCompleted()` assert completion.
+- `await node.actions.Save()` asserts completion.
 - `.Save.expectError()` returns `{ status: "error", error }` with declared public data.
 - `.Save.expectRefusal()` returns `{ status: "refused", reason }`.
 - `.Save.run()` returns the public outcome without asserting success.
@@ -43,7 +43,7 @@ The mobile services E2E uses this API without a custom transport.
 `explore` is exported from the package root. `inputs: { Node: { Action: [input] } }` and
 `invariants: { Node: state => messageOrUndefined }` are keyed and typed by the app. It
 checks mounted services as well as focused screens. `steps`, `scenario`, `seed`, and an
-async `invariant(session)` are also supported, as in the compiled spec examples. `knownInputs` supplies values that need application-specific knowledge.
+async `invariants(session)` are also supported, as in the compiled spec examples. `inputs` supplies values that need application-specific knowledge.
 Exploration is bounded and shrinks failing walks.
 Supply known inputs for store actions that cannot generate samples from their schemas.
 

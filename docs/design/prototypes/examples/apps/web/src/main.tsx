@@ -1,3 +1,4 @@
+import { developmentBridge } from "@reflex/live/vite"
 import { Suspense } from "react"
 import { createRoot } from "react-dom/client"
 import { createBrowserRouter, RouterProvider } from "react-router"
@@ -9,7 +10,6 @@ const router = createBrowserRouter(
     List: { Component: ListView },
     Detail: {
       Component: DetailView,
-      loader: async ({ params }) => ({ id: params.id }),
       errorElement: <p>Could not load detail</p>,
     },
   }),
@@ -19,7 +19,7 @@ if (root === null) {
   throw new Error("Missing root element")
 }
 createRoot(root).render(
-  <Provider fallback={null} bridge="development">
+  <Provider fallback={null} bridge={developmentBridge}>
     <Suspense fallback={<p>Loading…</p>}>
       <RouterProvider router={router} />
     </Suspense>

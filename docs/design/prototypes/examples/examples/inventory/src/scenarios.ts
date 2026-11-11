@@ -5,10 +5,7 @@ import { memorySettings } from "./settings-store.ts"
 import { fixtureApi, fixtureSettings, seedProducts, InventoryFixture } from "./fixtures.ts"
 
 const services = (products: typeof seedProducts, saveDelay?: "1 second" | "30 seconds") =>
-  Layer.merge(
-    fixtureApi({ products, ...(saveDelay === undefined ? {} : { saveDelay }) }),
-    fixtureSettings,
-  )
+  Layer.merge(fixtureApi({ products, saveDelay }), fixtureSettings)
 export const testScenarios = {
   "live-services": {
     layer: Layer.merge(httpInventoryApi("http://127.0.0.1:4318"), memorySettings),
@@ -27,6 +24,7 @@ export const testScenarios = {
     virtualTime: true,
   },
 } as const
+
 export default app.withScenarios(testScenarios, {
   defaultScenario: "inventory-with-products",
   fixtures: [InventoryFixture],

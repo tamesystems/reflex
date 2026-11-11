@@ -4,14 +4,20 @@ import * as Effect from "effect/Effect"
 import * as Redacted from "effect/Redacted"
 import * as Schema from "effect/Schema"
 import inventory, { productionServices } from "@reflex/example-inventory"
-import { SettingsStore } from "@reflex/example-inventory/domain.ts"
+import {
+  ApiError,
+  LOW_STOCK_THRESHOLD_MAX,
+  SettingsStore,
+} from "@reflex/example-inventory/domain.ts"
 import { httpInventoryApi } from "@reflex/example-inventory/http-api.ts"
 
 const KEY = "inventory-settings:v1"
 const SETTINGS_BYTES_MAX = 1024
 const SavedSettings = Schema.Struct({
   version: Schema.Literal(1),
-  lowStockThreshold: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1000 })),
+  lowStockThreshold: Schema.Int.check(
+    Schema.isBetween({ minimum: 0, maximum: LOW_STOCK_THRESHOLD_MAX }),
+  ),
 })
 const defaults = { version: 1, lowStockThreshold: 10 } as const
 // No credentials in AsyncStorage or EXPO_PUBLIC variables. Supply real credentials
@@ -21,7 +27,7 @@ const storage = Layer.succeed(
   SettingsStore.of({
     load: Effect.tryPromise({
       try: () => AsyncStorage.getItem(KEY),
-      catch: () => new Error("Settings read failed"),
+      catch: () => new ApiError({ message: "Settings read failed" }),
     }).pipe(
       Effect.flatMap((raw) =>
         raw === null || new TextEncoder().encode(raw).byteLength > SETTINGS_BYTES_MAX
@@ -42,10 +48,10 @@ const storage = Layer.succeed(
         Effect.flatMap((raw) =>
           Effect.tryPromise({
             try: () => AsyncStorage.setItem(KEY, raw),
-            catch: () => new Error("Settings write failed"),
+            catch: () => new ApiError({ message: "Settings write failed" }),
           }),
         ),
-        Effect.orDie,
+        Effect.mapError(() => new ApiError({ message: "Settings write failed" })),
       ),
   }),
 )

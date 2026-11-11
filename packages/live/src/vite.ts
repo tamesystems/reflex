@@ -8,12 +8,12 @@ declare global {
 }
 
 /** Vite erases the complete development branch from production JavaScript. */
-export const developmentBridge = (): Bridge | undefined => {
+export const developmentBridge: Bridge = (controller) => {
   if (import.meta.env.DEV) {
     const setting = import.meta.env.VITE_REFLEX_BRIDGE
     if (setting) {
-      return connectBridge(setting)
+      return connectBridge(setting)(controller)
     }
   }
-  return undefined
+  return () => undefined
 }

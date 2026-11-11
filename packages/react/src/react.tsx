@@ -268,13 +268,16 @@ export const useAction = <
     },
     [node, action],
   )
-  return {
-    run,
-    pending: current.pending > 0,
-    available: verdict === true,
-    reason: verdict === true ? null : verdict,
-    outcome: current.outcome,
-  }
+  return React.useMemo(
+    () => ({
+      run,
+      pending: current.pending > 0,
+      available: verdict === true,
+      reason: verdict === true ? null : verdict,
+      outcome: current.outcome,
+    }),
+    [run, current.pending, current.outcome, verdict],
+  )
 }
 
 /** Resolve a definition mounted by the app, retaining its exact consumer contract. */

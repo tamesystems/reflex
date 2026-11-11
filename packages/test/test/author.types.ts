@@ -1,5 +1,5 @@
 import { createTestApp, createTestAppPool, includes } from "../src/index.ts"
-import { authoredApp as app } from "../../../examples/inventory/src/scenarios.ts"
+import app from "../../../examples/inventory/src/scenarios.ts"
 import { InventoryList, InventoryDetail } from "../../../examples/inventory/src/screens.ts"
 import { InventoryFixture } from "../../../examples/inventory/src/fixtures.ts"
 import { defineStoreApp, defineStoreNode } from "@reflex/runtime"

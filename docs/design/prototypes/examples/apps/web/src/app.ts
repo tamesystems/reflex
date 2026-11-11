@@ -14,7 +14,7 @@ export const List = defineStoreNode({
 export const Detail = defineStoreNode({
   name: "Detail",
   params: z.strictObject({ id: z.string() }),
-  store: ({ id }: { id: string }) => createStore(() => ({ id, count: 0 })),
+  store: ({ id }) => createStore(() => ({ id, count: 0 })),
   actions: (action) => ({
     Increment: action({
       handler: (_, { store }) => store.setState((s) => ({ count: s.count + 1 })),

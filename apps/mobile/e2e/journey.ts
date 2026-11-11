@@ -555,6 +555,7 @@ const runAll = async (): Promise<void> => {
   const browser = await chromium.launch({ channel: "chrome", headless: true })
   try {
     for (const scenario of scenarios) {
+      console.log(`running ${scenario.name}`)
       await scenario(browser)
     }
   } finally {

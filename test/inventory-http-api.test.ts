@@ -11,10 +11,10 @@ import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
 import * as FetchHttpClient from "effect/http/FetchHttpClient"
 import { Nav } from "../examples/inventory/src/navigation.ts"
-import { InventoryList } from "../examples/inventory/src/features/inventory-list.ts"
-import { InventoryDetail } from "../examples/inventory/src/features/inventory-detail.ts"
+import { InventoryListLive as InventoryList } from "../examples/inventory/src/features/inventory-list.ts"
+import { InventoryDetailLive as InventoryDetail } from "../examples/inventory/src/features/inventory-detail.ts"
 import { InventoryList as InventoryListContract } from "../examples/inventory/src/screens.ts"
-import { Settings } from "../examples/inventory/src/features/settings.ts"
+import { SettingsLive as Settings } from "../examples/inventory/src/features/settings.ts"
 const navigation = Nav.implement([InventoryList, InventoryDetail, Settings], {
   initial: InventoryListContract,
 })

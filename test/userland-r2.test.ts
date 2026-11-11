@@ -9,8 +9,8 @@ import { expoRoutes } from "../packages/expo/src/routes-effect.ts"
 import { ROUTE_MAPPING, SCREEN_BINDING } from "../packages/expo/src/route-token.ts"
 import inventoryDefinition from "../examples/inventory/src/scenarios.ts"
 const inventory = inventoryDefinition
-import { InventoryList } from "../examples/inventory/src/features/inventory-list.ts"
-import { InventoryDetail } from "../examples/inventory/src/features/inventory-detail.ts"
+import { InventoryListLive as InventoryList } from "../examples/inventory/src/features/inventory-list.ts"
+import { InventoryDetailLive as InventoryDetail } from "../examples/inventory/src/features/inventory-detail.ts"
 import { InventoryFixture } from "../examples/inventory/src/fixtures.ts"
 
 const pool = createTestAppPool()

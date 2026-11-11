@@ -81,12 +81,33 @@ const identifyHost = (
     descriptorFingerprint: descriptorFingerprint(spec.name, screens, services),
   })
 }
-const buildApp = (spec: Spec): Erased => {
-  const scenarios = spec.scenarios ?? { default: {} }
-  const nav = spec.navigation?.[NAVIGATION]
-  if (nav !== undefined && spec.screens !== undefined) {
+const validateScenario = (
+  scenario: Scenario & { fixtures: readonly AuthorDefinition[] },
+  screens: readonly AuthorDefinition[],
+  services: readonly AuthorDefinition[],
+) => {
+  for (const fixture of scenario.fixtures) {
+    if (fixture[AUTHOR]?.role !== "fixture") {
+      throw new Error("fixtures accepts only fixtures")
+    }
+  }
+  if (scenario.layer !== undefined && !Layer.isLayer(scenario.layer)) {
+    throw new Error("scenario layer must be an Effect Layer")
+  }
+  validateDefinitions([...screens, ...services, ...scenario.fixtures])
+}
+const validateSpec = (spec: Spec) => {
+  if (spec.layer !== undefined && !Layer.isLayer(spec.layer)) {
+    throw new Error("layer must be an Effect Layer")
+  }
+  if (spec.navigation !== undefined && spec.screens !== undefined) {
     throw new Error("Choose navigation or screens, not both")
   }
+}
+const buildApp = (spec: Spec): Erased => {
+  validateSpec(spec)
+  const scenarios = spec.scenarios ?? { default: {} }
+  const nav = spec.navigation?.[NAVIGATION]
   const screens = spec.navigation?.screens ?? spec.screens ?? []
   const services = spec.services ?? []
   for (const definition of screens) {
@@ -116,7 +137,7 @@ const buildApp = (spec: Spec): Erased => {
   )
   const composed = Object.fromEntries(
     Object.entries(normalized).map(([name, scenario]) => {
-      validateDefinitions([...screens, ...services, ...scenario.fixtures])
+      validateScenario(scenario, screens, services)
       const layer = (scenario.layer ?? Layer.empty).pipe(
         Layer.provideMerge(
           (spec.layer ?? Layer.empty).pipe(Layer.provideMerge(fixtureLayer(scenario.fixtures))),

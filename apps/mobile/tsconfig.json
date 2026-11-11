@@ -32,7 +32,8 @@
       "@reflex/live/dev": ["../../packages/live/src/dev.ts"],
       "@reflex/react/internal": ["../../packages/react/src/internal.ts"],
       "@reflex/react-router/advanced": ["../../packages/react-router/src/advanced.ts"],
-      "@reflex/expo/advanced": ["../../packages/expo/src/advanced.ts"]
+      "@reflex/expo/advanced": ["../../packages/expo/src/advanced.ts"],
+      "@reflex/expo/testing": ["../../packages/expo/src/testing.tsx"]
     },
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
@@ -42,5 +43,14 @@
     "useUnknownInCatchVariables": true,
     "verbatimModuleSyntax": true
   },
-  "include": ["app", "src", "e2e/*.ts", "hermes-smoke/*.ts", "plain", "../../packages/react/src"]
+  "include": [
+    "app",
+    "src",
+    "e2e/*.ts",
+    "hermes-smoke/*.ts",
+    "plain",
+    "../../packages/react/src",
+    "test",
+    "e2e/**/*.tsx"
+  ]
 }

@@ -285,6 +285,20 @@ export interface Scenario {
   readonly virtualTime?: boolean
   readonly description?: string
 }
+type FixtureCheck<D> = [D] extends [never]
+  ? unknown
+  : [D] extends [{ readonly [authorTypes]: { readonly role: "fixture" } }]
+    ? unknown
+    : Msg<"fixtures accepts only fixtures">
+export type FixtureChecks<F> = F extends readonly (infer D)[] ? FixtureCheck<D> : unknown
+export type ScenarioChecks<S> = {
+  [K in keyof S]: (S[K] extends { readonly layer: infer L }
+    ? L extends Layer.Any
+      ? unknown
+      : Msg<"layer must be an Effect Layer">
+    : unknown) &
+    (S[K] extends { readonly fixtures: infer F } ? FixtureChecks<F> : unknown)
+}
 export type ScenarioMap = Record<string, Scenario>
 type LayerOutput<L> = L extends Layer.Layer<infer P, infer _E, infer _R> ? P : never
 type LayerInput<L> = L extends Layer.Layer<infer _P, infer _E, infer R> ? R : never
@@ -353,24 +367,26 @@ export interface App<
   }
   readonly nodes: DefinitionMap<D | V | F | ScenarioFixtureUnion<Sc>>
   readonly name: N
-  readonly screens: D
-  readonly services: V
+  readonly screens: readonly D[]
+  readonly services: readonly V[]
   readonly scenarios: Sc
   readonly defaultScenario: Default
   readonly scenarioNames: readonly (keyof Sc & string)[]
-  readonly fixtures: F
-  readonly provided: Common
+  readonly [authorTypes]: { readonly fixtures: F; readonly provided: Common }
   withScenarios<
     const Extra extends ScenarioMap,
-    const K extends string,
+    const K extends string = Default & string,
     const FF extends readonly AnyDef[] | undefined = undefined,
   >(
     extra: Extra &
+      NoInfer<ScenarioChecks<Extra>> &
       NoInfer<StoreOverrideCheck<Extra, D | V>> & {
         [P in keyof Extra &
           keyof Sc]: Msg<`Scenario ${P & string} already exists; choose a new name`>
       } & NoInfer<ScenarioCoverage<Extra, D, V, FixtureDefault<F, FF>, Common>>,
-    options: { defaultScenario: K; fixtures?: FF } & ([K] extends [keyof Sc | keyof NoInfer<Extra>]
+    options: { defaultScenario?: K; fixtures?: FF & FixtureChecks<FF> } & ([K] extends [
+      keyof Sc | keyof NoInfer<Extra>,
+    ]
       ? unknown
       : Msg<"withScenarios defaultScenario must exist">),
   ): App<
@@ -384,6 +400,7 @@ export interface App<
   >
   withScenarios<const Extra extends ScenarioMap>(
     extra: Extra &
+      NoInfer<ScenarioChecks<Extra>> &
       NoInfer<StoreOverrideCheck<Extra, D | V>> & {
         [P in keyof Extra &
           keyof Sc]: Msg<`Scenario ${P & string} already exists; choose a new name`>

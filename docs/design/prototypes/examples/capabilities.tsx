@@ -41,7 +41,7 @@ export const app = defineApp({
 const { Provider, useScreen, useScreenStatus, Link, href, from } = createReflexRouter(app, {
   Detail: "/:id",
 })
-const feature = from(detail)
+const feature = from(Detail)
 export function DetailView() {
   const { state, actions } = useScreen(Detail)
   const count = feature.useNodeState((s) => s.count)
@@ -110,8 +110,8 @@ export async function advanced() {
 export async function exploreCounter() {
   await explore(storeApp, {
     steps: 10,
-    knownInputs: { Counter: { Set: [1, 2] } },
-    invariant: async (session) => {
+    inputs: { Counter: { Set: [1, 2] } },
+    invariants: async (session) => {
       const node = await session.node(Counter)
       expect((await node.state()).count).toBeGreaterThanOrEqual(0)
     },

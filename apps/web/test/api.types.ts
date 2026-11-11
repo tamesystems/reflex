@@ -1,7 +1,7 @@
 import { createReflexRouter } from "@reflex/react-router"
 import { defineApp, defineNavigation, Screen } from "@reflex/effect"
 import * as Schema from "effect/Schema"
-import { host, Detail } from "./host.ts"
+import { host, Detail } from "../src/host.ts"
 // @ts-expect-error Registrations must cover every screen.
 createReflexRouter(host, { List: "/" })
 const bound = createReflexRouter(host, {

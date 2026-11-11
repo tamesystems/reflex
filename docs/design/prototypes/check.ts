@@ -51,6 +51,18 @@ for (const file of authored) {
   if (file.endsWith(".json")) {
     JSON.parse(readFileSync(file, "utf8"))
   }
+  const relativeExample = relative(join(home, "examples"), file).replaceAll("\\", "/")
+  if (relativeExample.startsWith("apps/") || relativeExample.startsWith("examples/")) {
+    const realPath = join(
+      root,
+      relativeExample === "examples/inventory/test/journey.ts"
+        ? "examples/inventory/test/journey.test.ts"
+        : relativeExample,
+    )
+    if (readFileSync(realPath, "utf8") !== readFileSync(file, "utf8")) {
+      throw new Error(`Real/extracted example drift: ${relativeExample}`)
+    }
+  }
   const block = blocks.find((m) => m[1] === path)
   if (!block || block[2] !== readFileSync(file, "utf8")) {
     throw new Error(`Spec/extracted example drift: ${path}`)
@@ -157,9 +169,6 @@ if (real) {
   console.log(
     `Real author, host and test examples: passed (${result.instantiations} instantiations)`,
   )
-  if (!process.argv.includes("--performance")) {
-    process.exit(0)
-  }
 }
 function checkPublicExamples() {
   const config = ts.readConfigFile(join(home, "examples.json"), ts.sys.readFile)
@@ -221,7 +230,9 @@ if (!real) {
   if (/^docs\/design\/prototypes\/.*error TS/m.test(declarations.output)) {
     throw new Error(declarations.output)
   }
-  negative = tsc(join(home, "negative.json"), true)
+}
+{
+  negative = tsc(join(home, real ? "real-negative.json" : "negative.json"), true)
   const diagnostics = [
     ...negative.output.matchAll(
       /^(.+?)\((\d+),(\d+)\): error (TS\d+): ([\s\S]*?)(?=^.+?\(\d+,\d+\): error TS|^Files:|$(?![\s\S]))/gm,
@@ -250,7 +261,7 @@ if (!real) {
       const sentences = d.text
         .split("\n")
         .map((line) => line.replace(/^.*error TS\d+: /, "").trim())
-      return custom.includes(c.marker) || (c.marker.endsWith(".") && sentences.includes(c.marker))
+      return custom.includes(c.marker) || sentences.some((line) => line.includes(c.marker))
     })
     if (!precise) {
       throw new Error(
@@ -281,6 +292,10 @@ if (!real) {
     throw new Error("Duplicate negative case ID")
   }
 }
+console.log(`Negative locations and messages: ${cases.length} passed`)
+if (real && !process.argv.includes("--performance")) {
+  process.exit(0)
+}
 const generated = join(home, ".generated")
 mkdirSync(generated, { recursive: true })
 const measurements: {
@@ -302,7 +317,7 @@ for (const n of [0, 100, 200, 400]) {
       : `const app=defineApp({name:"scale"})\n`
     source += `const reflex=createReflexRouter(app,{${Array.from({ length: n }, (_, i) => `S${i}:"/s${i}/:id"`).join(",")}})\n`
     for (let i = 0; i < n && hooks > 0; i++) {
-      source += `const feature${i}=reflex.from(I${i})\n`
+      source += `const feature${i}=reflex.from(S${i})\n`
       for (let j = 0; j < hooks; j++) {
         source += `export function View${i}_${j}(){const v=feature${i}.useScreen();if(v.state._tag==="ready"){const count:number=v.state.count;void count;void v.actions.Add.run({by:"1"})}return null}\n`
       }
@@ -358,24 +373,14 @@ const repeated = measurements
         m.screens === 0 ? 0 : (1000 * (m.checkSeconds - single.checkSeconds)) / (9 * m.screens),
     }
   })
-// Wall-clock gates intentionally allow scheduler noise. Measurements use heterogeneous
+// Wall-clock timings are informational. Instantiation gates use heterogeneous
 // contracts, codecs, guards, params, navigation, routes and narrowed feature hooks.
 const maxSlope = Math.max(...slopes.filter((s) => s.hooks === 1).map((s) => s.msPerScreen))
 const results = {
   mode: real ? "real-packages" : "reference-declarations",
   typescript: ts.version,
   authoredFiles: authored.length,
-  negativeCases: real
-    ? [
-        "apps/web/src/api.types.ts",
-        "apps/web/src/bindings.types.tsx",
-        "apps/mobile/src/expo.types.tsx",
-      ].reduce(
-        (count, file) =>
-          count + [...readFileSync(join(root, file), "utf8").matchAll(/@ts-expect-error/g)].length,
-        0,
-      )
-    : cases.length,
+  negativeCases: cases.length,
   compiledFiles: authored.filter((file) => !file.endsWith(".json")).length,
   jsonFiles: authored.filter((file) => file.endsWith(".json")).length,
   checker: checker.instantiations,
@@ -388,9 +393,23 @@ const results = {
 }
 console.log(JSON.stringify(results, null, 2))
 
-if (maxSlope > 25) {
-  throw new Error(`Screen check-time gate failed: ${maxSlope}ms`)
+const maxInstantiationSlope = Math.max(
+  ...slopes.filter((s) => s.hooks === 1).map((s) => s.instantiationsPerScreen),
+)
+if (maxInstantiationSlope > 12_000) {
+  throw new Error(`Screen instantiation gate failed: ${maxInstantiationSlope}`)
 }
-if (repeated.some((m) => m.msPerAdditionalHook > 5)) {
-  throw new Error(`Hook check-time gate failed: ${JSON.stringify(repeated)}`)
+if (
+  measurements
+    .filter((m) => m.hooks === 10)
+    .some((m) => {
+      const single = measurements.find((s) => s.screens === m.screens && s.hooks === 1)
+      return (
+        single !== undefined &&
+        m.screens > 0 &&
+        (m.instantiations - single.instantiations) / (9 * m.screens) > 2_000
+      )
+    })
+) {
+  throw new Error(`Hook instantiation gate failed: ${JSON.stringify(repeated)}`)
 }

@@ -59,7 +59,7 @@ A journey drives the app through the real protocol, with inferred inputs and sta
 
 ```ts
 import { createTestAppPool } from "@reflex/test"
-import { authoredApp as app } from "@reflex/example-inventory/scenarios.ts"
+import app from "@reflex/example-inventory/scenarios.ts"
 import { InventoryList, InventoryDetail } from "@reflex/example-inventory/screens.ts"
 const pool = createTestAppPool()
 const session = await pool.open(app, { scenario: "inventory-with-products" })

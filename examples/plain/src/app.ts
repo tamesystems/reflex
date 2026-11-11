@@ -19,6 +19,4 @@ export const Counter = defineStoreNode({
     }),
   }),
 })
-export const authoredApp = defineStoreApp({ name: "plain-counter", services: [Counter] })
-
-export default authoredApp
+export default defineStoreApp({ name: "plain-counter", services: [Counter] })

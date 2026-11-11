@@ -207,8 +207,9 @@ export declare function appContract<
       M.Unique<V> &
       RoleCheck<V[number], "service" | "store", "services accepts only services or stores"> &
       AmbientParams<V[number]>
-    fixtures?: F
+    fixtures?: F & RoleCheck<F[number], "fixture", "fixtures accepts only fixtures">
     scenarios: S &
+      NoInfer<M.ScenarioChecks<S>> &
       NoInfer<
         M.Coverage<
           S,
@@ -219,7 +220,7 @@ export declare function appContract<
         >
       >
     defaultScenario?: K & keyof NoInfer<S>
-    layer?: L
+    layer?: L & (L extends Layer.Any | undefined ? unknown : M.Msg<"layer must be an Effect Layer">)
   } & (IsUnion<keyof S> extends true ? { defaultScenario: K } : unknown) &
     M.Unique<[...I, ...V]> &
     CrossRoleNames<Screens<Nav, I>, V[number]> &
@@ -251,6 +252,9 @@ type LayerAt<T> = T extends { readonly layer: infer L } ? L : undefined
 type NavAt<T> = T extends { readonly navigation: infer Nav } ? Nav : undefined
 export declare function appContract<const Spec extends AppSpec>(
   spec: Spec &
+    (LayerAt<Spec> extends Layer.Any | undefined
+      ? unknown
+      : M.Msg<"layer must be an Effect Layer">) &
     NoInfer<
       M.Coverage<
         { default: M.Empty },

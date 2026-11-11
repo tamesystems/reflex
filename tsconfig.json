@@ -47,6 +47,7 @@
     "packages/react-router/src/route-types.ts",
     "packages/react/src/routes.ts",
     "packages/react-router/src/advanced.ts",
-    "packages/expo/src/advanced.ts"
+    "packages/expo/src/advanced.ts",
+    "packages/expo/src/testing.tsx"
   ]
 }

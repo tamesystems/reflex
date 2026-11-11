@@ -1,9 +1,4 @@
-import type {
-  ConsumerDefinition,
-  InferActions,
-  InferState,
-  DEFINITION_IDENTITY,
-} from "@reflex/runtime/internal"
+import type { InferActions, InferState, DEFINITION_IDENTITY } from "@reflex/runtime/internal"
 import type { ActionOutcome } from "@reflex/runtime"
 import type { ReactNode, ComponentType, ComponentProps, ReactElement } from "react"
 import type { Bridge } from "./react.tsx"
@@ -66,12 +61,26 @@ export type Member<
   Allowed,
   N extends string,
   Role extends string = "screen",
-> = [Identity<C>] extends [Identity<Allowed>]
-  ? unknown
-  : C["name"] extends (Allowed extends { name: infer K } ? K : never)
-    ? Msg<`This ${C["name"]} is a different contract from app '${N}''s ${C["name"]}`>
-    : Msg<`${C["name"]} is not a ${Role} of app '${N}'`>
-type PublishedError<O> = O extends { status: "domain-error"; error: { data?: infer E } } ? E : never
+> = C extends { readonly "~reflex": unknown }
+  ? [Contract<C>] extends [never]
+    ? [Identity<C>] extends [Identity<Allowed>]
+      ? unknown
+      : Msg<`${C["name"]} is not a ${Role} of app '${N}'`>
+    : [C] extends [Contract<C>]
+      ? [Identity<C>] extends [Identity<Allowed>]
+        ? unknown
+        : Msg<`${C["name"]} is not a ${Role} of app '${N}'`>
+      : Msg<`Pass the contract \`${C["name"]}\` from screens.ts, not its implementation`>
+  : [Identity<C>] extends [Identity<Allowed>]
+    ? unknown
+    : C["name"] extends (Allowed extends { name: infer K } ? K : never)
+      ? Msg<`This ${C["name"]} is a different contract from app '${N}' (${C["name"]})`>
+      : Msg<`${C["name"]} is not a ${Role} of app '${N}'`>
+type PublishedError<O> = O extends { status: "domain-error"; error: { data?: infer E } }
+  ? E
+  : O extends { status: "error"; error: infer E }
+    ? E
+    : never
 export type ActionView<F> = F extends (...args: infer I) => Promise<infer O>
   ? {
       run(...args: I): Promise<ActionOutcome<PublishedError<O>>>
@@ -116,6 +125,7 @@ export interface FeatureBinding<D> {
   useAction<K extends keyof InferActions<D> & string>(name: K): ActionView<InferActions<D>[K]>
 }
 export interface ReflexBinding<A extends App, T = Table<Screens<A>>> {
+  withApp<B extends Pick<A, "name" | "screens" | "services"> & App>(app: B): ReflexBinding<B>
   Provider: ComponentType<{
     app?: Pick<A, "name" | "screens" | "services">
     scenario?: Scenario<A>
@@ -126,11 +136,15 @@ export interface ReflexBinding<A extends App, T = Table<Screens<A>>> {
   }>
   useScreen: Hook<A, T, true>
   useScreenStatus: Hook<A, T, false>
-  useScreenSuspense: Hook<A, T, true>
   useService<D extends { readonly name: string }>(
     definition: D & NoInfer<Member<D, Selected<Table<Services<A>>, D>, A["name"], "service">>,
+  ): ReadyNodeView<D>
+  useServiceStatus<D extends { readonly name: string }>(
+    definition: D & NoInfer<Member<D, Selected<Table<Services<A>>, D>, A["name"], "service">>,
   ): NodeView<D>
-  from<D extends ConsumerDefinition>(definition: D): FeatureBinding<D>
+  from<const C extends { readonly name: string }>(
+    contract: C & NoInfer<Member<C, Contract<Selected<T, C>>, A["name"]>>,
+  ): FeatureBinding<Selected<T, C>>
   useSession(): SessionControls<A>
 }
 
