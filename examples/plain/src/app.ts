@@ -1,4 +1,4 @@
-import { defineStoreNode, defineStoreApp, standardInput } from "@reflex/runtime"
+import { defineStoreNode, defineStoreApp } from "@reflex/runtime"
 import { createStore } from "zustand/vanilla"
 import { z } from "zod"
 
@@ -35,6 +35,4 @@ export const plainBackend = defineStoreApp({
     },
   },
 })
-export const addSchema = z.strictObject({ by: z.int() })
-export const addInput = standardInput(addSchema)
 export default authoredApp

@@ -8,32 +8,23 @@ import {
   type AppHost,
   type AppSession,
   type Runtime,
-  mountSessionRoute,
   definitionIdentity,
-  type NodeHandle,
   systemTimers,
 } from "@reflex/runtime/internal"
 import {
   type Bridge,
-  nodeSource,
   reportFocus,
   createLiveController,
   LiveSessions,
   reportFailure,
 } from "@reflex/live/session"
 import * as React from "react"
-import { findRouteNode, type RouteEntry } from "./route-binding.ts"
-export interface RouteBinding {
-  readonly stack: ReadonlyArray<RouteEntry>
-  readonly token: string | null
-  readonly params?: Record<string, unknown>
-}
 const SessionContext = React.createContext<AppSession | null>(null)
 
 export const useRuntimeSession = (): AppSession => {
   const session = React.useContext(SessionContext)
   if (session === null) {
-    throw new Error("useSession must be used inside <ReflexProvider>")
+    throw new Error("useSession requires the app's <Provider>")
   }
   return session
 }
@@ -45,10 +36,10 @@ const ControlsContext = React.createContext<{
   reset(scenario?: string): Promise<unknown>
 } | null>(null)
 /** Session controls; raw registry access is an explicit advanced import. */
-const useBoundSession = <H extends AppHost>(host: H): SessionControls<H> => {
+export const useBoundSession = <H extends AppHost>(host: H): SessionControls<H> => {
   const controls = React.useContext(ControlsContext)
   if (controls === null) {
-    throw new Error("useSession requires ReflexProvider")
+    throw new Error("useSession requires the app's <Provider>")
   }
   if (definitionIdentity(controls.host) !== definitionIdentity(host)) {
     throw new Error(
@@ -112,7 +103,7 @@ export type { Bridge } from "@reflex/live/session"
  * the session on screen. A bridge's reset replaces that session, until `scenario` or
  * `host` next changes.
  */
-export const ReflexProvider = <H extends AppHost>({
+export const SessionProvider = <H extends AppHost>({
   host,
   scenario,
   bridge,
@@ -183,33 +174,6 @@ const SessionGate = ({
   }
 }
 
-export const useRouteNode = <N,>(
-  resolve: (runtime: Runtime, nodeId: NodeId) => N | undefined,
-  { stack, token, params }: RouteBinding,
-): N | null => {
-  const { runtime } = useRuntimeSession()
-  const key = JSON.stringify([token, params])
-  const bound = React.useRef<{ key: string; node: N } | null>(null)
-  const node =
-    bound.current?.key === key
-      ? bound.current.node
-      : findRouteNode({
-          stack,
-          token,
-          params,
-          resolve: (nodeId) => resolve(runtime, nodeId),
-        })
-
-  // Kept across renders, so that a screen stays on its node after the core pops it.
-  React.useEffect(() => {
-    if (node !== null) {
-      bound.current = { key, node }
-    }
-  }, [key, node])
-
-  return node
-}
-
 const noSubscription = () => () => undefined
 
 /** The part of a node a subscriber needs. */
@@ -238,12 +202,6 @@ export const useNodeFocus = (node: { readonly id: NodeId } | null, focused: bool
     }
     return reportFocus(runtime, nodeId)
   }, [runtime, nodeId, focused])
-}
-
-/** Bind a public node handle without assumptions about the adapter's live object. */
-export const useRawNode = (id: NodeId | null) => {
-  const { runtime } = useRuntimeSession()
-  return React.useMemo(() => (id === null ? null : nodeSource(runtime, id)), [runtime, id])
 }
 
 /** Subscribe to the definition's guard and retain the latest typed action outcome. */
@@ -403,7 +361,7 @@ export const useRouteLease = <N extends OwnedNode>(
   const { runtime } = useRuntimeSession()
   const owner = React.useContext(OwnershipContext)
   if (owner === null) {
-    throw new Error("Route hooks require ReflexProvider")
+    throw new Error("Route hooks require the app's <Provider>")
   }
   const identity = definition.identity ?? definition
   owner.factories.set(identity, (_, signal) => definition.mount(runtime, signal))
@@ -453,28 +411,6 @@ export const useRouteLease = <N extends OwnedNode>(
     paramsKey,
   ])
   return lease
-}
-
-export const useMountedNode = <N extends OwnedNode>(
-  definition: {
-    readonly identity?: object
-    mount(runtime: Runtime, signal?: AbortSignal): N | Promise<N>
-  },
-  options: {
-    readonly key: string
-    readonly lifetime?: "component" | "history-entry"
-    readonly navigationType?: "POP" | "PUSH" | "REPLACE"
-  },
-): N | null => {
-  const lease = useRouteLease(definition, options)
-  if (lease === null) {
-    throw new Error("Expected an enabled route lease")
-  }
-  const snapshot = React.useSyncExternalStore(lease.subscribe, lease.getSnapshot)
-  if (snapshot.status === "error") {
-    throw snapshot.error
-  }
-  return snapshot.status === "ready" ? snapshot.value : null
 }
 
 export type ActionViews<A> = {
@@ -556,65 +492,4 @@ export const useNodeView = <S, A extends ViewActions>(
   return node === null
     ? { status: "pending", state: null, actions: null }
     : { status: "ready", state: state as S, actions }
-}
-
-/** Ambient lookup subscribes to membership and optionally owns focus while displayed. */
-export const useNode = <S, A extends ViewActions>(
-  definition: {
-    resolve(runtime: Runtime): import("@reflex/runtime/internal").NodeHandle<S, A> | undefined
-  },
-  options: { readonly focus?: boolean } = {},
-): NodeView<S, A> => {
-  const node = useNodeHandle(definition)
-  useNodeFocus(node, options.focus === true)
-  return useNodeView(node)
-}
-
-/** Derive a composed view from its definition. */
-export type ScreenView<D> = D extends import("@reflex/runtime/internal").ConsumerDefinition<
-  infer S,
-  infer A
->
-  ? NodeView<S, A>
-  : never
-
-/** Bind session controls and ambient definitions to one provider identity. */
-export const createLegacyReflex = <H extends AppHost>(app: H) => ({
-  // biome-ignore lint/correctness/noComponentHookFactories: This explicit app binding factory is called once at module scope.
-  Provider: (props: Omit<React.ComponentProps<typeof ReflexProvider<H>>, "host">) => (
-    <ReflexProvider {...props} host={app} />
-  ),
-  useSession: () => useBoundSession(app),
-  useNode: <S, A extends ViewActions>(
-    definition: { resolve(runtime: Runtime): NodeHandle<S, A> | undefined },
-    options: { readonly focus?: boolean } = {},
-  ) => {
-    useBoundSession(app)
-    return useNode(definition, options)
-  },
-})
-
-/** Legacy adapter entry retained until Expo migrates. */
-export const useSuspenseRoute = <S, A extends ViewActions>(
-  definition: { resolve(runtime: Runtime, id?: NodeId): NodeHandle<S, A> | undefined },
-  params: unknown,
-  key: string,
-): NodeHandle<S, A> => {
-  const { runtime } = useRuntimeSession()
-  const lease = useRouteLease(
-    {
-      identity: definition,
-      mount: (_, signal) => mountSessionRoute(runtime, definition, params, signal),
-    },
-    { key, lifetime: "history-entry" },
-  )
-  if (lease === null) {
-    throw new Error("Expected an enabled route lease")
-  }
-  const owned = React.use(lease.ready)
-  const node = definition.resolve(runtime, owned.id)
-  if (node === undefined) {
-    throw new Error("The mounted Suspense route did not resolve")
-  }
-  return node
 }

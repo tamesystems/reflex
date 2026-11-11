@@ -59,8 +59,64 @@ for (const file of authored) {
 if (blocks.length !== authored.length) {
   throw new Error("Spec has an unextracted example")
 }
+/** Compare symbols, including type-only and re-exported names, rather than runtime keys. */
+function checkImplementedExports() {
+  const entries = [
+    ["react", "index", "react"],
+    ["react", "advanced", "react-advanced"],
+    ["react-router", "index", "react-router"],
+    ["react-router", "advanced", "react-router-advanced"],
+    ["expo", "index", "expo"],
+    ["expo", "advanced", "expo-advanced"],
+  ] as const
+  const config = ts.readConfigFile(join(home, "real.json"), ts.sys.readFile)
+  const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, home)
+  const pairs = entries.map(([pkg, entry, declaration]) => {
+    const directory = join(root, `packages/${pkg}`)
+    const manifest = JSON.parse(readFileSync(join(directory, "package.json"), "utf8"))
+    const subpath = entry === "index" ? "." : `./${entry}`
+    const target: unknown = manifest.exports[subpath]
+    if (typeof target !== "string") {
+      throw new Error(`Missing package entry: @reflex/${pkg} ${subpath}`)
+    }
+    return {
+      entry: `@reflex/${pkg}${entry === "index" ? "" : `/${entry}`}`,
+      actual: resolve(directory, target),
+      expected: join(home, `api/${declaration}.d.ts`),
+    }
+  })
+  const program = ts.createProgram(
+    pairs.flatMap((p) => [p.actual, p.expected]),
+    parsed.options,
+  )
+  const checker = program.getTypeChecker()
+  const names = (path: string) => {
+    const file = program.getSourceFile(path)
+    const symbol = file && checker.getSymbolAtLocation(file)
+    if (!symbol) {
+      throw new Error(`Missing package module: ${path}`)
+    }
+    return checker
+      .getExportsOfModule(symbol)
+      .map((s) => s.name)
+      .sort()
+  }
+  for (const pair of pairs) {
+    const actual = names(pair.actual)
+    const expected = names(pair.expected)
+    const missing = expected.filter((name) => !actual.includes(name))
+    const extra = actual.filter((name) => !expected.includes(name))
+    if (missing.length || extra.length) {
+      throw new Error(
+        `${pair.entry} exports differ from declarations: missing [${missing}], extra [${extra}]`,
+      )
+    }
+  }
+  console.log(`Exact root/advanced export names: ${pairs.length} entries passed`)
+}
 const real = process.argv.includes("--real")
 if (real) {
+  checkImplementedExports()
   // The plumbing file also exercises live APIs outside this implementation step.
   // Compile its exact test functions against real packages without substituting declarations.
   const plumbing = ts.createSourceFile(
@@ -319,12 +375,6 @@ const results = {
   slopes,
   repeated,
   maxSlope,
-}
-if (process.env.REFLEX_RECORD_TYPE_PERF === "1") {
-  writeFileSync(
-    join(home, real ? "real-results.json" : "results.json"),
-    `${JSON.stringify(results, null, 2)}\n`,
-  )
 }
 console.log(JSON.stringify(results, null, 2))
 

@@ -11,7 +11,7 @@ import { createRuntime, mountStore, standardInput, StoreFailure } from "@reflex/
 import Ajv from "ajv/dist/2020.js"
 import { createStore, type StoreApi } from "zustand/vanilla"
 import { z } from "zod"
-import { addInput, addSchema } from "../../../examples/plain/src/app.ts"
+const addSchema = z.strictObject({ by: z.int() })
 
 const setup = () => {
   const runtime = createRuntime({ sessionId: "store-test" })
@@ -24,7 +24,7 @@ const setup = () => {
     project: ({ count }) => ({ count }),
     actions: {
       Add: {
-        input: addInput,
+        input: standardInput(addSchema),
         handler: ({ by }: z.infer<typeof addSchema>) =>
           store.setState(({ count }) => ({ count: count + by })),
       },

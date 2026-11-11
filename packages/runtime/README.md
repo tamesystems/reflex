@@ -45,9 +45,7 @@ disposal. Runtime disposal revokes the generation before ending its stores. Inde
 retained raw stores remain application-owned. Owned action views return `completed`,
 `error`, `refused`, `cancelled` or `defect` outcomes.
 
-Legacy record-based `nodes`/`screens`, callable actions, `mountStore` and the low-level
-runtime remain available for existing consumers under `@reflex/runtime/internal`.
-See [ADR 0025](../../docs/decisions/0025-additive-store-author-api.md).
+See [ADR 0020](../../docs/decisions/0020-userland-api.md).
 
 `src/node-handle.ts` defines the shared Effect/store consumer contract and definition-owned
 journey serialization. See [adopting](../../docs/adopting.md) and ADR 0020.

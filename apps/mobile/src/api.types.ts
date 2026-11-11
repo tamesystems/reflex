@@ -1,11 +1,10 @@
 import { reflex } from "./routes.ts"
-const { useSession, useNode, Provider } = reflex
+const { useSession, useService, Provider } = reflex
 import type { ComponentProps } from "react"
-import { useAction } from "@reflex/react"
-import type { NodeOf } from "@reflex/effect/advanced"
-import type { InventoryDetailLive } from "@reflex/example-inventory/features/inventory-detail.ts"
+import { InventoryDetailLive } from "@reflex/example-inventory/features/inventory-detail.ts"
 
-export const useContracts = (node: NodeOf<typeof InventoryDetailLive> | null) => {
+export const useContracts = () => {
+  const feature = reflex.from(InventoryDetailLive)
   const controls = useSession()
   void controls.reset("production")
   // @ts-expect-error Session resets derive scenario names from the app value.
@@ -16,8 +15,8 @@ export const useContracts = (node: NodeOf<typeof InventoryDetailLive> | null) =>
     scenario: "missing-scenario",
   }
   void props
-  const save = useAction(node, "Save")
-  const set = useAction(node, "SetQuantity")
+  const save = feature.useAction("Save")
+  const set = feature.useAction("SetQuantity")
   void save.run()
   void set.run({ quantity: 3 })
   // @ts-expect-error Save takes no input.
@@ -27,7 +26,7 @@ export const useContracts = (node: NodeOf<typeof InventoryDetailLive> | null) =>
   // @ts-expect-error Input types derive from the definition.
   void set.run({ quantity: "3" })
   // @ts-expect-error Unknown action.
-  useAction(node, "Missing")
+  feature.useAction("Missing")
 }
 
 import { createReflexExpo } from "@reflex/expo"
@@ -47,5 +46,6 @@ export const useBoundContracts = () => {
     void view.actions.SetQuantity.run({ quantity: "1" })
   }
   useScreen(InventoryListScreen)
-  useNode(InventoryFixture)
+  // @ts-expect-error Fixtures are scenario-scoped, not production services.
+  useService(InventoryFixture)
 }

@@ -84,7 +84,6 @@ test("React bindings have no native or Expo dependency", () => {
         "@reflex/runtime",
         "@reflex/live/session",
         "@reflex/live/dev",
-        "@reflex/effect",
         "react",
       ),
     ),
@@ -130,7 +129,6 @@ test("React Router binding stays thin and Effect-free", () => {
       "packages/react-router/src",
       allowing(
         "@reflex/react",
-        "@reflex/react/advanced",
         "react",
         "@reflex/live/session",
         "@reflex/runtime",
@@ -148,12 +146,7 @@ test("plain example has no Effect or UI dependency", () => {
 })
 test("only explicit capability entries imports Effect at runtime", () => {
   for (const file of [...sources("packages/expo/src"), ...sources("packages/react/src")]) {
-    if (
-      file.endsWith("effect.tsx") ||
-      file.endsWith("routes-effect.ts") ||
-      file.endsWith("bound.tsx") ||
-      file.endsWith("screen-ready.ts")
-    ) {
+    if (file.endsWith("routes-effect.ts")) {
       continue
     }
     expect(importsOf(file).filter((s) => s === "@reflex/effect" || isEffect(s))).toEqual([])

@@ -30,7 +30,9 @@
       "@reflex/effect/advanced": ["../../../packages/effect/src/advanced.ts"],
       "@reflex/live/dev": ["../../../packages/live/src/dev.ts"],
       "@reflex/test": ["../../../packages/test/src/index.ts"],
-      "@reflex/test/advanced": ["../../../packages/test/src/advanced.ts"]
+      "@reflex/test/advanced": ["../../../packages/test/src/advanced.ts"],
+      "@reflex/react/internal": ["../../../packages/react/src/internal.ts"],
+      "@reflex/expo/advanced": ["../../../packages/expo/src/advanced.ts"]
     }
   },
   "include": [

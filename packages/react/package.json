@@ -6,7 +6,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./advanced": "./src/advanced.ts"
+    "./advanced": "./src/advanced.ts",
+    "./internal": "./src/internal.ts"
   },
   "dependencies": {
     "@reflex/protocol": "workspace:*",

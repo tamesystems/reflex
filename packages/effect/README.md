@@ -54,15 +54,9 @@ Omitting scenarios creates the literal `default` scenario and still checks cover
 `.withScenarios(extra, options)` adds names, preserves existing scenario fixtures, and
 can select a new default and fixture defaults for the new scenarios.
 
-The current journey and UI APIs use `legacyApp(app)` from `@reflex/effect/internal`.
-Inventory's `scenarios.ts` supplies that adapter; its production entry stays an authored
-app, which the CLI recognizes through the same internal host adapter.
-
-Legacy `defineScreen`, `defineCapability`, `action` and the old app/navigation overloads
-remain available until their consumers migrate. Their explicit internal names are
-`legacyDefineApp` and `legacyDefineNavigation`. `/advanced` retains legacy ownership
-APIs; `/internal` retains registry, scoped mounting and integration plumbing.
+Pass the authored app directly to app-bound UI factories, `createTestApp` and the CLI.
+The symbol-keyed session host adapter stays internal to the integration.
 
 State access belongs to its mounted node. Published state is detached and deeply frozen
 through the same JSON publication boundary as store nodes. See
-[ADR 0024](../../docs/decisions/0024-additive-effect-author-api.md).
+[ADR 0020](../../docs/decisions/0020-userland-api.md).

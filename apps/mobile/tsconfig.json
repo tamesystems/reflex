@@ -29,7 +29,10 @@
       "@reflex/effect/advanced": ["../../packages/effect/src/advanced.ts"],
       "@inventory-provider": ["./provider.tsx"],
       "@reflex/expo/dev": ["../../packages/expo/src/dev.ts"],
-      "@reflex/live/dev": ["../../packages/live/src/dev.ts"]
+      "@reflex/live/dev": ["../../packages/live/src/dev.ts"],
+      "@reflex/react/internal": ["../../packages/react/src/internal.ts"],
+      "@reflex/react-router/advanced": ["../../packages/react-router/src/advanced.ts"],
+      "@reflex/expo/advanced": ["../../packages/expo/src/advanced.ts"]
     },
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,

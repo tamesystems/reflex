@@ -5,7 +5,7 @@ import type {
   DEFINITION_IDENTITY,
 } from "@reflex/runtime/internal"
 import type { ActionOutcome } from "@reflex/runtime/advanced"
-import type { ReactNode, ComponentType } from "react"
+import type { ReactNode, ComponentType, ComponentProps, ReactElement } from "react"
 import type { Bridge } from "./react.tsx"
 
 export interface App {
@@ -132,6 +132,22 @@ export interface ReflexBinding<A extends App, T = Table<Screens<A>>> {
   ): NodeView<D>
   from<D extends ConsumerDefinition>(definition: D): FeatureBinding<D>
   useSession(): SessionControls<A>
-  /** Legacy ambient consumer, retained for Expo until B2. */
-  useNode: typeof import("./react.tsx").useNode
 }
+
+export interface HostBinding<A extends App, HostLinkProps = ComponentProps<"a">>
+  extends ReflexBinding<A> {
+  href(...args: RouteArgs<Contract<Screens<A>>>): string
+  Link(props: BoundLinkProps<Contract<Screens<A>>, HostLinkProps>): ReactElement
+}
+type RouteArgs<C> = C extends unknown
+  ? [contract: C, ...params: keyof URLParams<C> extends never ? [] : [params: URLParams<C>]]
+  : never
+type BoundLinkProps<C, HostLinkProps> = C extends unknown
+  ? {
+      to: C
+      children?: ReactNode
+      replace?: boolean
+      className?: string
+    } & (keyof URLParams<C> extends never ? { params?: never } : { params: URLParams<C> }) &
+      Omit<HostLinkProps, "to" | "href" | "params" | "asChild">
+  : never

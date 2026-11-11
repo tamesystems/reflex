@@ -1,4 +1,4 @@
-import { useRuntime } from "@reflex/react/advanced"
+import { useRuntime } from "@reflex/react/internal"
 import { useCoreStack, useShownToken } from "@reflex/expo/internal"
 import production from "../src/app.ts"
 import { testScenarios } from "@reflex/example-inventory/scenarios.ts"

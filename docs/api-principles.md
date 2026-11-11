@@ -1,6 +1,6 @@
 # API principles
 
-The scoring standard for reviewing Reflex's application-author-facing APIs (`defineCapability`, `defineNavigation`, `defineApp`, `defineStoreNode`, `defineStoreApp`, the React, Expo Router and React Router hooks, and journeys). Define a contract once, attach it to a runtime value, and derive every consumer type from it. These principles also judge ceremony, lifetimes, naming and teaching.
+The scoring standard for reviewing Reflex's application-author-facing APIs (`Screen`, `defineService`, `defineFixture`, `defineNavigation`, `defineApp`, `defineStoreNode`, `defineStoreApp`, the React, Expo Router and React Router hooks, and journeys). Define a contract once, attach it to a runtime value, and derive every consumer type from it. These principles also judge ceremony, lifetimes, naming and teaching.
 
 North star: APIs "should be easy to use and hard to misuse. It should be easy to do simple things; possible to do complex things; and impossible, or at least difficult, to do wrong things" (Bloch). Users should "simply fall into winning practices" (Mariani, the Pit of Success).
 
@@ -39,7 +39,7 @@ cart.actions.add(item) // typed creator
 typeof cart.actions.add.type // 'cart/add'
 ```
 TanStack Query's `queryOptions` does the same thing: it tags the key with the data type, so `getQueryData` needs no generic.
-**Prevents.** `useNode<CartState, CartActions>('cart')`, and `as` at call sites.
+**Prevents.** `useScreen<CartState, CartActions>('cart')`, and `as` at call sites.
 
 ### P3. Typed end to end, from definition to UI
 
@@ -76,7 +76,7 @@ XState v5 `setup({ types })` does the same for events: sending an undeclared eve
 // @tanstack/react-query, solid-query and vue-query share one options object
 useQuery({ queryKey: ["todo", id], queryFn: () => fetchTodo(id) })
 ```
-**Prevents.** `useNode` in React, `useReflexNode` in Expo and `useNodeState` in React Router, each taking `(id, opts)` in a different order.
+**Prevents.** different screen-hook names in React, Expo and React Router, each taking `(id, opts)` in a different order.
 
 ### P6. Progressive disclosure, with honest escape hatches
 
@@ -129,7 +129,7 @@ Zustand: selectors that return objects go through `useShallow`.
 **Pattern (Standard Schema input; tRPC public inference).**
 
 ```ts
-function mountStore<S extends StandardSchemaV1>(
+function validateInput<S extends StandardSchemaV1>(
   input: S /* Zod, Valibot, ArkType, Effect Schema */,
 ) {}
 type Out = inferRouterOutputs<AppRouter>["post"]["byId"] // not AppRouter._def

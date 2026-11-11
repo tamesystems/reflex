@@ -31,8 +31,8 @@ commit. Effect and store screens use the same consumer definitions. Store screen
 without core Navigation use Expo entry keys and session-owned route factories.
 
 Link accepts a contract, correlated encoded params and Expo Link props. href returns
-an Expo Href. Integration plumbing and shared route/routeCodec helpers live under the
-single internal entry. Custom codecs own advanced grammar and array policies.
+an Expo Href. Integration plumbing lives under the internal entry; `routeCodec` and its type live
+under `@reflex/expo/advanced`. Custom codecs own advanced grammar and array policies.
 
 ## How the router is followed
 

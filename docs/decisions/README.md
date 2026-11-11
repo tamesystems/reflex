@@ -23,3 +23,6 @@ What we do.
 
 What follows, good and bad.
 ```
+
+The current userland redesign is recorded in [0020](0020-userland-api.md). Its unmerged
+0020–0028 drafts were consolidated before landing; 0001–0019 remain historical records.

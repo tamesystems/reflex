@@ -23,14 +23,15 @@ client ── connects to → controller ── serves → the current session
 ## The app
 
 **Host** (`AppHost`). An app definition that can start sessions: its name, its scenarios,
-and `start`. `defineApp` makes one from Effect layers; anything with the same shape works.
+and `start`. Author app descriptors provide an internal host adapter; `defineApp` composes Effect services and `defineStoreApp` composes stores.
 
 **Scenario.** A named way to start the app: the services it runs with, usually fixtures in
 place of the network. Some run on **virtual time**, a clock that moves only when a client
 calls `advanceTime`. A **fixture** is a stand-in service, often with a node of its own.
 
-**Capability.** The definition of a kind of node: a state schema, actions and an optional
-`onFocus`. `defineCapability` makes one; `mount` turns it into a live node. A screen also owns its params schema and `initial(params)`. Store definitions use `defineStoreNode`; both produce the same consumer-facing `NodeHandle`.
+**Definition.** A kind of node with state, actions and optional focus work. Effect uses
+`Screen`, `defineService` and `defineFixture`; stores use `defineStoreNode`. A screen
+contract declares params and initial state before `.implement` attaches its behavior.
 
 **Node.** A live, stateful thing a client can see and act on. Its **type** decides when it
 can act:
@@ -54,10 +55,10 @@ returns `true` or why not, and a handler. Its input schema is published as JSON 
 it as soon as it is **accepted**; that is not completion.
 
 **Public projection.** The explicit JSON-only view of an existing store published by
-`mountStore`. It excludes secrets and internal machinery; the store remains application-owned.
+`defineStoreNode`. It excludes secrets and internal machinery; the store remains application-owned.
 
 **Focus.** The screen the user is on: the top of the core navigation stack, or the screen
-reported by an existing router through `useNodeFocus`. Every focus arrival starts the screen's `onFocus`, if present, as a tracked operation. Repeating the current focus does not restart it.
+reported by the app-bound host adapter. Every focus arrival starts the screen's `onFocus`, if present, as a tracked operation. Repeating the current focus does not restart it.
 
 **Route**, **stack**, **entry**. A route is a kind of screen with a params schema; the stack
 is the list of entries the user has opened, each an instance of a route with its own scope

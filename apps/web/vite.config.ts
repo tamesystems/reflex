@@ -13,6 +13,10 @@ export default defineConfig({
         import.meta.dirname,
         "../../packages/react-router/src/index.ts",
       ),
+      "@reflex/react/internal": resolve(
+        import.meta.dirname,
+        "../../packages/react/src/internal.ts",
+      ),
       "@reflex/react/advanced": resolve(
         import.meta.dirname,
         "../../packages/react/src/advanced.ts",

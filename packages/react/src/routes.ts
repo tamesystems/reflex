@@ -67,12 +67,6 @@ export type ValidateRoutes<A extends App, R> = {
     : Msg<`${N & string} needs a route registration`>
 }
 
-export function route<P>() {
-  return <const Path extends string, const Map extends object = Record<never, never>>(
-    path: Path & CheckPath<P, NoInfer<Path>, NoInfer<Map>>,
-    mapping?: Map,
-  ) => ({ path, mapping: mapping ?? ({} as Map), params: mapping ?? ({} as Map) })
-}
 export interface RouteCodec<P> {
   readonly path: string
   decode(raw: Readonly<Record<string, string | string[] | undefined>>): P

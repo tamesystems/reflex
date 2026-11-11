@@ -55,7 +55,6 @@ legacy protocol tests. `@reflex/test/advanced` exports `createProtocolTestSessio
 `createJourneyClient(app, scenario, transport)` integration port. Custom transports may
 supply `onEvent`; request-only transports poll state matches and do not record events.
 
-Legacy AppHost journeys and their assertion maps remain available during migration.
 See [the shared story](../../examples/inventory/journeys/services.ts),
-[ADR 0028](../../docs/decisions/0028-app-typed-journeys.md),
+[ADR 0020](../../docs/decisions/0020-userland-api.md),
 [architecture](../../docs/ARCHITECTURE.md) and [development](../../docs/development.md).

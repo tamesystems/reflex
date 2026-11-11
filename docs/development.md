@@ -142,8 +142,8 @@ Its exact Zustand/Zod dev dependencies are installed in apps/mobile; no third in
 
 ### Add a screen
 
-1. Define state, params and `initial(params)` with `defineScreen` in a contract module.
-2. Build navigation from contracts. Attach handlers with `.implement`, and compose implementations with `Nav.implement(screens, { initial })` in `defineApp`.
+1. Define state, params and `initial(params)` with `Screen` in a contract module.
+2. Build navigation from contracts. Attach handlers with `.implement`, and compose implementations with `Nav.implement([definitions], { initial })` in `defineApp`.
 3. Add a typed journey using `session.focused(Capability, match)` and `node.actions`.
 4. Register every file path and param-name mapping with `createReflexExpo(app, registration)` and render with `useScreen`.
 5. Use the composed `useScreen` view for state and action controls; granular hooks remain available.
@@ -154,7 +154,7 @@ Navigate with `Nav.push`/`Nav.back` Effects from handlers. See [adopting.md](ado
 
 A scenario is a name and a `Layer` of services in `defineApp`'s `scenarios`; set
 `virtualTime: true` to run it on a `TestClock`. To let tests and agents steer a double,
-declare fixtures once in `defineApp({ fixtures })`, and mount a node with `type: "fixture"` and give it actions, as `fixtures.ts`'s
+declare controls with `defineFixture`, list them in `defineApp({ fixtures })`, and give them actions, as `fixtures.ts`'s
 `FailNextSave` does. Fixture nodes are ambient, so their actions work from any screen.
 
 ### Add a CLI command
@@ -282,157 +282,45 @@ actual invalid call. Record root diagnostics before and after with
 `bunx tsc --noEmit -p tsconfig.json --extendedDiagnostics`; all three typechecks still run
 in `bun run check`. Integration plumbing belongs under explicit internal subpaths.
 
-### ADR 0020 validation baseline
+### Userland API validation
 
-Measured on macOS, Bun 1.4.4 and TypeScript 5.9.3, on 2026-11-10. Three paired root
-`tsc --noEmit -p tsconfig.json --extendedDiagnostics` runs compared the original source
-at `5961f3e` with the implementation at `dc86f64`. The baseline was a temporary source
-archive using the same installed dependencies and workspace module mappings; its type
-and instantiation counts matched the original checkout. Medians:
+The consolidated design and deviations are in [ADR 0020](decisions/0020-userland-api.md).
+`bun run check` includes real-package compilation of the extracted examples, negative
+inference cases, complete documentation snippets, root/mobile/web typechecks and tests.
+Intentionally partial snippets use `ts partial: reason` or `tsx partial: reason`.
 
-| Metric         |    Before |     After |
-| -------------- | --------: | --------: |
-| Total time     |    1.79 s |    1.95 s |
-| Check time     |    1.07 s |    1.21 s |
-| Types          |    79,691 |    93,262 |
-| Instantiations |   223,920 |   290,689 |
-| Memory         | 461,505 K | 492,845 K |
+`bun docs/design/prototypes/check.ts --real` also compares the exact type and value
+export-name sets for the React, React Router and Expo root/advanced entries against the
+spec declarations. Effect/runtime/live/test export cleanup remains in progress. Run
+`bun docs/design/prototypes/check.ts` for the declaration examples, diagnostic locations
+and reference performance gates. Run `bun docs/design/prototypes/check.ts --real --performance`
+for the real-package gates. Measurements print to stdout; no generated reports are tracked.
 
-Total time increased by about 9% (0.16 s). This includes the new positive/negative type
-coverage. The initial pre-change run was 2.06 s total and 1.13 s check time; use paired
-runs when comparing future changes, since other build/test work affects elapsed times.
+`scripts/type-budget.ts` gates root instantiations at 505,132: the unchanged 459,211
+baseline in `performance/type-budget.json` plus 10%, rounded down. Inspect graph growth
+before changing this budget. Timing and memory depend on the machine; instantiation
+counts remain the stable acceptance gate. `bunx tsc --noEmit -p tsconfig.json --extendedDiagnostics`
+prints the root measurements directly.
 
-Local validation passed `bun run check` (606 passed, three Windows-only skips), mobile
-`e2e`, `e2e:plain`, `e2e:live`, `e2e:services`, and web `e2e`. The bundle checks still
-exclude the production bridge/token and keep Effect out of the plain graph. The focus
-regression test was also run with lifecycle activation temporarily disabled and failed
-as intended. `hermes-smoke` was attempted but could not start because HERMES was unset;
-its VM execution remains for the configured CI job or a local VM install.
+The pre-cleanup B2 benchmark on Bun 1.4.4 / TypeScript 5.9.3 measured 1.05/1.72/3.29 s
+check time for 100/200/400 heterogeneous screens with one hook (561,961 / 1,189,761 /
+2,865,361 instantiations). Incremental slopes were 6.70/7.85 ms per screen, under the
+25 ms gate. Additional narrowed hooks cost at most 0.050 ms, under the 5 ms gate.
+Root B2 diagnostics were 460,241 instantiations, 533,064 K memory, 1.66 s check and
+2.51 s total. These are historical local measurements; rerun the commands above for
+current results.
 
-### Type performance
+The Provider selects `@reflex/live/dev`; Vite aliases it to `@reflex/live/vite`, and
+Metro aliases it to `@reflex/expo/dev`. Normal production imports exclude E2E modules.
+Run mobile e2e, e2e:plain, e2e:live, e2e:services and web e2e after binding changes.
+These cover production bridge/token/instrumentation exclusion and the plain Metro
+graph's Effect exclusion as well as browser behavior. All three frozen installs are
+required before checking a checkout.
 
-`bun run typecheck` runs `scripts/type-budget.ts` for the root graph before the mobile
-and web checks. It prints extended diagnostics and fails above the recorded instantiation
-budget plus 10%. Baselines and the budget live in docs/performance/. Inspect any increase
-before changing the budget; timings are machine-dependent, instantiation counts are the gate.
-
-### Documentation snippets
-
-`bun scripts/check-docs.ts` extracts TypeScript blocks from README.md, docs/adopting.md
-and package READMEs and typechecks complete blocks. Excerpts must explicitly use
-`ts partial: reason` or `tsx partial: reason`. This runs in `bun run check` on both platforms.
-
-### Contract identity and host bindings
-
-See [ADR 0022](decisions/0022-contract-identity-and-app-bindings.md). UI modules import screen
-contracts and app-bound hooks. Use an explicit unique-symbol identity when independently
-declared same-name contracts need static distinction. Ordinary unique names need no token.
-`defineStoreApp` registers router-mounted definitions with `screens`; reserve routes for URL
-bindings. Fixture state access lives only in `@reflex/effect/internal`. Navigation queues
-behind the handler, so journeys assert successful SaveAndClose through ordinary actions.
-
-### Effect author API migration (A1)
-
-Inventory uses `Screen`, `defineService`, `defineFixture`, terminal navigation commands
-and ordered app composition. `examples/inventory/src/app.ts` is production-safe;
-`scenarios.ts` adds fixtures and exposes `legacyApp(authoredApp)` to the current
-`@reflex/test` API. The CLI accepts authored apps through their internal host adapter.
-Use `action.navigates` to return `Nav.push(Screen, params)`, `Nav.back` or `Nav.stay`.
-A navigation refusal remains a refused outcome after any `onRefused` state recovery.
-Legacy Effect APIs remain available for their existing consumers.
-
-`bun docs/design/prototypes/check.ts --real` checks spec/example drift and compiles
-all exact inventory author examples against the real package. `bun run check` includes
-this mode and the real-package negative cases in `packages/effect/test/author.types.ts`.
-The full declaration harness remains `bun docs/design/prototypes/check.ts` for the
-consumer tiers that have not migrated. See [ADR 0024](decisions/0024-additive-effect-author-api.md)
-and the [type graph audit](performance/userland-api-a1.md).
-
-### Store author API migration (A2)
-
-Use `defineStoreNode({ name, store, actions, params?, project? })` and
-`defineStoreApp({ name, screens?, services? })`. Zod inputs and params work directly;
-`standardInput(validator, jsonSchema)` supplies opaque validators' wire schema.
-JSON state needs no projection. Scenarios replace stores by identity with
-`stores: [Counter.withStore(factory)]`; factories retain decoded params and store types.
-Advanced store ownership uses `createRuntime` and `mountOwned` from
-`@reflex/runtime/advanced`. See [ADR 0025](decisions/0025-additive-store-author-api.md).
-
-The real-package harness now includes the exact plain and live-counter examples.
-Plain's `authoredApp` uses an ambient service; its legacy default keeps the current
-mobile and conformance screen behavior until host migration B. No mobile adapter
-change is needed in A2. Legacy store overloads remain in use by other consumers.
-
-### React host API migration (B1)
-
-Use app-bound `useScreen` for Suspense and `useScreenStatus` for pending/error/retry.
-`from(Definition)` captures a registered implementation for narrow selector/action
-hooks. React Router's binding adds contract `Link`/`href` and `routes(views)`. The
-Provider owns the bridge; Vite aliases `@reflex/live/dev` to `@reflex/live/vite`, keeping
-the default host-neutral entry inert. See ADR 0026 and the package READMEs.
-
-The real-package harness includes the exact web examples and their negative cases.
-Run `REFLEX_RECORD_TYPE_PERF=1 bun docs/design/prototypes/check.ts --real --performance`
-for measured real-package screen/hook gates. Its fast `--real` mode remains in check.
-B1 measured 459,211 root instantiations. Its real-package 100/200/400-screen checks
-with one hook took 2.49/4.94/8.67 seconds, with slopes 24.50/18.65 ms per screen and
-at most 0.872 ms per additional narrowed hook. The gates are 25 ms per screen and
-5 ms per additional hook; the B2 measurements below supersede that raw snapshot.
-
-### Expo host API migration (B2)
-
-`createReflexExpo` provides destructured hooks, contract Link/href and a Provider that
-owns the bridge and includes Navigation projection. Use `useScreen` inside a local
-Suspense boundary or `useScreenStatus` for explicit pending/error/retry. Status-only
-screen acquisition starts at commit. `@reflex/expo/dev` is Effect-free; Metro aliases
-`@reflex/live/dev` to it for Provider-owned development connections. The author root
-also stays Effect-free, including host-owned store screens.
-
-The mobile Metro config aliases `@inventory-provider`; `REFLEX_E2E=1` selects the
-instrumented Provider, which installs exported testScenarios on the same descriptor
-identity. Normal entries import no instrumentation. Development HTTP and AsyncStorage
-use `device-services`; absent an explicit API setting, production stays offline.
-The plain fixture uses the authored ambient service composition. The legacy screen
-adapter remains named for conformance tests only. See ADR 0027.
-
-The real-package harness includes the exact mobile example files and Expo misuse
-cases. Advanced `route` and `routeCodec` share one implementation in React, re-exported
-from React Router's advanced and Expo's internal entry. Custom codecs own their path
-and array policies. Expected observed action errors do not also report as background
-failures; ignored errors and defects remain visible.
-
-B2 validation on Bun 1.4.4 / TypeScript 5.9.3: root diagnostics recorded 460,241
-instantiations, 533,064 K memory, 1.66 s check and 2.51 s total. The unchanged root
-budget passes (459,211 baseline plus 10%). Exact real-package mobile/web/author
-examples compile with 183,185 instantiations and 41 host negative cases.
-
-The isolated real-package performance run measured 1.05/1.72/3.29 s check time for
-100/200/400 screens with one hook; the incremental slopes were 6.70/7.85 ms per
-screen (25 ms gate). Additional narrowed hooks cost at most 0.050 ms (5 ms gate).
-At one hook the instantiation counts were 561,961 / 1,189,761 / 2,865,361. Raw data
-is in [real-results.json](design/prototypes/real-results.json). Timing is local and
-scheduler-dependent; the fixed instantiation budget remains unchanged.
-
-Validation passed check (671 passed, three Windows-only skips), mobile e2e/plain/live/
-services and web e2e, including production bridge/token/instrumentation exclusion and
-plain's Effect-free Metro graph. The abandoned-status browser probe was verified to
-fail with render-time acquisition restored, then pass with commit-time acquisition.
-Browser probes also cover advanced codec routing/encoding and observed versus ignored
-expected action errors; runtime tests cover ignored errors and defects.
-
-### Test API migration (C)
-
-Use `createTestApp(authoredApp)` or `pool.open(authoredApp)` for app/scenario-typed clients.
-Inventory retains its legacy default host for protocol/conformance consumers; its journeys
-import the named authored descriptor and screen contracts. The shared story requires only
-focused/back, so fixture and device-services clients both satisfy it. `connectJourney` uses
-REFLEX_DIR and the CLI's device endpoint; mobile services no longer supplies a transport.
-
-The public root exports explore with keyed inputs/invariants; its advanced entry contains
-custom request transports and standalone raw protocol sessions. Malformed input and HTTP
-transport tests belong under root test/. See the test package README and ADR 0028.
-
-The real-package harness includes the exact inventory test/story, reset and capabilities
-examples and the test functions extracted verbatim from plumbing.ts, plus packages/test/test/author.types.ts for negative inference cases. Keep the
-unchanged root instantiation budget; compare extended diagnostics before/after this step. The pre-change root recorded
-460,241 instantiations; C stays within the unchanged 459,211 plus 10% budget.
+D's first cleanup on macOS measured 503,424 root instantiations, 534,982 K memory,
+2.05 s check and 2.78 s total. Exact real-package examples compiled with 254,482
+instantiations. The real-package screen gate measured 1.22/2.41/3.75 s for
+100/200/400 screens (564,961 / 1,195,561 / 2,876,761 instantiations); slopes were
+11.90/6.70 ms per screen and additional hooks at most 0.223 ms. Reference declarations
+passed at 8.80 ms per screen and at most 0.912 ms per additional hook. These local runs
+included concurrent browser work; the root instantiation ceiling remains unchanged.

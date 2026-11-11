@@ -82,10 +82,10 @@ packages/
               socket-writer.ts counts queued bytes until write callbacks complete;
               socket-shutdown.ts waits for the Windows shutdown reply receipt; bridge-controller.ts a Controller that
               forwards to whichever app is connected.
-  effect/     How an Effect app becomes nodes. capability.ts (defineCapability, mount), screen.ts (contracts before handlers),
-              navigation.ts (defineNavigation: the stack, a scope per screen),
-              app.ts (legacy AppHost lifecycle), author-*.ts (Screen, services, fixtures,
-              action commands and ordered scenario composition), json-codec.ts, redaction.ts.
+  effect/     author-screen.ts (Screen, defineService, defineFixture),
+              author-navigation.ts (terminal commands and scoped screens),
+              author-app.ts (ordered Layers and scenarios), capability.ts (internal
+              mounting/state access), app.ts (session lifecycle), redaction.ts.
   test/       App/scenario-typed createTestApp/connectJourney clients, raw protocol tests
               and explore random walks, through the real protocol.
   cli/        The reflex command. cli.ts parses; commands.ts does; session.ts runs and
@@ -94,9 +94,9 @@ packages/
   live/       Framework-free bridge.ts, live-sessions.ts, live-controller.ts,
               session-owner.ts, node-source.ts and ui-actions.ts. session.ts excludes
               the bridge for UI bundles. See packages/live/README.md.
-  react/      React-only legacy provider/hooks (react.tsx), app-bound host-neutral hooks
-              (binding.tsx, binding-types.ts), generic route binding,
-              app-bound factories and advanced session/route seams. See packages/react/README.md.
+  react/      App-bound hooks (binding.tsx), session/lease ownership (react.tsx),
+              shared route checks (routes.ts), and sibling-only internal plumbing.
+              See packages/react/README.md.
   navigation/ Router-neutral projection rules/controller and Navigation core port.
               No framework, router or Effect. See packages/navigation/README.md.
   react-router/ React Router 8 registration, typed links, route objects and per-screen
@@ -136,7 +136,7 @@ protocol ◄── runtime ◄── rpc ◄── test / cli
                 │    └── react-router ◄── apps/web
                 ├── navigation ─┘
                 │    ▲
-                └── effect ◄── react/effect, expo/effect
+                └── effect ◄── authored app cores
 
 runtime + live ◄── examples/live-counter
 ```
@@ -208,7 +208,7 @@ inventory-list.ts   OpenProduct's action.navigates handler returns Nav.push(Inve
 author-actions.ts   queue the command after its handler and child scope finish
 navigation.ts       execute the command: build the screen in a scope of its own, push it, set focus (the runtime starts onFocus as a tracked operation); the Navigation
                     node's state (the stack) changes
-react.tsx           useCoreStack sees the new stack; RouterProjection hands it to
+expo/react.tsx      useCoreStack sees the new stack; RouterProjection hands it to
 projection-         ProjectionController.onStack ─► syncRouter (pure, projection.ts)
   controller.ts     says push; router.push with the entry's node handle as the
                     reflexNode route param
@@ -303,7 +303,7 @@ scenario-local route factory used by the UI binding. The runtime sets focus; the
 binds the exact returned node id. Existing node, name, JSON and control-work limits apply.
 An aborted or closed session disposes a route that finishes mounting late.
 
-App-typed journeys are described in ADR 0028. The descriptor fingerprint in describe/reset
+App-typed journeys are described in ADR 0020. The descriptor fingerprint in describe/reset
 covers registered screen/service schemas and actions and excludes scenarios and fixtures.
 RPC owns target endpoint naming and Windows secret checks, shared by CLI and connectJourney.
 
@@ -366,9 +366,8 @@ What must stay true when you change things. Most have a test; the test names say
 - **Core-owned navigation is authoritative when adopted.** Navigation lives in the `Navigation` node; the
   router is a projection. App code in that mode navigates through actions, never `router.replace`.
   Incremental adopters keep their router, report focus, and do not mount RouterProjection.
-- **Effect state is written only through `StateAccess`.** Action handlers and `onFocus` receive
-  it; an owner that mounts with `mountWithAccess` holds it too. Nothing else can write a
-  node's state.
+- **Effect state is written only through scoped state access.** Action handlers and `onFocus`
+  receive it; the mounted owner revokes it when disposed.
 - **Closed write capabilities cannot be used.** Effect state access rejects reads and writes
   after its node closes, before invoking a transition. Store handlers receive revocable
   store access: cancellation revokes it before abort listeners run, and disposal revokes
@@ -378,7 +377,7 @@ What must stay true when you change things. Most have a test; the test names say
   taken as no change: no encoding, no event, no new revision. The UI and protocol read a detached, deeply frozen
   encoded, redacted copy, so mutating the decoded value in place would
   silently separate the two.
-- **Store state has a public boundary.** mountStore requires a bounded, checked JSON
+- **Store state has a public boundary.** defineStoreNode publishes a bounded, checked JSON
   projection, retains a detached frozen copy, and emits no event for identical public
   JSON. Application stores retain write ownership; invalid external writes cannot be
   rolled back. Availability dependencies belong in that projection.
@@ -390,7 +389,7 @@ What must stay true when you change things. Most have a test; the test names say
 - **Popping a core-owned screen cancels its work.** Each screen owns a scope; popping it interrupts
   every running action and its `onFocus`. Pushing another screen on top only takes its
   focus: it refuses new actions, but work already running carries on. Existing routers
-  report focus with useNodeFocus and must dispose their own popped nodes; store work
+  report focus through their app-bound host adapter and must dispose their own popped nodes; store work
   cancels cooperatively through AbortSignal.
 - **Session resources do not survive a reset.** Handles, operations and waits belong to one session.
   Pending waits reject with `SessionClosed`; a cursor from another session always gets
@@ -471,41 +470,42 @@ decision is in its ADR; what is still to do is in [roadmap.md](roadmap.md).
   Effect is how the example app is built, not what the protocol requires
   ([ADR 0002](decisions/0002-the-runtime-is-effect-free.md)).
 
-## 8. Author-facing contracts
+## 10. Author contracts and host bindings
 
-[ADR 0020](decisions/0020-type-bearing-userland-contracts.md) records the value-based API.
-Effect capabilities and store definitions retain exact consumer action maps and state.
-NodeHandle is structural and framework-free; outcomes adapt existing operations/refusals
-without changing protocol messages. The test client's transport binds the definition's
-own serializers. Apps register node definitions for typed journey membership.
+[ADR 0020](decisions/0020-userland-api.md) records the redesign and remaining cleanup.
+Effect uses `Screen`, `defineService` and `defineFixture`; stores use `defineStoreNode`.
+A screen contract precedes handlers and navigation. Implementations attach actions;
+app composition registers screens, services, fixtures and scenarios. Symbol-keyed host
+adapters connect authored descriptors to session lifecycle without importing Effect into
+controllers, CLI or test packages.
 
-Screen capabilities own params and initial state. Navigation derives screen factories;
-Expo's registration derives both mapping directions. React owns commit-time mounting and
-history-entry retention. Runtime setFocus invokes the adapter lifecycle only on arrival;
-routers and core navigation call this same operation.
+Consumer definitions retain exact action maps, encoded public state and identity.
+Published JSON is detached and deeply frozen. Effect handlers read decoded state;
+store handlers keep app-owned stores behind revocable invocation access. Guards publish
+independently of projection equality. Navigating handlers return terminal commands;
+handler scopes finish before navigation can retire the departing screen.
 
-Public roots expose author APIs. Effect integration helpers are under `/internal`, with ownership APIs under `/advanced`;
-React has only its root and `/advanced`. These subpaths keep their package's existing
-dependency direction. Expo exports its bound factory, projection and guarded development bridge from the root;
-its `/internal` entry also supplies the bridge to plain integrations without importing Effect.
-Expo URL binding helpers may import Effect. Generic React entries remain Effect-free. Vite's live/vite entry dynamically imports the dialler only in development.
-Production exclusion is checked by browser builds. UI entry files delegate optional test
-instrumentation to a development module, which production Metro removes.
+`createReflex`, `createReflexRouter` and `createReflexExpo` bind a real app to a Provider
+and typed hooks. Roots expose app-bound APIs. React advanced exposes `createRouteAdapter`
+for custom hosts; sibling adapters use React internal. React Router and Expo advanced
+expose `routeCodec`. Expo's dev entry remains Effect-free. Only router-actions.ts reads
+private Expo modules. The development bridge is selected by the host's alias and owned
+by the Provider; production exports exclude the bridge, token and instrumentation.
 
-## Contract and consumer boundary
+React owns one session route registry, shared by status hooks, Suspense and host
+preparation. Status acquisition begins at commit. Provisional Suspense resources remain
+owned even if render is abandoned; reset drains them. Host entry identity bounds history
+retention and controls forward-entry disposal. Session route factories provide Effect
+services and store scenario overrides. React Router owns its navigation; Expo projects
+core Navigation when present and supports host-owned stores otherwise.
 
-Screen contracts precede handler imports (ADRs 0021 and 0022) and share identity with
-implementations. `defineApp` composes a navigation implementation and declares fixtures
-once; scenario layers remain plain Layers. UI and journey
-consumers read wire state, while handlers read decoded state. Store projections are JSON
-and guards publish independently of projection equality. React owns bounded history-entry
-retention; router adapters supply only location identity and focus. Protocol probes live
-in root test/, and examples teach typed stories. Mobile E2E instrumentation lives in
-e2e/, loaded only through the compile-time selector in e2e/entry.tsx.
+Journeys resolve contracts through app/scenario membership and use the same serialized
+protocol headless or live. Reset returns a new client and revokes the previous generation.
+Protocol probes use the raw seam. Browser journeys select separate E2E instrumentation
+through the Metro/Vite entry; ordinary production modules import no instrumentation.
 
-Host binding factories attach the app to a Provider and typed screen/session hooks (ADR 0022).
-Session route factories provide Effect services and scenario store overrides. React Router
-mounts through these factories; Expo resolves core-owned screen instances. Navigating actions
-finish their handler before queued navigation can retire the screen, so a successful back
-reports completed. Other work on a popped screen is still cancelled. Documentation snippets
-and compiler diagnostic text are checked in CI alongside the instantiation budget.
+The real-package harness compiles extracted examples and negative cases and compares the
+six React/React Router/Expo root/advanced export-name sets with their declarations.
+Complete documentation snippets, compiler diagnostic text and the unchanged root type
+instantiation budget are checked in CI. Remaining legacy-package export cleanup and the
+source-size target are tracked in ADR 0020.

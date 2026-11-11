@@ -27,17 +27,13 @@ registry and remounts the subtree with fresh handles.
 (as apps/web does). The bridge is opened by the Provider effect and closed at unmount.
 The production branch excludes the dialler and setting. A custom `Bridge` also works.
 
-`/advanced` exports the route adapter/context, raw session/source access and legacy
-integration seams. All route hooks use one registry per session, including abandoned
-Suspense work. Builds have a protocol-defined deadline and cancellation signal;
-late results are disposed. History retains at most the protocol budget and releases
-unreachable forward entries. Retry replaces the promise in the existing lease.
-
-The round-3 `ReflexProvider`, `createLegacyReflex`, `useNode`, `useNodeView`, granular
-node hooks and `ScreenView` remain exported for legacy consumers. Their legacy action
-outcomes remain unchanged; the new bound views expose completed/error/refused/
-cancelled/defect outcomes.
+`/advanced` exports `createRouteAdapter` and its `RouteAdapter` port for a custom host.
+Sibling adapters and development instrumentation use `/internal`. All route hooks use
+one registry per session, including abandoned Suspense work. Builds have a protocol-defined
+deadline and cancellation signal; late results are disposed. History retains at most the
+protocol budget and releases unreachable forward entries. Retry replaces the promise in
+the existing lease.
 
 Status-only acquisition begins at commit. Observed expected action errors are returned
 without duplicate background reporting; ignored errors and defects still report with
-node/action context. Advanced route/routeCodec helpers are shared by host bindings.
+node/action context. The host advanced entries expose the shared `routeCodec` escape hatch.

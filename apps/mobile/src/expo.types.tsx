@@ -1,10 +1,12 @@
+import { Screen, defineApp } from "@reflex/effect"
+import * as Schema from "effect/Schema"
 import { defineStoreNode, defineStoreApp } from "@reflex/runtime"
 import { createStore } from "zustand/vanilla"
 import { z } from "zod"
 import { createReflexExpo } from "@reflex/expo"
 import { InventoryList, InventoryDetail, type Settings } from "@reflex/example-inventory/screens.ts"
 import app from "./app.ts"
-import { route, routeCodec } from "@reflex/react/advanced"
+import { routeCodec } from "@reflex/expo/advanced"
 const expo = createReflexExpo(app, {
   InventoryList: "/",
   InventoryDetail: "/inventory/[productId]",
@@ -39,16 +41,24 @@ createReflexExpo(app, {
 })
 // @ts-expect-error Missing route registration.
 createReflexExpo(app, { InventoryList: "/" })
-const path = route<{ id: string; tab?: string }>()
-path("/[id]")
+class RouteScreen extends Screen("RouteScreen", {
+  params: { id: Schema.String, tab: Schema.optionalKey(Schema.String) },
+  state: Schema.Number,
+  initial: () => 0,
+}) {}
+const routeScreen = RouteScreen.implement({
+  actions: (a) => ({ Noop: a.reduce({ reducer: (_, s) => s }) }),
+})
+const routeApp = defineApp({ name: "route-checks", screens: [routeScreen] })
+createReflexExpo(routeApp, { RouteScreen: "/[id]" })
 // @ts-expect-error Optional params cannot be placeholders.
-path("/[id]/[tab]")
+createReflexExpo(routeApp, { RouteScreen: "/[id]/[tab]" })
 // @ts-expect-error Repeated mapping target.
-path("/[id]", { tab: "id" })
+createReflexExpo(routeApp, { RouteScreen: { pathname: "/[id]", params: { tab: "id" } } })
 // @ts-expect-error Wrong mapping key.
-path("/[id]", { typo: "id" })
+createReflexExpo(routeApp, { RouteScreen: { pathname: "/[id]", params: { typo: "id" } } })
 // @ts-expect-error Dynamic paths need routeCodec.
-path("/[id]" as string)
+createReflexExpo(routeApp, { RouteScreen: "/[id]" as string })
 routeCodec({
   path: "/[...tail]",
   decode: () => ({ id: "1" }),

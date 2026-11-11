@@ -21,7 +21,7 @@ import {
   type ReflexBinding,
   type ValidateRoutes,
   type RouteCodec,
-} from "@reflex/react/advanced"
+} from "@reflex/react/internal"
 import { isRecord, type Json } from "@reflex/protocol"
 import { RouterProjection, routeParam } from "./react.tsx"
 import { ROUTE_MAPPING, NODE_PARAM } from "./route-token.ts"

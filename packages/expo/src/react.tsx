@@ -1,17 +1,8 @@
-import { isRecord, type NodeId } from "@reflex/protocol"
-import type { AppSession, Runtime } from "@reflex/runtime/internal"
-import {
-  router,
-  useGlobalSearchParams,
-  useLocalSearchParams,
-  useNavigationContainerRef,
-  useSegments,
-} from "expo-router"
+import { isRecord } from "@reflex/protocol"
+import type { AppSession } from "@reflex/runtime/internal"
+import { router, useGlobalSearchParams, useNavigationContainerRef, useSegments } from "expo-router"
 import * as React from "react"
-import {
-  useRuntimeSession as useSession,
-  useRouteNode as useBoundRouteNode,
-} from "@reflex/react/advanced"
+import { useRuntimeSession as useSession } from "@reflex/react/internal"
 import { reportFailure } from "@reflex/live/session"
 import {
   corePortOf,
@@ -57,16 +48,6 @@ export const routeParam = (value: string | ReadonlyArray<string> | undefined): s
   }
   return value?.[0] ?? null
 }
-
-export const useRouteNode = <N,>(
-  resolve: (runtime: Runtime, nodeId: NodeId) => N | undefined,
-  params?: Record<string, unknown>,
-): N | null =>
-  useBoundRouteNode(resolve, {
-    stack: useCoreStack(),
-    token: routeParam(useLocalSearchParams()[NODE_PARAM]),
-    ...(params === undefined ? {} : { params }),
-  })
 
 type ToHref = (destination: Destination) => RouterHref
 

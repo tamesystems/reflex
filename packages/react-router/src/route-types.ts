@@ -1,1 +1,1 @@
-export type { ValidateRoutes } from "@reflex/react/advanced"
+export type { ValidateRoutes } from "@reflex/react/internal"

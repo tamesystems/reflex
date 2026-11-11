@@ -33,7 +33,7 @@ live bridge need no React, React Native or Expo.
 
 - **Protocol and runtime**: JSON contracts, a registry of nodes, operations and events,
   and type-bearing store definitions with Standard Schema inputs.
-- **Effect integration**: `defineCapability`, `defineNavigation`, `defineApp`.
+- **Effect integration**: `Screen`, `defineService`, `defineFixture`, `defineNavigation`, `defineApp`.
 - **CLI**: background sessions, the device bridge and the MCP server.
 - **Live serving**: `@reflex/live` connects any JS app to the bridge with a global WebSocket.
 - **React bindings**: `@reflex/react` provides the provider and hooks without a router dependency.
@@ -59,9 +59,8 @@ A journey drives the app through the real protocol, with inferred inputs and sta
 
 ```ts
 import { createTestAppPool } from "@reflex/test"
-import app from "@reflex/example-inventory/scenarios.ts"
-import { InventoryList } from "@reflex/example-inventory/features/inventory-list.ts"
-import { InventoryDetail } from "@reflex/example-inventory/features/inventory-detail.ts"
+import { authoredApp as app } from "@reflex/example-inventory/scenarios.ts"
+import { InventoryList, InventoryDetail } from "@reflex/example-inventory/screens.ts"
 const pool = createTestAppPool()
 const session = await pool.open(app, { scenario: "inventory-with-products" })
 const list = await session.focused(InventoryList, { _tag: "ready" })
@@ -132,4 +131,4 @@ bun run reflex --target device stop
 `device` is the existing target name for any bridged app, including a server process.
 React apps bind a real app with `createReflex(app)` from `@reflex/react`. Expo and
 React Router use `createReflexExpo` and `createReflexRouter`. Their bound hooks infer
-contracts and scenario names. Raw dispatch lives in `@reflex/react/advanced`.
+contracts and scenario names. Custom host adapters use `createRouteAdapter` from `@reflex/react/advanced`.

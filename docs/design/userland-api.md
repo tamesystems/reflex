@@ -1,10 +1,12 @@
 # Reflex userland API specification, revision 3 (implementation contract)
 
-Status: Effect author tier implemented in A1; consumer and store tiers remain proposed.
+Status: A1–C implemented; D legacy cleanup is in progress. The React, React Router and
+Expo root/advanced export-name sets now match these declarations. Full-package legacy
+deletion and the 7,600-line acceptance target remain outstanding. This document is not
+yet marked fully implemented. Decisions: [ADR 0020](../decisions/0020-userland-api.md).
 Revision 1 baseline: `9debc24` on `origin/userland-api-spec`. Rubric:
 [api-principles.md](../api-principles.md). Architecture, protocol/controller parity,
-access policy and dependency boundaries remain authoritative. A1 is recorded in [ADR 0024](../decisions/0024-additive-effect-author-api.md). It does not
-implement a roadmap item. The remaining consumer migration is not claimed by A1.
+access policy and dependency boundaries remain authoritative.
 
 ## 1. Reading and verification contract
 
@@ -268,8 +270,7 @@ membership at runtime and uses only that definition in its hook types, avoiding 
 N-member overload intersection or repeated app-membership computation.
 The gates are 25 ms per added screen (100→200 and 200→400 with one hook) and 5 ms per
 additional narrowed hook, allowing scheduling noise. These are batch checker measurements,
-not editor latency measurements. Results are printed by the checker and recorded in
-prototypes/results.json when REFLEX_RECORD_TYPE_PERF=1 is set.
+not editor latency measurements. Results are printed by the checker; maintainer measurements belong in development.md.
 
 Static misuse rows below are generated from @case annotations. The checker asserts
 the complete custom message or a full TypeScript diagnostic sentence **plus exact source
@@ -2291,10 +2292,10 @@ longPath.href(Count, { count: "1" })
 - Real-package compilation of the exact authored examples is an implementation
   acceptance requirement; declaration-only compilation cannot establish runtime parity.
 
-The Effect author tier now packs phantom metadata under a symbol and implements the
-HTTP rewrite, runtime command diagnostics and real-package inventory harness. Consumer
-and store tiers, complete type-export example coverage, and the command-erasure lint
-rule remain later work; the full design is not yet a shipped API.
+The implementation packs author metadata under a symbol and compiles extracted author,
+store, host and journey examples against the real packages. Legacy cleanup, complete
+export equality and the source budget remain acceptance work; command-erasure lint is
+deferred.
 
 ## 6. Validation
 
@@ -2508,67 +2509,25 @@ export const Metrics = defineService({
 
 ## Implementation deviations
 
-C (`@reflex/test`): store journey `open` takes the validator's encoded input params;
-Standard Schema offers no inverse for one-way transforms, so arbitrary decoded params
-cannot be validated/re-encoded safely. Effect routes retain decoded params and encode
-through their codec. The test package accepts Duration.Input structurally, preserving its
-Effect-free dependency boundary. It retains ExploreResult summaries and the legacy
-AppHost/action-map APIs while adding the compiled API. The raw seam is also available as
-session.raw. `app.open` is an additive control-only protocol method for the requested
-host/store route operation. Fingerprints use available public declaration schemas;
-store projections have no public state/error schema, so projected errors are marked
-opaque. See ADR 0028.
+Store journey `open` takes the validator's encoded input params. Standard Schema has no
+inverse for arbitrary one-way transforms; Effect routes retain decoded params and encode
+through their codec. Duration.Input is accepted structurally to preserve the test package's
+Effect-free boundary. `app.open` is the additive control-only protocol operation for
+host/store routes. Fingerprints use available public declaration schemas; store projections
+have no public state/error schema, so projected errors are marked opaque.
 
-A1 retains legacy overloads and adds `legacyApp` under `@reflex/effect/internal` while
-old consumers migrate. Inventory's `scenarios.ts` exports the authored value as
-`authoredApp` and adapts its default export to the existing journey API. Feature and
-screen aliases preserve mobile imports. Production composition remains the exact
-compiled example, with no implicit HTTP fallback.
+TypeScript 5.9 requires one-step builders to use the already inferred codec state directly
+and the omitted-scenarios overload to infer the whole spec before checking layer coverage.
+Readable diagnostics also carry a fixed `Reflex type error` property so widened app names
+cannot bypass template-index checks. Author phantom metadata is packed under a symbol.
 
-TypeScript 5.9 requires two declaration-level inference corrections: one-step builders
-use the already inferred codec state directly (the outer `NoInfer` made tagged guards
-infer `never`), and the omitted-scenarios `defineApp` overload infers the whole spec
-before checking common-layer coverage. Callable behavior and coverage rules are
-unchanged. The declaration harness and real-package negative tests include these
-corrections. Author phantom metadata is symbol-packed in the implementation; the
-reference model's consumer fields remain declaration plumbing until their migration.
+The host-neutral development bridge entry is inert. Vite aliases it to its development
+implementation and Metro to Expo's Effect-free helper. Sibling integration plumbing uses
+internal entries; Expo's specified advanced entry exposes `routeCodec`. The E2E provider
+retains startup-failure probes and scenario selection in its separate instrumented module.
 
-The HTTP example now uses `filterStatusOk`, `schemaBodyJson`, and `catchTags`, while
-retaining byte/deadline bounds and the established invalid-JSON error message. Its
-extracted example and this document are kept identical.
-
-A2 adds the store author path alongside the legacy store overloads. The plain example
-exports its service-based composition as `authoredApp`; its default remains the
-screen-based `plainBackend` adapter for unchanged mobile and live conformance consumers
-until B. The exact extracted plain and live-counter examples compile against the real
-packages. `serveLive` already satisfied the process example and needed no change.
-
-Legacy callable actions and transformed-error handlers remain supported: `fail` also
-accepts a validator's input for those existing handlers. Authored decoded failures can
-use `projectError`; both the declaration and published JSON are checked. Explicit
-`project` callbacks retain the existing node-level JSON constraint, while omitted
-projections are checked at app composition. Actual state is checked at mount, so app
-composition does not instantiate stores. Advanced owned store handles use the new
-outcome vocabulary; old hosts and journeys retain their current outcomes until B.
-
-B1 adds the app-bound React and React Router bindings while retaining the round-3
-exports for Expo. New bound action views use the target outcomes; legacy node views
-retain their earlier outcomes. The host-neutral development bridge entry is inert;
-Vite selects the existing Vite implementation through an alias, so the Provider owns
-its lifecycle without pulling a dialler into other hosts or production bundles.
-
-TypeScript diagnostics also carry a fixed `Reflex type error` property alongside the
-readable mapped message. Legacy app names can be widened to string, and a template
-index signature alone would otherwise permit invalid contracts without an error.
-Authored constructor names are restored from their declared contract name after
-implementation, preserving unchanged legacy adapters in minified bundles.
-
-B2 installs the authored Expo binding and mobile examples alongside retained legacy
-integration internals. Expo exposes its advanced route helpers through the single
-internal entry rather than adding a second integration subpath. The Effect-free dev
-entry is separate; round-3 root aliases remain during the additive migration. Metro
-aliases the host-neutral development helper to Expo's helper.
-The E2E provider additionally retains startup-failure instrumentation and scenario
-selection needed by the existing browser journeys. Plain's legacy adapter remains a
-named conformance fixture; its default is now the authored composition. The real-package
-harness includes exact mobile examples and Expo negative cases. See ADR 0027.
+Effect/store/test legacy paths remain pending D deletion; their retention is temporary,
+not an accepted final deviation. The six React/React Router/Expo root and advanced name
+sets are checked against the declarations by the real-package harness. The complete
+export equality gate and source budget remain pending. The command-erasure lint rule
+remains explicit follow-up work. See ADR 0020 for the design and implementation status.

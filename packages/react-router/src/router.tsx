@@ -11,7 +11,7 @@ import {
   type Contract,
   type URLParams,
   type ReflexBinding,
-} from "@reflex/react/advanced"
+} from "@reflex/react/internal"
 import { mountSessionRoute } from "@reflex/runtime/internal"
 import {
   Link as HostLink,
@@ -52,7 +52,7 @@ export interface RouterBinding<A extends App> extends ReflexBinding<A> {
   ): RouteObject[]
 }
 type Registration =
-  | import("@reflex/react/advanced").RouteCodec<Record<string, string | undefined>>
+  | import("@reflex/react/internal").RouteCodec<Record<string, string | undefined>>
   | string
   | {
       readonly path?: string

@@ -13,8 +13,8 @@ import {
 } from "@reflex/runtime/internal"
 import { developmentBridge } from "@reflex/live/dev"
 import {
-  ReflexProvider,
-  createLegacyReflex,
+  SessionProvider,
+  useBoundSession,
   useRouteLease,
   useNodeFocus,
   useNodeView,
@@ -207,7 +207,7 @@ const useSelectedState = (
 }
 const featureBinding = (
   definition: Definition,
-  legacy: { useSession(): unknown },
+  useSession: () => unknown,
   resolve: (contract: { name: string }) => Definition,
   useScreen: (contract: { name: string }) => unknown,
   useScreenStatus: (contract: { name: string }) => unknown,
@@ -216,12 +216,12 @@ const featureBinding = (
     useScreen: () => useScreen(definition),
     useScreenStatus: () => useScreenStatus(definition),
     useNodeState: (selector: (state: unknown) => unknown) => {
-      legacy.useSession()
+      useSession()
       const { node } = useSelectedNode(resolve(definition), true)
       return useSelectedState(node, selector)
     },
     useAction: (name: string) => {
-      legacy.useSession()
+      useSession()
       const { node } = useSelectedNode(resolve(definition), true)
       const action = useAction(node, name)
       const { runtime } = useRuntimeSession()
@@ -236,7 +236,8 @@ const featureBinding = (
 /** App-bound hooks are created once at module scope. */
 export function createReflex<A extends App>(app: A): ReflexBinding<A> {
   const host = appHost(app)
-  const legacy = createLegacyReflex(host)
+  // biome-ignore lint/correctness/noComponentHookFactories: Explicit app binding factory, called once at module scope.
+  const useSession = () => useBoundSession(host)
   const screens = new Map(screenDefinitions(app).map((d) => [d.name, d]))
   const services = new Map(
     definitions(app.services ?? (host as AppHost & { nodes?: unknown }).nodes)
@@ -255,7 +256,7 @@ export function createReflex<A extends App>(app: A): ReflexBinding<A> {
   }
   // biome-ignore lint/correctness/noComponentHookFactories: Explicit app binding factory, called once at module scope.
   const useScreenStatus = (contract: { name: string }) => {
-    legacy.useSession()
+    useSession()
     const selected = useSelectedNode(resolve(contract), false)
     const view = usePublishedView(selected.node)
     if (selected.snapshot?.status === "error") {
@@ -273,12 +274,12 @@ export function createReflex<A extends App>(app: A): ReflexBinding<A> {
   }
   // biome-ignore lint/correctness/noComponentHookFactories: Explicit app binding factory, called once at module scope.
   const useScreen = (contract: { name: string }) => {
-    legacy.useSession()
+    useSession()
     const { node } = useSelectedNode(resolve(contract), true)
     return usePublishedView(node)
   }
   return {
-    ...legacy,
+    useSession,
     // biome-ignore lint/correctness/noComponentHookFactories: Explicit app binding factory, called once at module scope.
     Provider: ({
       app: provided,
@@ -293,13 +294,13 @@ export function createReflex<A extends App>(app: A): ReflexBinding<A> {
         () => (bridge === "development" ? developmentBridge() : bridge),
         [bridge],
       )
-      return <ReflexProvider {...props} host={target} bridge={ownedBridge} />
+      return <SessionProvider {...props} host={target} bridge={ownedBridge} />
     },
     useScreen,
     useScreenStatus,
     useScreenSuspense: useScreen,
     useService: (definition: Definition) => {
-      legacy.useSession()
+      useSession()
       if (services.get(definition.name) !== definition) {
         throw new Error(`${definition.name} is not a service of app '${app.name}'`)
       }
@@ -311,7 +312,7 @@ export function createReflex<A extends App>(app: A): ReflexBinding<A> {
           `from requires the registered definition of ${definition.name} in app '${app.name}'`,
         )
       }
-      return featureBinding(definition, legacy, resolve, useScreen, useScreenStatus)
+      return featureBinding(definition, useSession, resolve, useScreen, useScreenStatus)
     },
   } as unknown as ReflexBinding<A>
 }

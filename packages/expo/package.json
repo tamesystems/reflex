@@ -7,7 +7,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./internal": "./src/internal.ts",
-    "./dev": "./src/dev.ts"
+    "./dev": "./src/dev.ts",
+    "./advanced": "./src/advanced.ts"
   },
   "dependencies": {
     "@reflex/effect": "workspace:*",
