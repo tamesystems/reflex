@@ -17,3 +17,5 @@ export type { OwnedRoute } from "./route-mount.ts"
 export { registerRouteFactories, mountSessionRoute } from "./route-mount.ts"
 
 export { DEFINITION_IDENTITY, definitionIdentity } from "./definition-identity.ts"
+
+export { publishJson } from "./publication.ts"

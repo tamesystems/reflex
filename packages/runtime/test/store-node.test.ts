@@ -9,7 +9,7 @@ import {
 } from "@reflex/protocol"
 import { createRuntime, mountStore, standardInput, StoreFailure } from "@reflex/runtime/internal"
 import Ajv from "ajv/dist/2020.js"
-import { createStore } from "zustand/vanilla"
+import { createStore, type StoreApi } from "zustand/vanilla"
 import { z } from "zod"
 import { addInput, addSchema } from "../../../examples/plain/src/app.ts"
 
@@ -473,4 +473,146 @@ test("a refused input says what is wrong, within a bound", async () => {
   expect(bounded.message).toContain("field0: ")
   expect(bounded.message).not.toContain("field5: ")
   many.dispose()
+})
+
+test("cancelled handlers lose store methods before abort listeners and late continuations run", async () => {
+  const runtime = createRuntime({ sessionId: "revoked-handler" })
+  const store = createStore(() => ({ count: 0 }))
+  const barrier = deferred<void>()
+  const settled = deferred<void>()
+  let abortWrite: unknown
+  let lateWrite: unknown
+  const node = mountStore(runtime, {
+    name: "Counter",
+    store,
+    project: (state) => state,
+    actions: {
+      Run: {
+        handler: async (_, { store, signal }) => {
+          const write = (store as StoreApi<{ count: number }>).setState
+          signal.addEventListener("abort", () => {
+            try {
+              write({ count: 1 })
+            } catch (error) {
+              abortWrite = error
+            }
+          })
+          await barrier.promise
+          try {
+            write({ count: 2 })
+          } catch (error) {
+            lateWrite = error
+          } finally {
+            settled.resolve()
+          }
+        },
+      },
+    },
+  })
+  const operation = await runtime.dispatch({ action: "Run" })
+  runtime.cancel(operation.operationId)
+  expect(abortWrite).toMatchObject({ code: ErrorCode.SessionClosed })
+  barrier.resolve()
+  await settled.promise
+  expect(lateWrite).toMatchObject({ code: ErrorCode.SessionClosed })
+  expect(store.getState()).toEqual({ count: 0 })
+  expect(node.getSnapshot()).toEqual({ count: 0 })
+  expect((await runtime.wait({ operationId: operation.operationId })).operation?.status).toBe(
+    "cancelled",
+  )
+  node.dispose()
+})
+
+test("disposing a store generation revokes handler access while a fresh store stays independent", async () => {
+  const runtime = createRuntime({ sessionId: "revoked-generation" })
+  const store = createStore(() => ({ count: 0 }))
+  const barrier = deferred<void>()
+  const settled = deferred<void>()
+  let lateWrite: unknown
+  const node = mountStore(runtime, {
+    name: "Counter",
+    store,
+    project: (state) => state,
+    actions: {
+      Run: {
+        handler: async (_, { store }) => {
+          await barrier.promise
+          try {
+            ;(store as StoreApi<{ count: number }>).setState({ count: 99 })
+          } catch (error) {
+            lateWrite = error
+          } finally {
+            settled.resolve()
+          }
+        },
+      },
+    },
+  })
+  const operation = await runtime.dispatch({ action: "Run" })
+  node.dispose()
+  expect((await runtime.wait({ operationId: operation.operationId })).operation?.status).toBe(
+    "cancelled",
+  )
+  const nextStore = createStore(() => ({ count: 5 }))
+  const next = mountStore(runtime, {
+    name: "Counter",
+    store: nextStore,
+    project: (state) => state,
+    actions: {},
+  })
+  const sequence = runtime.sequence
+  barrier.resolve()
+  await settled.promise
+  expect(lateWrite).toMatchObject({ code: ErrorCode.SessionClosed })
+  expect(store.getState()).toEqual({ count: 0 })
+  expect(nextStore.getState()).toEqual({ count: 5 })
+  expect(next.getSnapshot()).toEqual({ count: 5 })
+  expect(runtime.sequence).toBe(sequence)
+  expect((await runtime.wait({ operationId: operation.operationId })).operation?.status).toBe(
+    "cancelled",
+  )
+  next.dispose()
+})
+
+test("guarded handlers preserve frozen class stores and stable extracted methods", async () => {
+  class CounterStore {
+    #count = 0
+    #listeners = new Set<() => void>()
+    getState() {
+      return { count: this.#count }
+    }
+    subscribe(listener: () => void) {
+      this.#listeners.add(listener)
+      return () => {
+        this.#listeners.delete(listener)
+      }
+    }
+    increment() {
+      this.#count++
+      for (const listener of this.#listeners) {
+        listener()
+      }
+    }
+  }
+  const runtime = createRuntime({ sessionId: "class-store" })
+  const store = Object.freeze(new CounterStore())
+  const node = mountStore(runtime, {
+    name: "Counter",
+    store,
+    project: (state) => state,
+    actions: {
+      Increment: {
+        handler: (_, { store }) => {
+          const counter = store as CounterStore
+          expect(counter.increment).toBe(counter.increment)
+          const increment = counter.increment
+          increment()
+          expect(counter.getState()).toEqual({ count: 1 })
+        },
+      },
+    },
+  })
+  expect((await node.dispatchRaw("Increment")).status).toBe("completed")
+  expect(node.getSnapshot()).toEqual({ count: 1 })
+  node.dispose()
 })

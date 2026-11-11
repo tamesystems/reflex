@@ -345,9 +345,14 @@ What must stay true when you change things. Most have a test; the test names say
 - **Effect state is written only through `StateAccess`.** Action handlers and `onFocus` receive
   it; an owner that mounts with `mountWithAccess` holds it too. Nothing else can write a
   node's state.
+- **Closed write capabilities cannot be used.** Effect state access rejects reads and writes
+  after its node closes, before invoking a transition. Store handlers receive revocable
+  store access: cancellation revokes it before abort listeners run, and disposal revokes
+  every handler. Extracted methods retain this check. Raw stores retained outside the
+  handler remain application-owned.
 - **Effect state is immutable.** An update returns a new value. Returning the same object is
-  taken as no change: no encoding, no event, no new revision. The UI reads the decoded
-  value; the protocol reads its encoded, redacted copy, so mutating in place would
+  taken as no change: no encoding, no event, no new revision. The UI and protocol read a detached, deeply frozen
+  encoded, redacted copy, so mutating the decoded value in place would
   silently separate the two.
 - **Store state has a public boundary.** mountStore requires a bounded, checked JSON
   projection, retains a detached frozen copy, and emits no event for identical public

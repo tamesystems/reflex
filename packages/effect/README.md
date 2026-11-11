@@ -54,3 +54,7 @@ dispatch and custom factory navigation. Scenarios stay plain Layers; declare fix
 with `defineApp({ fixtures: { Fixture }, ... })`.
 
 [ADR 0022](../../docs/decisions/0022-contract-identity-and-app-bindings.md) records these changes.
+
+State access belongs to its mounted node. After disposal, reads and updates fail before
+calling application transitions. Published encoded state is detached and deeply frozen
+through the same JSON publication boundary as store nodes.

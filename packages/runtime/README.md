@@ -19,7 +19,9 @@ Rendering, routing, Effect, platform APIs or application persistence.
 
 ## Important invariants
 
-Imports only protocol. Screen actions require focus; service and fixture nodes are ambient. Accepted operations are distinct from completion. Public store state is checked JSON, detached and frozen. Reset changes session identity.
+Imports only protocol. Screen actions require focus; service and fixture nodes are ambient. Accepted operations are distinct from completion. Public store state is checked JSON, detached and frozen. Reset changes session identity. Handler store access is revoked before cancellation abort
+listeners run and when its node is disposed. Extracted store methods retain the revocation
+check; independently retained raw stores remain application-owned.
 
 See [architecture](../../docs/ARCHITECTURE.md) and [development](../../docs/development.md).
 
@@ -43,3 +45,6 @@ ownership seams under `@reflex/runtime/internal`.
 
 `src/node-handle.ts` defines the shared Effect/store consumer contract and definition-owned
 journey serialization. See [adopting](../../docs/adopting.md) and ADR 0020.
+
+`src/publication.ts` shares detached, deeply frozen JSON publication with the Effect
+adapter. Publication rejects accessors, non-JSON values and values outside protocol limits.

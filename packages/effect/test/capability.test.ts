@@ -1266,3 +1266,46 @@ test("native views are bounded before allocating their indexed property list", (
     "ArrayBuffer view is too large",
   )
 })
+
+test("state capabilities reject reads and transitions after their owning scope closes", async () => {
+  const { createRuntime } = await import("@reflex/runtime/internal")
+  const { mountWithAccess } = await import("@reflex/effect/internal")
+  const runtime = createRuntime({ sessionId: "closed-state-access" })
+  const Counter = defineCapability({
+    name: "Counter",
+    state: Schema.Struct({ count: Schema.Int }),
+    actions: () => ({}),
+  })
+  const { node, access } = await Effect.runPromise(
+    Effect.scoped(
+      mountWithAccess(Counter, { count: 0 }).pipe(Effect.provideService(Registry, runtime)),
+    ),
+  )
+  let called = false
+  const sequence = runtime.sequence
+  const read = await Effect.runPromiseExit(access.get)
+  const write = await Effect.runPromiseExit(
+    access.update(() => {
+      called = true
+      return { count: 99 }
+    }),
+  )
+  expect(read._tag === "Failure" && Cause.hasInterruptsOnly(read.cause)).toBe(true)
+  expect(write._tag === "Failure" && Cause.hasInterruptsOnly(write.cause)).toBe(true)
+  expect(called).toBe(false)
+  expect(node.getSnapshot()).toEqual({ count: 0 })
+  expect(runtime.sequence).toBe(sequence)
+})
+
+test("Effect wire publication detaches and deeply freezes unknown JSON values", () => {
+  const encode = secretFreeEncoder(Schema.Struct({ value: Schema.Unknown }))
+  const initial = { value: { rows: [{ count: 1 }] } }
+  const published = encode(initial)
+  initial.value.rows[0] = { count: 99 }
+  expect(published).toEqual({ value: { rows: [{ count: 1 }] } })
+  const frozen = (value: Json): boolean =>
+    value === null ||
+    typeof value !== "object" ||
+    (Object.isFrozen(value) && Object.values(value).every(frozen))
+  expect(frozen(published)).toBe(true)
+})

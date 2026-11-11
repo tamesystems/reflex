@@ -1,3 +1,4 @@
+import { publishJson } from "./publication.ts"
 import { DEFINITION_IDENTITY } from "./definition-identity.ts"
 import {
   boundedText,
@@ -6,10 +7,7 @@ import {
   type JsonSchema,
   json,
   isRecord,
-  measureJson,
   NODE_LISTENERS_MAX,
-  NODE_STATE_CHARACTERS_MAX,
-  NODE_STATE_DEPTH_MAX,
   type NodeType,
   type OperationOutcome,
   ProtocolError,
@@ -161,72 +159,6 @@ export interface StoreAction<S, I = unknown, T extends Store<S> = Store<S>, W = 
   ): unknown
 }
 
-/** Validate, detach and freeze the public projection before retaining or publishing it. */
-const publicState = (value: unknown): Json => {
-  // Reject accessors before reading them: JSON.stringify must not run application code.
-  let budget = NODE_STATE_CHARACTERS_MAX
-  const copy = (item: unknown, depth: number): unknown => {
-    if (depth > NODE_STATE_DEPTH_MAX || --budget < 0) {
-      throw new ProtocolError(
-        ErrorCode.ResourceExhausted,
-        "State cannot be sent: too-deep or too-large",
-      )
-    }
-    if (item === null || typeof item !== "object") {
-      return item
-    }
-    if (
-      !Array.isArray(item) &&
-      Object.getPrototypeOf(item) !== Object.prototype &&
-      Object.getPrototypeOf(item) !== null
-    ) {
-      throw new Error("Public state must contain only plain JSON objects")
-    }
-    const result: Record<string, unknown> | unknown[] = Array.isArray(item)
-      ? []
-      : Object.create(null)
-    for (const key of Object.keys(item)) {
-      if (Array.isArray(item) && (String(Number(key)) !== key || Number(key) >= item.length)) {
-        throw new Error("Public arrays cannot contain named properties")
-      }
-      const descriptor = Object.getOwnPropertyDescriptor(item, key)
-      if (!descriptor || !("value" in descriptor)) {
-        throw new Error("Public state cannot contain accessors")
-      }
-      Object.defineProperty(result, key, {
-        value: copy(descriptor.value, depth + 1),
-        enumerable: true,
-        configurable: true,
-        writable: true,
-      })
-    }
-    // Preserve holes so measureJson rejects them rather than silently dropping them.
-    if (Array.isArray(item) && Array.isArray(result)) {
-      result.length = item.length
-    }
-    return result
-  }
-  value = copy(value, 1)
-  const measure = measureJson(value, NODE_STATE_CHARACTERS_MAX, NODE_STATE_DEPTH_MAX)
-  if (measure !== "fits") {
-    throw new ProtocolError(ErrorCode.ResourceExhausted, `State cannot be sent: ${measure}`)
-  }
-  const text = JSON.stringify(value)
-  if (text.length > NODE_STATE_CHARACTERS_MAX) {
-    throw new ProtocolError(ErrorCode.ResourceExhausted, "State cannot be sent: too-large")
-  }
-  const freeze = (item: Json): Json => {
-    if (item !== null && typeof item === "object") {
-      for (const child of Object.values(item)) {
-        freeze(child)
-      }
-      Object.freeze(item)
-    }
-    return item
-  }
-  return freeze(JSON.parse(text) as Json)
-}
-
 const invoke = (
   handler: (signal: AbortSignal) => unknown,
   validatedFailures: WeakSet<StoreFailure>,
@@ -251,6 +183,56 @@ const invoke = (
   return { done, cancel }
 }
 
+/** Revoke handler access before abort callbacks or late Promise continuations run. */
+const guardedStore = <T extends object>(store: T, active: () => boolean): T => {
+  const methods = new WeakMap<(...args: never[]) => unknown, (...args: unknown[]) => unknown>()
+  const check = () => {
+    if (!active()) {
+      throw new ProtocolError(ErrorCode.SessionClosed, "The store handler is no longer active")
+    }
+  }
+  // A facade also supports frozen stores: replacing a frozen target's method in a
+  // proxy get trap would violate Proxy invariants. Bind methods to the original
+  // receiver so class-based stores retain access to private fields.
+  return new Proxy(Object.create(Object.getPrototypeOf(store)) as T, {
+    get(_, key) {
+      check()
+      const value: unknown = Reflect.get(store, key, store)
+      if (typeof value !== "function") {
+        return value
+      }
+      const method = value as (...args: never[]) => unknown
+      let guarded = methods.get(method)
+      if (guarded === undefined) {
+        guarded = (...args) => {
+          check()
+          return Reflect.apply(method, store, args)
+        }
+        methods.set(method, guarded)
+      }
+      return guarded
+    },
+    set(_, key, value) {
+      check()
+      return Reflect.set(store, key, value, store)
+    },
+    defineProperty(_, key, descriptor) {
+      check()
+      return Reflect.defineProperty(store, key, descriptor)
+    },
+    deleteProperty(_, key) {
+      check()
+      return Reflect.deleteProperty(store, key)
+    },
+    has: (_, key) => Reflect.has(store, key),
+    ownKeys: () => Reflect.ownKeys(store),
+    getOwnPropertyDescriptor(_, key) {
+      const descriptor = Reflect.getOwnPropertyDescriptor(store, key)
+      return descriptor === undefined ? undefined : { ...descriptor, configurable: true }
+    },
+  })
+}
+
 const failedOutcome = (
   error: unknown,
   validatedFailures: WeakSet<StoreFailure>,
@@ -270,7 +252,7 @@ const failedOutcome = (
         ...(error instanceof StoreFailure &&
         validatedFailures.has(error) &&
         error.data !== undefined
-          ? { data: publicState(error.data) }
+          ? { data: publishJson(error.data) }
           : {}),
       },
     }
@@ -475,7 +457,7 @@ class StoreNode<S, P, A extends Readonly<Record<string, AnyStoreAction<S>>>>
     this.name = definition.name
     this.type = definition.type ?? "service"
     this.id = runtime.nextId(this.type, this.name)
-    this.state = publicState(definition.project(definition.store.getState()))
+    this.state = publishJson(definition.project(definition.store.getState()))
     this.previous = JSON.stringify(this.state)
     this.unregister = runtime.register(this)
     try {
@@ -578,7 +560,10 @@ class StoreNode<S, P, A extends Readonly<Record<string, AnyStoreAction<S>>>>
               input,
               Object.assign(
                 {
-                  store: this.definition.store,
+                  store: guardedStore(
+                    this.definition.store,
+                    () => !this.disposed && !this.runtime.closed && !signal.aborted,
+                  ),
                   signal,
                 },
                 {
@@ -586,7 +571,7 @@ class StoreNode<S, P, A extends Readonly<Record<string, AnyStoreAction<S>>>>
                     if (action.error === undefined) {
                       throw new Error(`Action "${name}" has no declared error`)
                     }
-                    const data = publicState(validateStandard(action.error, error))
+                    const data = publishJson(validateStandard(action.error, error))
                     const tag =
                       isRecord(data) && typeof data._tag === "string" ? data._tag : "Failure"
                     const message =
@@ -638,7 +623,7 @@ class StoreNode<S, P, A extends Readonly<Record<string, AnyStoreAction<S>>>>
     }
     let next: Json
     try {
-      next = publicState(this.definition.project(this.definition.store.getState()))
+      next = publishJson(this.definition.project(this.definition.store.getState()))
     } catch (error) {
       if (this.unpublishable === null) {
         this.runtime.report(error)

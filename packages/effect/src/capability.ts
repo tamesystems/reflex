@@ -10,10 +10,7 @@ import {
   ErrorCode,
   type Json,
   type JsonSchema,
-  measureJson,
   NODE_LISTENERS_MAX,
-  NODE_STATE_CHARACTERS_MAX,
-  NODE_STATE_DEPTH_MAX,
   type NodeId,
   type NodeType,
   type OperationError,
@@ -23,6 +20,7 @@ import {
 } from "@reflex/protocol"
 import {
   actionOutcome,
+  publishJson,
   reportActionOutcome,
   decodeActionInput,
   bindActions,
@@ -510,26 +508,13 @@ export const secretFreeEncoder = <A>(schema: WireCodec<A>): ((value: A) => Json)
     // Validate the real secret before projection, without ever encoding its plaintext.
     if (view === value) {
       // `toCodecJson` guarantees JSON, including schemas whose encoded type is erased.
-      return requireWithinStateLimit(encode(value) as Json)
+      return publishJson(encode(value) as Json)
     }
     if (!validate(value)) {
       throw new Error("State does not match its schema")
     }
-    return requireWithinStateLimit(encodeView(view))
+    return publishJson(encodeView(view))
   }
-}
-
-/** Valid pieces can add up to more than a session should hold. */
-const requireWithinStateLimit = (encoded: Json): Json => {
-  const measure = measureJson(encoded, NODE_STATE_CHARACTERS_MAX, NODE_STATE_DEPTH_MAX)
-  if (measure !== "fits") {
-    throw new ProtocolError(ErrorCode.ResourceExhausted, `State cannot be sent: ${measure}`)
-  }
-  // The walk's count is a lower bound: escapes alone can double what it saw.
-  if (JSON.stringify(encoded).length > NODE_STATE_CHARACTERS_MAX) {
-    throw new ProtocolError(ErrorCode.ResourceExhausted, "State cannot be sent: too-large")
-  }
-  return encoded
 }
 
 const isEmptyInput = (raw: unknown): boolean => {
@@ -731,8 +716,11 @@ class NodeInstance<S, A extends ActionsOf<S>, R, P, W>
   private unregister: () => void = () => undefined
 
   readonly access: StateAccess<S> = {
-    get: Effect.sync(() => this.state),
-    update: (transition) => Effect.sync(() => this.apply(transition)),
+    get: Effect.suspend(() => (this.isClosed() ? Effect.interrupt : Effect.sync(() => this.state))),
+    update: (transition) =>
+      Effect.suspend(() =>
+        this.isClosed() ? Effect.interrupt : Effect.sync(() => this.apply(transition)),
+      ),
     when: (tag) => narrowAccess(this.access, tag),
   }
 
@@ -954,17 +942,33 @@ class NodeInstance<S, A extends ActionsOf<S>, R, P, W>
 
   /** Encodes first: state that cannot be published must not become the state. */
   private apply(transition: (state: S) => S): void {
+    this.requireActive()
     const next = transition(this.state)
+    this.requireActive()
     if (next === this.state) {
       return
     }
     const encoded = this.encodeState(next)
+    this.requireActive()
     this.state = next
     this.encoded = encoded
     for (const listener of [...this.listeners]) {
       this.notify(listener)
     }
     this.availabilityChanged()
+  }
+
+  private requireActive(): void {
+    if (this.isClosed()) {
+      throw new ProtocolError(
+        ErrorCode.SessionClosed,
+        `State access for ${this.name} belongs to a closed node`,
+      )
+    }
+  }
+
+  private isClosed(): boolean {
+    return this.focus.kind === "retired" || this.host.registry.closed
   }
 
   /** The state has changed: one listener's failure cannot undo that for the others. */
