@@ -1,6 +1,6 @@
 # 0020. Userland contracts, composition and app-bound consumers
 
-Date: 2026-11-11. Status: accepted; implementation cleanup in progress.
+Date: 2026-11-11. Status: accepted.
 
 ## Context
 
@@ -122,131 +122,66 @@ per additional hook; instantiations were 561,961 / 1,189,761 / 2,865,361. Timing
 on the machine; instantiation counts are the stable root gate. Maintainer commands and
 current measurements belong in [development.md](../development.md), not scratch reports.
 
-## Consequences and implementation status
+## Consequences and retained internals
 
-The ordinary API follows one definition into the UI and journeys without hand-written
-consumer generics. Explicit ownership and host entries keep framework and transport
-boundaries intact. Protocol, controller parity, bridge, CLI and MCP coverage must remain.
+The ordinary API follows one definition into UI and journeys without hand-written
+consumer generics. All 16 specified root, advanced and dev entries have exact type/value
+export-name equality with the declarations, enforced by the real-package harness.
+Runtime store compatibility exports, the string-based test facade, test scheduling
+helpers and the old Effect/React/Expo author exports are absent from these entries.
+The public test factory accepts authored descriptors only. Its pool has no low-level
+open method. Authored regressions use descriptors, action-level error/refusal assertions
+and reset generations. Shared journey contracts and structural duration inputs live in
+runtime so live/test consumers share types without upward package dependencies.
 
-A1–C implement the authored paths. The first D cleanup removes the unbound React surface,
-legacy React hooks and unused Suspense adapters, and aligns all six React/React Router/
-Expo root and advanced export-name sets with the declarations. The real-package harness
-checks those sets, including type-only exports. Sibling integration imports move to the
-React internal entry; Expo gains its specified advanced entry. No experiment is deleted
-in this partial cleanup.
+Protocol limits, both controllers, bridge behavior, CLI/MCP reuse, conformance and
+experiments are preserved. Store composition has one array/override path; expected store
+errors originate from a declared action's checked fail helper. Effect composition has
+one author implementation over the internal session engine. Explicit Effect ownership
+uses scoped mountEffect. Definition/scenario extensions preserve stable identity.
 
-Source lines in the first D cleanup (all files under each package's src):
+The original 7,600-source-line allocation is no longer a landing requirement. Current
+physical source lines (all files recursively under each package's src, including entry
+files, comments and shared types) are:
 
-| Package      | Before |  After |
-| ------------ | -----: | -----: |
-| effect       |  4,096 |  4,096 |
-| runtime      |  3,727 |  3,727 |
-| react        |  1,258 |  1,115 |
-| expo         |    861 |    766 |
-| react-router |    290 |    290 |
-| live         |    821 |    821 |
-| test         |  1,889 |  1,889 |
-| Total        | 12,942 | 12,704 |
+| Package      | Source lines |
+| ------------ | -----------: |
+| effect       |        3,780 |
+| runtime      |        4,013 |
+| react        |        1,115 |
+| expo         |          766 |
+| react-router |          290 |
+| live         |          833 |
+| test         |        1,595 |
+| Total        |       12,392 |
 
-D remains incomplete: the Effect/store/test legacy paths and their internal test,
-conformance, benchmark and experiment users still need migration and deletion. The
-7,600-line target and full-package export equality remain acceptance requirements, not
-waived deviations; the remaining 5,104-line gap reflects unfinished cleanup, not evidence
-that the final budget is impossible. The implementation branch must not land on
-`userland-api` until these and every required verification pass. The spec remains
-explicitly in progress. This status is narrower than the final design decision.
+The gap from the original allocation is 4,792 lines. It is retained implementation
+cost, not a claim that the planning target was met.
 
-### D2 store and conformance cleanup
+Mounting, state publication/encoding/redaction, scoped navigation, registry bounds,
+session lifecycle, route retention and protocol-backed journeys remain necessary runtime
+behavior. Removing these to reach the line target would weaken the contract. The
+following specific shrink candidates remain follow-up work requiring coordinated fixture
+migration and type changes:
 
-The store composition now accepts only the authored screen/service arrays. Its internal
-host builder no longer has the eager-screen branch or a second scenario extension
-implementation. Store mounting is private to definitions; the exported raw mount helper
-and throwable failure constructor are removed. Expected errors can originate only from
-a declared action's validated `fail` helper. Store regression tests now build definitions,
-including limits, invalid publication, cancellation, extracted methods and late writes.
-The builder already checks action inputs and brands its results, so the duplicate mapped
-handler check is removed. Overlapping store type cases are consolidated in the store
-author suite, retaining encoded-input, declared-error, scenario and override checks.
+- capability.ts retains the internal capability/action builder, guard/reducer and state
+  access paths. author-screen.ts and author-actions.ts adapt authored definitions to it;
+  collapse the legacy capability and action branches into the authored representation.
+- Consolidate guard and decoded-dispatch paths: dispatchDecoded, ActionArgs/SendArgs,
+  OwnedLiveNode.send and its decoded-input encoding branch still support low-level tests.
+- Consolidate consumer-type branches (PublicState, action arguments/errors, coverage and
+  navigation requirements) with the authored encoded consumer model. LiveNode remains a
+  sibling contract, not an ordinary author export.
+- Port the deliberately malformed capability/schema-navigation fixtures in
+  test/lifecycle.test.ts and packages/effect/test/capability.test.ts before removing
+  their private builders. Their failure, focus, cancellation, encoding and resource-limit
+  assertions must remain. The private test loopback/exploration engine remains for these
+  raw host fixtures and bounded shrinking; it is not a public string API.
+- Consolidate the private Expo URL-binding fixture path with the bound registration
+  implementation. Sibling session/route integration entries remain internal plumbing.
 
-The conformance Effect app uses Screen and contract navigation; the large-row benchmark
-uses a service reducer. The production plain example no longer exports a compatibility
-screen host. A test host opens its declared store screen through the session route factory.
-All five conformance backends use the wire client directly, with event recording beginning
-after startup. This retains malformed input, state, revision, wait and access-policy
-assertions independently of the old TestApp facade. The external-focus regression uses
-an authored Effect screen and the session's route factory. No experiment is deleted.
-
-This is a partial item 1 checkpoint. Effect/test/Expo legacy deletion, remaining consumer
-migration, complete declaration parity, the source budget, final docs audit and full
-acceptance still block landing. The protocol and CLI/MCP implementations are unchanged.
-
-Source lines after this partial D2 checkpoint (all files under each package's src):
-
-| Package      | D start | D2 checkpoint |
-| ------------ | ------: | ------------: |
-| effect       |   4,096 |         4,096 |
-| runtime      |   3,727 |         3,671 |
-| react        |   1,115 |         1,115 |
-| expo         |     766 |           766 |
-| react-router |     290 |           290 |
-| live         |     821 |           821 |
-| test         |   1,889 |         1,889 |
-| Total        |  12,704 |        12,648 |
-
-These counts do not justify an exception to the final budget: most legacy Effect/test
-machinery still remains. A final per-package budget assessment is premature.
-
-### D3 Effect checkpoint
-
-The Effect root and advanced entries now equal their target declaration export names,
-including types. The harness checks all eight Effect/React/React Router/Expo entries.
-The old screen module, string-keyed contract navigation, public capability/action and
-mount exports, consumer lookup wrapper, Effect inference aliases and author-host adapter
-are removed. App composition and scenario extension now have one author implementation;
-the internal host engine handles session lifetime without a second composition path.
-Explicit advanced ownership is implemented by scoped `mountEffect`. Authored descriptors
-and their scenario extensions now expose the same stable definition identity as their
-internal hosts.
-
-[The module/export inventory](../design/effect-cleanup.md) classifies all source modules
-and exports, including what remains. Round-three behavior and type tests use Screen,
-terminal navigation and implementation arrays. Route codec, encoded-input, exploration,
-RPC/bridge and UI reporting fixtures also use authored definitions. Their limits,
-cancellation, event, wait and refusal assertions are retained. Advanced ownership tests
-cover dependencies, focus, encoded publication/errors, change notifications, pending
-work, explicit and scope disposal, independent owners and resource refusal. No experiment
-was deleted.
-
-| Effect line count                        | Before D3 | After D3 |
-| ---------------------------------------- | --------: | -------: |
-| All `src/*.ts`                           |     4,096 |    3,788 |
-| Entire package, excluding `node_modules` |     6,022 |    5,813 |
-
-This is a green partial checkpoint, not final Effect acceptance. Remaining work is
-specifically the internal capability/action builder and legacy type branches in
-`capability.ts`, their adapters in `author-screen.ts` and `author-actions.ts`, and the
-low-level capability/schema-navigation fixtures in `test/lifecycle.test.ts` and
-`packages/effect/test/capability.test.ts`. Port those fixtures before removing their
-internal exports, then reduce the remaining state guard, action, coverage and navigation
-types to one representation. Shared mounting, registry, redaction and scoped navigation
-are runtime behavior and must be preserved. The full source budget and the other
-packages' remaining export cleanup still block final landing. Protocol and CLI/MCP
-implementations are unchanged.
-
-D3 verification: `bun run check` passes (688 tests passed, four platform/device skips),
-with 486,449 root instantiations under the unchanged 505,132 ceiling. Both declaration
-and real-package harness performance modes pass. Mobile `e2e`, `e2e:plain`, `e2e:live`,
-`e2e:services` and web `e2e` pass; the final services run needed a retry after Metro's
-chosen port was occupied. CLI/MCP process, access-policy and both-mode conformance
-suites are included in the green check.
-
-### Public entry parity
-
-All 16 specified root, advanced and dev entries have exact type/value export-name
-equality with the declarations, enforced by the real-package harness. Runtime store
-compatibility types, the string-based test facade and test scheduling helpers are no
-longer root exports. The public test factory accepts authored descriptors only and its
-pool has no low-level open method. Authored regressions use descriptors, action-level
-error/refusal assertions and reset generations. Deliberately malformed host/lifecycle
-fixtures retain the private loopback engine; their assertions remain intact. Shared
-journey contracts live in runtime to preserve dependency direction.
+These changes are deferred because they require a substantial internal refactor; public
+surface parity and behavioral acceptance, rather than further internal shrinking, define
+this landing. The command-erasure lint rule and core-owned React Router projection remain
+explicit follow-ups. No report or module inventory file is part of the maintained API.
+Maintainer validation commands and performance budgets live in development.md.
