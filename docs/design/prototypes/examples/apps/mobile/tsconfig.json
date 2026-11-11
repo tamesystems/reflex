@@ -1,0 +1,41 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "paths": {
+      "@reflex/protocol": ["../../packages/protocol/src/index.ts"],
+      "@reflex/runtime": ["../../packages/runtime/src/index.ts"],
+      "@reflex/rpc/connection": ["../../packages/rpc/src/server.ts"],
+      "@reflex/effect": ["../../packages/effect/src/index.ts"],
+      "@reflex/expo": ["../../packages/expo/src/index.ts"],
+      "@reflex/example-plain": ["../../examples/plain/src/app.ts"],
+      "@reflex/example-inventory": ["../../examples/inventory/src/app.ts"],
+      "@reflex/example-inventory/*": ["../../examples/inventory/src/*"],
+      "effect": ["./node_modules/effect"],
+      "effect/*": ["./node_modules/effect/dist/*"],
+      "react": ["./node_modules/@types/react/index.d.ts"],
+      "expo-router": ["./node_modules/expo-router"],
+      "react/jsx-runtime": ["./node_modules/@types/react/jsx-runtime.d.ts"],
+      "@reflex/live": ["../../packages/live/src/index.ts"],
+      "@reflex/react": ["../../packages/react/src/index.ts"],
+      "@reflex/navigation": ["../../packages/navigation/src/index.ts"],
+      "@reflex/react/advanced": ["../../packages/react/src/advanced.ts"],
+      "@reflex/effect/advanced": ["../../packages/effect/src/advanced.ts"],
+      "@inventory-provider": ["./provider.tsx"],
+      "@reflex/runtime/advanced": ["../../packages/runtime/src/advanced.ts"],
+      "@reflex/live/advanced": ["../../packages/live/src/advanced.ts"],
+      "@reflex/expo/advanced": ["../../packages/expo/src/advanced.ts"],
+      "@reflex/expo/dev": ["../../packages/expo/src/dev.ts"]
+    },
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "useUnknownInCatchVariables": true,
+    "verbatimModuleSyntax": true
+  },
+  "include": ["app", "src", "e2e/*.ts", "hermes-smoke/*.ts", "plain", "../../packages/react/src"]
+}

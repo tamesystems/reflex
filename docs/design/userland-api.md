@@ -1,133 +1,576 @@
-# Reflex userland API specification
+# Reflex userland API specification, revision 2
 
-Status: proposed, implementation deliberately absent. Baseline: origin/userland-api,
-2a26d9e. This document supersedes the _target author API_ in ADRs 0020–0022; it does
-not claim those changes have shipped. Protocol, access policy, controller parity,
-core navigation ownership, dependency boundaries and resource limits remain as in
-ARCHITECTURE.md. No roadmap item is implemented by this design-only change.
+Status: proposed target API; **no runtime implementation is changed or claimed**.
+Revision 1 baseline: `9debc24` on `origin/userland-api-spec`. Rubric:
+[api-principles.md](../api-principles.md). Architecture, protocol/controller parity,
+access policy and dependency boundaries remain authoritative. This design does not
+implement a roadmap item or supersede a shipped ADR. An implementation needs its own
+ADR and roadmap update. Changes in this revision stay in this file and prototypes/.
 
-## 1. Decisions
+## 1. Reading and verification contract
 
-1. Contracts carry state and params; implementations carry actions and requirements.
-   `X`, `XLive`, `XView` name those three things. A contract is a class constructor,
-   and that constructor is its runtime identity. An implementation is a frozen object
-   `{ contract, actions, onFocus }`; that object is its separate implementation identity.
-   No identity token, SCREEN_CONTRACT, DEFINITION_IDENTITY, or public `resolve` exists.
-   Resolution always goes through the session's selected implementation table.
-2. **Nominality has one unavoidable line.** Each authored Screen class declares
-   `declare private readonly nominal: undefined`. `Self` is invariant on the generated
-   instance, and static methods infer `this`, retaining the subclass. Empty same-name
-   subclasses are structurally interchangeable in TS 5.9, including with a Self field;
-   the prototype includes this counterexample. A private member declared in the factory
-   would also be shared. We choose a private declaration in the author class over
-   pretending the requested empty-body spelling is generatively nominal. It emits no JS,
-   writes the screen name once, and needs no manual symbol. Different contracts with
-   the same name are additionally rejected at app construction. ESLint/private-field
-   rules must allow this documented nominal member.
-3. One `defineApp` value selects implementations. Effect apps choose navigation or
-   `screens` plus `services`; store apps choose `screens` plus `services`. Arrays derive
-   keys from names, reject duplicate names, and never expose `root`, `nodes`, `type`, or
-   `Nav.layer`. `defineStoreNode` defaults to a service; placing it in `screens` gives it
-   screen lifetime. No separate screen-node kind is authored. A single navigator is
-   named `default`; an optional key is for multiple navigator integration in advanced.
-4. **Navigation is terminal data, not a queued Effect.** `Nav.push(Contract, params)`
-   and `Nav.back` produce opaque commands. A handler must return a command, directly
-   in a store handler or as the success value of its Effect. A command is not yieldable,
-   has no `pipe`, and has no error channel. One invocation can return at most one.
-   `onRefused(error, ctx)` belongs to the action definition and runs before departure
-   when the command is refused. It returns void, cannot navigate, and cannot fail in
-   the Effect error channel. Handling a refusal still yields a refused action outcome;
-   the callback updates UI state, it does not relabel failure as success.
-5. Terminal execution is owned by the session operation supervisor. It prepares the
-   target in a provisional scope, validates limits, and atomically commits stack/focus
-   only on success. Refusal closes the provisional scope, leaves the source alive and
-   invokes its recovery callback. Successful back commits before closing the departing
-   scope; its originating operation is excluded from that scope's cancellation and
-   completes under the supervisor. Other departing work is interrupted. Cancellation
-   before commit abandons preparation; after commit it cannot undo navigation. No
-   source state access is permitted after commit. Effect failures before returning a
-   command discard it. Back at the root is refused with `AtRoot`. Defects are defects,
-   not NavigationRefused. External router gestures reconcile the core and may cancel
-   in-flight handlers; this does not turn a command into an immediate Effect.
-6. A scenario owns its fixture list. `defineFixture` creates a yielding Effect service
-   for write access and an observable definition for journeys. Session construction
-   mounts the listed fixtures _before_ building the scenario layer and automatically
-   supplies their access services. A layer requiring an unlisted fixture is a composition
-   error. Scenario layers cannot independently mount hidden fixtures. Fixtures are
-   services on the wire, with fixture access policy; there is no new node kind.
-7. `open(app, { scenario: "x" })` / `connectJourney` returns a session specialized to x.
-   With a union scenario it grants only fixtures present in every possible scenario.
-   `reset("y")` returns a **new typed client** specialized to y and invalidates all older
-   clients by session generation; callers must use the returned client. UI binding
-   controls expose `scenario: string`: `withScenarios` preserves identity and can add
-   scenarios unknown to a base binding. `useSession().forScenario(app, "x")` returns a
-   checked, generation-bound view or undefined; it is the only UI fixture access path.
-   Base hooks accept screens and services common to all base scenarios, never optional
-   fixture unions. Runtime identity/membership is checked even for widened JS callers.
-8. Each host has one binding object, created at module scope. `Provider app={app}` is
-   required and validates the bound app's identity, including identity-preserving
-   `withScenarios`. It can never accept an independently constructed same-name app.
-   Provider props and hook vocabulary agree across React, Expo and React Router.
-9. Each session has **one route registry** keyed by `(contract object, history entry
-   key)`, storing params hash, generation, pending promise, node, scope and lease state.
-   Both normal and Suspense hooks read it. A second lookup reuses the pending promise;
-   conflicting params for one key are an error. Acquisition is idempotent. Normal hooks
-   initiate in a commit effect; Suspense may request during render, but the session owns
-   provisional work. Unclaimed work is aborted at the existing route-build deadline;
-   no render owns a resource. Navigation-owned entries pin their existing registry node.
-   Host-only entries retain at most 64 history entries; unreachable forward entries are
-   released immediately. Eviction cancels pending builds, removes the registry/store
-   entry, unsubscribes, disposes once and closes the scope. Late completion is disposed
-   rather than installed. Reset/Provider teardown drains the registry. No append-only
-   `nodes` array or second Suspense cache survives. Every peer-reachable bound/deadline
-   is named in protocol/limits.ts at implementation time, including the existing bounds
-   currently expressed locally. The bound applies to provisional as well as live entries.
-10. Expo Provider includes projection. Expo uses its files/Stack; URLs mirror the core.
-    React Router `routes(views)` emits ordinary RouteObject[] from the registration;
-    its wrappers read pathname, params and history key. Router-owned apps (no `navigation`)
-    follow the router, including POP/deep links; core-navigation apps project the core
-    and reconcile external location changes through the navigation port. One binding
-    cannot silently switch ownership modes. Links use the same registration. Native
-    `<Link>` and browser back remain idiomatic host operations.
-11. Required params are path placeholders, optional params default to query fields.
-    Both adapters default URL names to schema field names; `params` maps _only changed_
-    names. Literal Expo `[x]` and React Router `:x` segments are checked. All placeholders
-    must correspond to fields, all required fields must occur, and targets are unique.
-    URL field encodings must be strings (optionally undefined); numeric values use a
-    string codec. Root grammar excludes catchalls, optional path segments, regexes and
-    router groups; advanced `routeCodec` handles these explicitly and validates at
-    runtime. Extra router query keys are ignored, never inserted into schema params.
-12. Store `input:`/`error:` accept Standard Schema directly. Async validators are refused
-    when preparation must be synchronous. `standardInput` exists only to provide JSON
-    Schema when the vendor has no converter. Handler signature is `(input, ctx)` on
-    both paths; Effect uses `ctx.state`, stores use `ctx.store`. No-input handlers receive
-    undefined; calls take zero args. Error schema presence alone enables `ctx.fail` for
-    stores. Unprojected state and errors must be JSON statically and are validated at
-    publication; rich state/errors require `project`/`projectError`. Returned snapshots
-    are detached, deeply readonly JSON. Default projection is identity, never a lossy
-    `JSON.stringify` trick. Effect default projection uses encoded schema state, with
-    redaction; custom schema JSON hooks require an explicit advanced wire codec.
-13. Production providers import no test code. An entry alias selects the E2E provider,
-    which passes `app.withScenarios(e2e)` with the same identity. Bridge code is isolated
-    in Effect-free `@reflex/expo/dev` and `@reflex/live/dev`, guarded by bundler development
-    constants. `dev` is a platform entry, not a third API tier. Root/advanced exports are
-    explicit lists; sibling plumbing uses workspace-private source imports allowed by
-    boundaries, never a package `/internal` export or user-facing wildcard barrel.
+The normative callable surface is [prototypes/api/](prototypes/api/), a declarations-only
+API for each package's root and advanced entry. Every named export is explicit; the
+shared model is declaration plumbing, not a public package entry. Importing these
+files cannot run an app. They deliberately do not map to the current package sources.
+The authored files in section 4 are exact copies of
+[prototypes/examples/](prototypes/examples/), compiled together against these declarations
+and the installed **TypeScript 5.9.3**, Effect 4.1.2, Zod, Zustand, React, Expo and React
+Router types. The JS Metro file is checked with `checkJs`; JSON files are configuration,
+not TypeScript programs. The mobile tsconfig describes future package paths; the
+executable-spec tsconfig substitutes target declarations without touching those packages.
 
-## 2. Complete authored files
+Run `bun docs/design/prototypes/check.ts`. It checks example/spec drift, invokes tsc,
+checks target declaration bodies (excluding upstream dependency diagnostics by path),
+asserts each negative marker at its **file and next-line location**, rejects unexpected
+diagnostics, and measures the 0/10/50/100-screen graph with 0/1/10 hooks per screen.
+Normal examples use skipLibCheck, matching the repository. The separate body check
+turns it off: errors in dependencies do not become evidence against our declarations,
+and errors in our declarations cannot be hidden. No positive example uses `any`,
+`@ts-expect-error`, internal package imports, or a double cast. The deliberate compiling
+counterexamples are isolated in `static-limits.ts` and identified as such.
 
-The following are target source files, not snippets against the current implementation.
-Each file is complete: no omitted handler, transport, wrapper, or hidden helper is needed.
-Existing package manifests, Expo configuration, HTML shell and server.ts remain normal
-infrastructure; the files below replace their author-facing API use. Inventory domain
-limits are application business limits, not new protocol limits. The HTTP adapter keeps
-app-owned parsing because HTTP is the application's external boundary; journeys do not
-parse JSON. Future implementation must compile these files together in fixture projects;
-the current docs compiler does not compile this proposed API. Only prototypes are verified
-in this design change.
+A **verified** statement means a successful compilation or asserted diagnostic in that
+harness. A **runtime obligation** means required future behavior with acceptance steps,
+not a passing test against an imaginary implementation. **Unproven** means the proposed
+surface or policy still lacks executable evidence. Runtime obligations are listed
+separately from the executable misuse table, rather than misrepresented as tsc failures.
+The repository check does not invoke this proposed API; both commands are required for
+this design review. Wiring the harness into CI is an implementation acceptance task
+because this change may not edit package.json or scripts/.
+
+## 2. Core model and decisions
+
+1. **Contract and implementation identities stay separate.** `Screen(name, spec)`
+   produces a base constructor; a class contract carries state/params and `.implement`
+   returns a separate frozen definition with actions/requirements. A session selects
+   implementations. UI and navigation accept contract values, never implementation
+   names as strings. Implementations do not have `resolve` or carry a global selection.
+   A one-step `Screen.define(name, {state, initial, actions})` returns a combined
+   constructor/implementation when there is no implementation selection. It has the
+   same app-bound consumer API. Its identity is still its actual runtime constructor.
+2. **Drop Self.** Authored split contracts use `declare private readonly nominal: undefined`.
+   This distinguishes independent same-shape classes; Self adds no protection. TS cannot
+   inspect a private member, and subclasses inherit it. We choose the cheaper honest
+   limit: runtime registration/lookup uses **exact constructor equality**, never
+   `instanceof`, `prototype` ancestry or string name equality. Missing-private-line
+   contracts and inherited subclasses can be structurally assignable statically;
+   `static-limits.ts` preserves these counterexamples. A missing private line is lintable,
+   not a claimed compiler diagnostic. A registered constructor's subclass is a distinct,
+   unregistered contract. JS class names may differ from declared names: registration
+   keys and diagnostics use the declared string; identities use constructors.
+3. **One role model.** Both Effect and store apps compose `screens` and `services`;
+   Effect apps with core navigation select `navigation` instead of `screens`.
+   `useService(Definition)` reads an ambient session-owned service in every host.
+   `useScreen(Contract)` reads a route-owned screen in every host. No `useNode` alias.
+   Store definitions acquire their role from composition; their stores remain idiomatic
+   stores. Arrays are checked for duplicate names, including screens/services collisions.
+   Runtime validation covers widened arrays and fixture collisions too.
+4. **Navigation record form is retained.** `defineNavigation({ InventoryList,
+   InventoryDetail, Settings })` checks record keys against declared names, avoiding
+   duplicate keys and aliases. Implementations remain a tuple because selection has no
+   redundant name keys; its small Unique check rejects duplicates and reports missing
+   contracts. An app must select exactly one implementation per contract, with no extras
+   (the extra-implementation identity check is a runtime obligation). One session owns
+   one route registry across normal hooks, Suspense and navigation preparation.
+5. **Commands are returned, never yielded.** `Nav.push`, `Nav.back`, `Nav.stay` are data.
+   `action.navigates` must return `Effect<NavigationCommand>`; a missing return, discarded
+   command or an `Effect<void>` helper in this tier fails compilation. `action` and
+   `onFocus` infer success/error before checking: visible command successes produce
+   `Use action.navigates for actions that navigate`; undeclared errors produce
+   `Declare action failures with error:`; lifecycle errors produce
+   `Handle onFocus failures into state`. The declared error field is `error`, the outcome
+   status is `"error"`, and journeys use `expectError`. No command is an Effect or has
+   `pipe`; `yield* Nav.back` produces **TS2488**, with no invented custom diagnostic.
+6. **Static erasure is real.** TS permits an Effect command to be widened to `Effect<void>`
+   and accepts unused expression statements in a plain action. Types cannot recover this.
+   Require a lint rule for command expressions, commands erased through void-returning
+   helpers, and yielded commands. Runtime tracks command creation by operation: exactly
+   one command must be returned for a navigating action; unused/multiple commands are
+   defects, even if hidden by void. Commands made outside an invocation cannot be
+   dispatched. A plain action or onFocus returning a hidden command is a defect, not
+   silently ignored. Service and fixture actions cannot navigate: inferred direct
+   commands get the same plain-action marker, and composition/runtime rejects navigator
+   requirements or hidden commands from those roles. Service/fixture builders omit navigates entirely; a negative fixture case
+   checks the missing method, while runtime checks cover hidden commands.
+7. **One terminal command per action.** `Nav.stay` explicitly chooses no transition.
+   `onRefused` is void-only, cannot fail except `StateChanged` converted by the builder,
+   and cannot navigate. Multi-step flows become separate actions with state transitions,
+   or one action that performs all domain I/O and returns its final destination.
+   Redirect-on-refusal becomes a refused state plus a separate redirect action; a journey
+   can await refusal and drive that next action. Navigation is not an imperative service.
+8. **Correlated complete argument tuples.** `push` and `href` take a union of whole tuples,
+   not a generic target plus a separately inferred params object. Initial routes are
+   a union of whole `{screen, params}` objects or a param-free contract. `Link` props are
+   likewise a union. Narrow a union target first, or carry the entire correlated tuple.
+   Navigation and initial routes take **decoded** params. href, Link and advanced URL
+   codecs consume **encoded** params; NumberFromString therefore takes a number for
+   push and a string for href. No params means zero arguments, not `{}`.
+9. **Store inference and codecs.** `StateOf<T>` derives the return of getState, never
+   infers state from `T extends Store<S>`. NoInfer prevents project/availability/builders
+   from changing it. Parameterized store factories may need one definition-site params
+   annotation; the web Detail file demonstrates the TS inference boundary, without a
+   call-site generic. Infer the whole Effect codec or Standard Schema validator; use
+   decoded output for handlers and encoded input for consumers. Standard Schema only
+   validates: it cannot invert an arbitrary transform. Transformed store errors require
+   projectError to explicitly encode their decoded domain error; the codecs example does
+   so. An automatic inverse for Standard Schema is **unproven and not promised**.
+   Effect codecs have their own encode operation. jsonCodec preserves its source C (including Type and Encoded) and returns a
+   Schema.Codec<C.Type, Wire> for the explicit JSON wire representation;
+   its explicit wire encoder may need a typed helper at this advanced boundary.
+10. **Publication is validated.** JSON-shaped interfaces pass a shape compatibility check;
+    Date, functions and rich values fail unless projected. This is not `S extends Json`,
+    which rejects interfaces without index signatures. Numbers still need a runtime
+    finiteness check. Publication makes detached deeply readonly snapshots, validates
+    schemas and always redacts secrets, including custom codecs. Consumer views derive encoded state, map Redacted to the fixed safe marker and
+    make nested properties readonly. consumer-state.ts proves transformed state and
+    redaction types; runtime encoding/publication remains an acceptance obligation.
+    `initial()` is checked statically against its state type and validated against its
+    full runtime schema before installation (TS cannot enforce refinements such as Int).
+11. **Guarded writes have a typed failure.** `state.when(tag).update(f)` and guarded
+    handler state writes have `Effect<void, StateChanged>`. The action/lifecycle supervisor
+    converts StateChanged to a refused outcome; it never becomes a domain error or a
+    successful overwrite of another phase. Each write rechecks its phase after suspension.
+    Cancellation cleanup cannot use a closed state capability to write after departure.
+12. **Scenario defaults and fixtures.** Define fixtures once in app-level `fixtures`;
+    a scenario can override with `fixtures: []`. A test-only withScenarios extension may
+    set its app-level defaults in its options. Scenario membership stays specific: a
+    union scenario admits only fixtures present in every member. Fixtures mount once,
+    before the layer; their access services provision that layer and their action
+    requirements must also be covered. Production app.ts imports no fixtures; scenarios.ts
+    extends it for tests/E2E. The production descriptor fingerprint excludes scenario
+    names, descriptions, fixture defaults and virtual clock settings, so this extension
+    matches the same device app. It includes selected screen/service/action wire schemas,
+    route encodings and protocol version, not function bodies. It is compatibility,
+    not proof that remote handlers are identical or trusted.
+13. **withScenarios is immutable and additive.** Fresh names only. Existing app values,
+    their default scenario and their fixture defaults never change. Extensions normalize
+    old scenario fixture membership before applying new defaults to new scenarios. A
+    later extension retains all earlier scenarios and retains the previous default
+    unless explicitly changed. A missing requested default fails. Existing scenario names
+    cannot be overwritten. Common-layer provisioning is retained across extensions; consumer-state.ts
+    compiles a common-layer app and two extensions, checking their defaults. Missing service diagnostics currently expose the service identifier;
+    the exact runtime message must name its Context key, e.g.
+    `App inventory scenario live-services must provide inventory/InventoryApi.`
+14. **Provider is app-bound.** Ordinary `<reflex.Provider>` needs no app prop. Only a
+    compatible withScenarios variant passes `app={instrumented}`. Runtime checks original
+    descriptor identity. `fallback` renders while starting, including when outside the
+    router. A failure stores the cause then rethrows during render to the nearest React
+    error boundary; retry requires that boundary to reset and the Provider to reset or
+    remount. A stable context remains above the fallback/error gate so a surrounding
+    status component can observe `useSession` starting/failed/closed. The boundary itself
+    cannot use a child context. `onBackgroundError` receives unobserved UI action failures,
+    lifecycle defects, and publication failures with node/action names. Journeys observe
+    outcomes directly; do not double-report observed expected failures.
+15. **Reset returns new controls.** Both UI reset and journey reset return the new
+    generation-bound controls/client. Reacquire screen/fixture handles. Old methods fail
+    with SessionChanged; an old view's run never dispatches into a new generation.
+    Resets queue in invocation order; each reply identifies its own generation, which
+    may already be superseded by a later queued reset. The returned generation is
+    checked on its next use. Reset during an action cancels it and drains the old registry
+    before starting the next scenario. Operation awaiters may still observe their own settled cancellation after reset;
+    this grants no dispatch or state access. The owning test client's async disposer remains
+    a resource owner across resets; disposal is idempotent and closes the current session.
+16. **Cancellation isolates generations, not just AbortSignal.** Each store build owns
+    a fresh store, guarded handler access and a generation-filtered subscription.
+    AbortSignal is advisory for arbitrary Promises. On close/reset, mark the generation
+    closed before notifying cancellation, detach subscriptions and revoke handler writes.
+    A Promise that ignores abort may finish, but neither a proxied store write nor a late
+    notification can publish into a closed generation or a new store. Externally retained
+    raw stores may mutate themselves; Reflex cannot undo arbitrary application side
+    effects and must never share such a store with a new generation. Late factory results
+    are disposed rather than installed. Forked fibers use scoped forks; escaped daemon
+    fibers still lose state capability on close. No closed-state write is permitted.
+17. **Single route registry and atomic navigation.** Key `(constructor, history entry
+    key)` stores generation, encoded params hash, pending promise, scope, node and leases.
+    A second lookup reuses the pending build. Conflicting params are an error. Normal
+    hooks acquire at commit; Suspense may request at render, but the session owns the
+    provisional scope. Abandoned work has a deadline. Provisional and committed entries
+    share bounded capacity; unreachable forward entries are released, reset/teardown
+    drains all entries exactly once. A failed build is evicted before retry; normal hooks
+    expose status:error/error/retry, Suspense throws to a per-screen error boundary whose
+    reset calls the same registry retry and rerenders. There is no permanently rejected
+    cached promise or second Suspense cache. Previous core focus survives preparation
+    failure. Terminal success commits focus atomically before source scope closes;
+    the originating navigation operation is supervised outside that source scope.
+    Cancellation before commit abandons preparation; after commit cannot undo history.
+    Peer-reachable bounds and deadlines must be named in protocol/limits.ts at implementation
+    time. No design-local numeric limit becomes a hidden implementation limit.
+18. **Route grammar.** Root adapters accept literal /:x and /[x] segments, required
+    placeholders plus optional query fields. Repeats, groups, catchalls, spread and optional
+    path grammar fail with a routeCodec hint (repeats identify the repeated field).
+    Optional schema fields cannot become path placeholders. Encoded params must be strings
+    or optional strings; mapping keys must be fields, and changed URL targets must be
+    unique including default names. The parser is a tail-recursive accumulator; the
+    60-segment positive example verifies it. Error text interpolates field names.
+    Advanced routeCodec, shared and re-exported from both host advanced entries, handles
+    excluded grammar. Runtime validates encode output and decode output against that
+    screen's **encoded** schema before decoded navigation args enter core logic. Extra
+    query keys are ignored; arrays need the explicit codec policy.
+19. **Host idioms.** Both hosts offer `<reflex.Link to={Detail} params={{id}} />` and
+    `reflex.href(Detail, {id})`. Expo owns its files/Stack and puts Suspense/error boundaries
+    per screen, never around the entire Stack. React Router routes accepts host options
+    `{ Component, loader, action, errorElement, shouldRevalidate, lazy }` per screen;
+    registration owns path, wrapper and focus key. Wrappers report the actual matched
+    location/history key; no useResolvedPath substitute. A lazy result may supply host
+    components/data handlers but cannot replace the owned route wrapper/path. Framework
+    mode and route modules are out of scope; this design targets ordinary RouteObjects
+    and createBrowserRouter. Loader errors use host errorElement and refuse preparation.
+    A contract hook called from another route file fails against route context at runtime;
+    TS cannot infer filenames. A missing Suspense boundary is a React/lint obligation,
+    not a claimed type error.
+20. **Progressive disclosure and tests.** Start with the first ten lines of
+    tiers/one-step.ts; move to tiers/selected.ts when selection becomes necessary;
+    advanced.ts adds explicit scoped ownership. The first plain counter is router-free:
+    services:[Counter] plus useService(Counter). Routing comes later in the web sample.
+    Journey actions have one map: detail.actions.Save(), .Save.expectError(),
+    .Save.expectRefusal(), .Save.start(). A TypedClient is JourneyClient with outcome
+    mode, not a parallel interface. Shared stories accept Pick of the capabilities they
+    use. Both fixture and real-service calls compile. Use await using or pool+afterEach;
+    no unowned test session. advanceTime takes Duration.Input. Match timeouts name the
+    contract, requested match, timeout and **last state seen**, including pending/error.
+21. **Export reduction.** No Self, resolve, root node map, queued-navigation layer,
+    public /internal entries, duplicated mountOwned/routeCodec/developmentBridge functions,
+    StateSource, or parallel Bridge types. runtime/advanced owns mountOwned;
+    effect/advanced owns mountEffect. live owns Bridge and live/dev implements
+    developmentBridge; expo/dev re-exports it. Root/advanced files under api/ are the
+    exhaustive target author surface, not wildcard compatibility barrels. Controller,
+    protocol, RPC, CLI and navigation integration APIs remain outside this redesign.
+    Root codecs are context-free; service-requiring schema codecs are outside this
+    revision, rather than silently erasing their requirements. The declaration model is intentionally smaller than the current implementation;
+    unlisted existing userland APIs require migration, not compatibility shims.
+
+## 3. Executable evidence and open obligations
+
+The revision-1 four isolated probes are replaced by the full declarations plus examples,
+negative cases and the slope harness. Reviewer probes p1–p10, store-inference, codecs,
+extra, long-path and fixes.ts were read; their counterexamples are represented by
+static-limits.ts, codecs.ts, the negative cases and the generated scale graph.
+
+The proposed performance gate is **at most 2,000 additional instantiations per screen**
+between 10→50 and 50→100, including a unique useScreen consumer, plus **100 per repeated
+identical useScreen call**. It is enforced in check.ts, in addition to recording the
+baseline. These are provisional upper gates, not a claim that 1,999 is cheap. Compare
+same compiler/dependencies and graph; lower the gate after representative implementation
+measurements. A count of repeated identical calls measures compiler caching, not the
+cost of a new contract selection. The harness reports 0/1/10 hooks and both slopes so
+that caching cannot disguise the unique-consumer cost. No claim is made about editor
+latency from tsc counts alone. Results are recorded in prototypes/results.json.
+
+Static misuse rows below are generated from @case annotations. The checker asserts
+marker **text plus exact source line** and rejects additional diagnostics. Ordinary TS
+messages are used when the surface cannot supply a marker. The old row numbers are
+superseded by stable case IDs. In particular old rows 19/21 now use inferred error channels;
+old row 20 honestly uses the TS parameter incompatibility; old row 35 honestly uses the
+missing component property; none relies on exactOptionalPropertyTypes wording.
+
+### Verified negative cases
+
+| Case                      | Expected marker or diagnostic fragment                                                | Executable source                           |
+| ------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------- |
+| role-fixture              | `InventoryFixture is not a screen of app 'inventory'`                                 | [case](prototypes/negative/cases.ts#L35)    |
+| nominal                   | `This InventoryDetail is a different contract from app 'inventory''s InventoryDetail` | [case](prototypes/negative/cases.ts#L44)    |
+| screen-service            | `InventoryDetail is not a service of app 'inventory'`                                 | [case](prototypes/negative/cases.ts#L46)    |
+| fixture-service           | `InventoryFixture is not a service of app 'inventory'`                                | [case](prototypes/negative/cases.ts#L48)    |
+| absent-fixture            | `InventoryFixture is not a fixture of this scenario of app 'inventory'`               | [case](prototypes/negative/cases.ts#L51)    |
+| union-fixture             | `InventoryFixture is not a fixture of this scenario of app 'inventory'`               | [case](prototypes/negative/cases.ts#L55)    |
+| duplicate-implementation  | `InventoryList is declared more than once`                                            | [case](prototypes/negative/cases.ts#L57)    |
+| missing-implementation    | `InventoryDetail`                                                                     | [case](prototypes/negative/cases.ts#L59)    |
+| unknown-params            | `productId`                                                                           | [case](prototypes/negative/cases.ts#L61)    |
+| union-push                | `not assignable`                                                                      | [case](prototypes/negative/cases.ts#L63)    |
+| no-params                 | `not assignable`                                                                      | [case](prototypes/negative/cases.ts#L65)    |
+| decoded-command           | `not assignable to type 'number'`                                                     | [case](prototypes/negative/cases.ts#L67)    |
+| encoded-href              | `not assignable to type 'string'`                                                     | [case](prototypes/negative/cases.ts#L69)    |
+| union-href                | `not assignable`                                                                      | [case](prototypes/negative/cases.ts#L72)    |
+| initial-correlation       | `not assignable`                                                                      | [case](prototypes/negative/cases.ts#L74)    |
+| yielded-command           | `TS2488`                                                                              | [case](prototypes/negative/cases.ts#L77)    |
+| command-pipe              | `Property 'pipe' does not exist`                                                      | [case](prototypes/negative/cases.ts#L80)    |
+| plain-navigation          | `Use action.navigates for actions that navigate`                                      | [case](prototypes/negative/cases.ts#L85)    |
+| undeclared-error          | `Declare action failures with error:`                                                 | [case](prototypes/negative/cases.ts#L89)    |
+| undeclared-input          | `not assignable`                                                                      | [case](prototypes/negative/cases.ts#L93)    |
+| dropped-navigation        | `not assignable`                                                                      | [case](prototypes/negative/cases.ts#L98)    |
+| erased-navigation         | `not assignable`                                                                      | [case](prototypes/negative/cases.ts#L105)   |
+| refusal-command           | `Navigation refusal recovery must return void`                                        | [case](prototypes/negative/cases.ts#L110)   |
+| focus-error               | `Handle onFocus failures into state`                                                  | [case](prototypes/negative/cases.ts#L117)   |
+| focus-navigation          | `Use action.navigates for actions that navigate`                                      | [case](prototypes/negative/cases.ts#L122)   |
+| transformed-store-input   | `not assignable to parameter of type 'string'`                                        | [case](prototypes/negative/cases.ts#L127)   |
+| transformed-effect-input  | `not assignable to parameter of type 'string'`                                        | [case](prototypes/negative/cases.ts#L132)   |
+| json-date                 | `Store state must be JSON; provide project`                                           | [case](prototypes/negative/cases.ts#L135)   |
+| json-function             | `Store state must be JSON; provide project`                                           | [case](prototypes/negative/cases.ts#L141)   |
+| no-fail                   | `Property 'fail' does not exist`                                                      | [case](prototypes/negative/cases.ts#L156)   |
+| rich-error                | `Store error must be JSON; provide projectError`                                      | [case](prototypes/negative/cases.ts#L161)   |
+| store-command             | `Store handlers cannot return NavigationCommand`                                      | [case](prototypes/negative/cases.ts#L164)   |
+| duplicate-service         | `Counter is declared more than once`                                                  | [case](prototypes/negative/cases.ts#L169)   |
+| multiple-roles            | `Choose navigation or screens, not both`                                              | [case](prototypes/negative/cases.ts#L171)   |
+| initial-schema            | `not assignable to type 'number'`                                                     | [case](prototypes/negative/cases.ts#L181)   |
+| includes-typo             | `qty`                                                                                 | [case](prototypes/negative/cases.ts#L184)   |
+| match-variant             | `State match fields must belong to one variant`                                       | [case](prototypes/negative/cases.ts#L186)   |
+| unknown-scenario          | `not assignable`                                                                      | [case](prototypes/negative/cases.ts#L188)   |
+| extension-default         | `withScenarios defaultScenario must exist`                                            | [case](prototypes/negative/cases.ts#L190)   |
+| extension-repeat          | `Scenario live-services already exists; choose a new name`                            | [case](prototypes/negative/cases.ts#L192)   |
+| repeated-placeholder      | `Repeated path placeholder id`                                                        | [case](prototypes/negative/cases.ts#L195)   |
+| group                     | `Excluded route grammar; use routeCodec`                                              | [case](prototypes/negative/cases.ts#L197)   |
+| catchall                  | `Excluded route grammar; use routeCodec`                                              | [case](prototypes/negative/cases.ts#L199)   |
+| spread                    | `Excluded route grammar; use routeCodec`                                              | [case](prototypes/negative/cases.ts#L201)   |
+| optional-grammar          | `Excluded route grammar; use routeCodec`                                              | [case](prototypes/negative/cases.ts#L203)   |
+| optional-placeholder      | `Optional route param tab cannot be a path placeholder`                               | [case](prototypes/negative/cases.ts#L205)   |
+| unmatched-placeholder     | `Path placeholder other has no matching param; add a params mapping`                  | [case](prototypes/negative/cases.ts#L207)   |
+| missing-placeholder       | `Required route param id must appear as a path placeholder`                           | [case](prototypes/negative/cases.ts#L209)   |
+| mapping-duplicates        | `URL param mapping targets must be unique`                                            | [case](prototypes/negative/cases.ts#L211)   |
+| mapping-keys              | `URL param mapping names must be schema fields`                                       | [case](prototypes/negative/cases.ts#L213)   |
+| dynamic-path              | `Route path must be a literal; use advanced routeCodec for dynamic paths`             | [case](prototypes/negative/cases.ts#L215)   |
+| numeric-url               | `URL param id must encode a string; use a string codec`                               | [case](prototypes/negative/cases.ts#L217)   |
+| registration-missing      | `Settings`                                                                            | [case](prototypes/negative/cases.ts#L219)   |
+| component-missing         | `Settings`                                                                            | [case](prototypes/negative/cases.ts#L226)   |
+| href-union                | `not assignable`                                                                      | [case](prototypes/negative/cases.ts#L228)   |
+| zero-arity                | `Expected 0 arguments, but got 1`                                                     | [case](prototypes/negative/cases.ts#L239)   |
+| missing-navigator         | `Action Go of app 'no-nav' requires a navigator`                                      | [case](prototypes/negative/cases.ts#L245)   |
+| missing-service           | `Scenario 'missing' must provide`                                                     | [case](prototypes/negative/cases.ts#L247)   |
+| missing-fixture           | `Scenario 'missing-fixture' must provide`                                             | [case](prototypes/negative/cases.ts#L255)   |
+| fixture-action-service    | `Scenario 'missing' must provide`                                                     | [case](prototypes/negative/cases.ts#L267)   |
+| role-collision            | `ParamFree is declared more than once`                                                | [case](prototypes/negative/cases.ts#L269)   |
+| missing-default           | `defaultScenario`                                                                     | [case](prototypes/negative/cases.ts#L271)   |
+| record-alias              | `Navigation key Second must match contract name InventoryDetail`                      | [case](prototypes/negative/cases.ts#L273)   |
+| effect-rich-state         | `Effect state must encode JSON; use jsonCodec`                                        | [case](prototypes/negative/cases.ts#L275)   |
+| fixture-navigates         | `Property 'navigates' does not exist`                                                 | [case](prototypes/negative/cases.ts#L282)   |
+| readonly-state            | `read-only property`                                                                  | [case](prototypes/negative/cases.ts#L288)   |
+| transformed-error-encoder | `projectError`                                                                        | [case](prototypes/negative/cases.ts#L295)   |
+| unknown-input-presence    | `Expected 1 arguments, but got 0`                                                     | [case](prototypes/negative/cases.ts#L310)   |
+| link-required             | `params`                                                                              | [case](prototypes/negative/links.tsx#L24)   |
+| link-name                 | `not assignable`                                                                      | [case](prototypes/negative/links.tsx#L26)   |
+| expo-link-name            | `not assignable`                                                                      | [case](prototypes/negative/links.tsx#L28)   |
+| link-union                | `not assignable`                                                                      | [case](prototypes/negative/links.tsx#L31)   |
+| initial-union             | `not assignable`                                                                      | [case](prototypes/negative/links.tsx#L34)   |
+| expo-href-union           | `not assignable`                                                                      | [case](prototypes/negative/links.tsx#L37)   |
+| owned-params              | `Expected 3 arguments, but got 2`                                                     | [case](prototypes/negative/ownership.ts#L5) |
+
+### Runtime obligations and unproven acceptance cases
+
+These rows are **not passing runtime tests**. The target runtime does not exist. Every
+row must become an executable negative acceptance test against both SessionController
+and LiveController where the protocol exposes it. It would be dishonest to assert a tsc
+marker for a Promise's behavior, disposal, a React boundary or a device fingerprint.
+The compiled abort-ignoring case is an acceptance program, not runtime evidence.
+
+| Case                            | Required rejection or observable result                                                                                                                                                                              | Phase                                                    |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| missing-nominal/subclass        | Exact constructor registry rejects an unregistered Subclass; message names InventoryDetail and suggests registering its own contract. Missing private line remains statically assignable; lint documents this limit. | Runtime obligation + static counterexample               |
+| class/string mismatch           | DifferentClassName diagnostics name DeclaredName; identity remains its constructor.                                                                                                                                  | Runtime obligation                                       |
+| extra implementation            | Reject foreign or extra definitions, even when every required contract also has an implementation.                                                                                                                   | Runtime obligation                                       |
+| duplicate dynamic definitions   | App x declares Counter more than once; keep one definition. Check all screens, services and effective fixtures.                                                                                                      | Runtime obligation                                       |
+| shared contract in navigations  | Reject a contract registered in two session navigation owners; separate app values may reuse contracts.                                                                                                              | Runtime obligation; advanced multi-owner typing unproven |
+| fixture service key             | App inventory scenario live-services must provide inventory/InventoryApi. Static coverage names the identifier; Context key string interpolation is unproven.                                                        | Runtime obligation                                       |
+| invalid initial refinement      | Counter initial.count must be an integer; fix initial(). Never install the invalid node.                                                                                                                             | Runtime obligation                                       |
+| invalid projected number        | Counter state.count must be a finite JSON number; fix the projection.                                                                                                                                                | Runtime obligation                                       |
+| malformed URL                   | InventoryDetail route params.productId are invalid; correct the URL. Preserve previous committed focus.                                                                                                              | Runtime obligation                                       |
+| wrong route file                | useScreen(Settings) in InventoryDetail's entry reports expected InventoryDetail, received Settings, and the route key.                                                                                               | Runtime obligation                                       |
+| no Suspense boundary            | React/lint reports missing per-screen boundary; no library compile marker is promised.                                                                                                                               | Unproven lint/integration obligation                     |
+| normal rejected build           | Observe status:error, retry once, get a fresh build; pending lease and subscription are released once.                                                                                                               | Runtime obligation                                       |
+| Suspense rejected build         | Boundary sees build error; resetting it retries the same registry entry with a new promise, without affecting sibling screens.                                                                                       | Runtime obligation                                       |
+| startup failure                 | Fallback while starting; status observer sees failed; nearest error boundary receives cause; reset/remount retries.                                                                                                  | Runtime obligation                                       |
+| Provider identity               | Provider app must share the binding's app identity; use app.withScenarios. Structural same-name apps fail runtime validation.                                                                                        | Runtime obligation                                       |
+| unused/erased command           | Reject unused, multiple, void-erased, service/fixture or onFocus commands; require action.navigates and Nav.stay. Lint must catch discarded expressions and TS2488 misuse earlier.                                   | Runtime obligation + unproven lint                       |
+| abort-ignoring Promise          | Run acceptance/cancellation.ts: cancel/reset while gate waits, release gate, operation stays cancelled and new state remains count:0; observe no old-generation state.changed.                                       | Runtime obligation; program compiles                     |
+| ignored raw notification        | After reset, invoke an old raw store subscriber and late factory resolution; neither may publish. Dispose late factory exactly once.                                                                                 | Runtime obligation                                       |
+| fork after close                | Fork scoped fiber then close; join observes interruption. Escaped daemon write receives SessionChanged/closed capability and never publishes.                                                                        | Runtime obligation                                       |
+| concurrent reset                | Queue reset A then B; returned A client is stale after B, B remains usable; no orphaned sessions/scopes.                                                                                                             | Runtime obligation                                       |
+| reset while pending             | Old action outcome cancelled before reset resolves; returned client/controls name the new generation; reacquire handles.                                                                                             | Runtime obligation                                       |
+| disposed view run               | Counter.Add belongs to a closed session; reacquire Counter from the current session. No dispatch or notification occurs.                                                                                             | Runtime obligation                                       |
+| disposed journey/read           | Old client, node, action function and narrowed state reader all reject SessionChanged; dispose itself remains idempotent.                                                                                            | Runtime obligation                                       |
+| stale matched variant           | A narrowed journey read checks its phase again, never asserts an editing state after loading.                                                                                                                        | Runtime obligation                                       |
+| matcher timeout                 | InventoryList did not match requested products within 5 seconds; last state: {…}. Include last pending/error state too.                                                                                              | Runtime obligation                                       |
+| fingerprint extension           | connectJourney accepts base descriptor with test scenarios added and rejects a changed selected action/schema. Repeated withScenarios never mutates earlier defaults.                                                | Runtime obligation                                       |
+| production exclusion            | Metro/Vite production graphs contain no fixtures/test provider or bridge dialler/token. Keep ADR 0017 development gates. No real credentials in public env/AsyncStorage.                                             | Runtime obligation                                       |
+| advanced codec                  | Catchall encode/decode validates encoded schema, rejects arrays/invalid output as specified, and never guesses decoded URL values.                                                                                   | Runtime obligation                                       |
+| transformed store error         | Validate explicit projectError output and detach it; automatic inversion of Standard Schema transforms is unavailable.                                                                                               | Runtime obligation                                       |
+| redacted/encoded consumer state | Validate actual encode/redaction behavior and custom wire codecs; consumer-state.ts verifies the derived encoded/read-only/redacted types.                                                                           | Runtime obligation; static types verified                |
+| common layer extensions         | Runtime provisioning agrees with the retained common output; two extensions/defaults compile in consumer-state.ts.                                                                                                   | Runtime obligation; static coverage verified             |
+| resource/type budgets           | Prove registry deadlines and limits under abort/reset; implement within the 7,600-line allocation, without hiding logic in tests.                                                                                    | Runtime obligation; implementation size unproven         |
+
+The implementation allocation remains 7,600 source lines across the seven packages
+(effect 2,350; runtime 2,550; react 600; expo 400; react-router 250; live 700; test 750).
+This is a planning ceiling, not measured implementation feasibility. Delete redundant
+identity tokens, queued afterAction navigation, separate Suspense caches, append-only
+store retention, manual provider wrappers and duplicate typed clients. Reuse protocol
+validation, access checks, redaction, transport/auth, projection and controllers.
+
+## 4. Complete authored files
+
+These paths describe the future app layout. The physical compiled copies are under
+prototypes/examples/. Production scenarios live in app.ts; test fixtures enter only
+through scenarios.ts or the E2E provider alias. The plain example precedes routing.
+One-step, split and advanced tiers show their actual first ten lines, with no hidden
+setup. Effect imports consistently use namespace subpaths, including type-only imports.
+The future test file is physically named test/journey.ts so the repository runner
+does not execute a target-API fixture as an implementation test; it can be renamed
+journey.test.ts when implementing the design. The only assertions are literal `as const` values, never assertions of decoded external
+input. HTTP uses Schema.fromJsonString instead of untyped JSON.parse; settings I/O uses
+Effect.tryPromise and versioned bounded storage. The HTTP response size check is after
+buffering when content-length is absent: bounded streaming reads remain an application
+transport acceptance obligation, not a claim that this buffer prevents all allocation.
+
+### tiers/advanced.ts
+
+<!-- file: examples/tiers/advanced.ts -->
+```ts
+import { mountEffect } from "@reflex/effect/advanced"
+import { CounterLive } from "./selected.ts"
+// Advanced mounting remains scoped: this Effect requires Scope and cannot run unscoped.
+export const owned = mountEffect(CounterLive)
+```
+
+### tiers/one-step.ts
+
+<!-- file: examples/tiers/one-step.ts -->
+```ts
+import { Screen, defineApp } from "@reflex/effect"
+import * as Schema from "effect/Schema"
+
+export const Counter = Screen.define("Counter", {
+  state: Schema.Struct({ count: Schema.Int }),
+  initial: () => ({ count: 0 }),
+  actions: (action) => ({
+    Increment: action.reduce({ reducer: (_, s) => ({ count: s.count + 1 }) }),
+  }),
+})
+export const app = defineApp({ name: "counter", screens: [Counter] })
+```
+
+### tiers/selected.ts
+
+<!-- file: examples/tiers/selected.ts -->
+```ts
+import { Screen, defineApp } from "@reflex/effect"
+import * as Schema from "effect/Schema"
+export class CounterContract extends Screen("Counter", {
+  state: Schema.Struct({ count: Schema.Int }),
+  initial: () => ({ count: 0 }),
+}) {
+  declare private readonly nominal: undefined
+}
+export const CounterLive = CounterContract.implement({
+  actions: (action) => ({
+    Increment: action.reduce({ reducer: (_, s) => ({ count: s.count + 1 }) }),
+  }),
+})
+export const selected = defineApp({ name: "counter", screens: [CounterLive] })
+```
+
+### examples/plain/src/app.ts
+
+<!-- file: examples/examples/plain/src/app.ts -->
+```ts
+import { defineStoreNode, defineStoreApp } from "@reflex/runtime"
+import { createStore } from "zustand/vanilla"
+import { z } from "zod"
+
+// The existing Zustand store remains usable without Reflex.
+export const createCounterStore = () => createStore(() => ({ count: 0, token: "private-token" }))
+export const Counter = defineStoreNode({
+  name: "Counter",
+  store: createCounterStore,
+  project: ({ count }) => ({ count }),
+  actions: (action) => ({
+    Add: action({
+      input: z.strictObject({ by: z.int() }),
+      handler: ({ by }, { store }) => store.setState((s) => ({ count: s.count + by })),
+    }),
+    Reset: action({
+      available: ({ count }) => (count === 0 ? "Already zero" : true),
+      handler: (_, { store }) => store.setState({ count: 0 }),
+    }),
+  }),
+})
+export default defineStoreApp({ name: "plain-counter", services: [Counter] })
+```
+
+### examples/inventory/journeys/services.ts
+
+<!-- file: examples/examples/inventory/journeys/services.ts -->
+```ts
+import { includes, type JourneyClientFor } from "@reflex/test"
+import { InventoryList, InventoryDetail, Settings } from "../src/screens.ts"
+import type inventoryApp from "../src/app.ts"
+
+/** The same typed story runs against fixtures and the live CLI transport. */
+export const servicesJourney = async (
+  app: Pick<JourneyClientFor<typeof inventoryApp>, "focused" | "back">,
+  failNextSave: () => Promise<void>,
+): Promise<void> => {
+  const list = await app.focused(InventoryList, {
+    _tag: "ready",
+    products: includes({ id: "product-123", quantity: 5 }),
+  })
+  await list.actions.OpenProduct({ productId: "product-123" })
+  const detail = await app.focused(InventoryDetail, {
+    _tag: "editing",
+    title: "Blue T-Shirt",
+    quantity: 5,
+  })
+  await detail.actions.SetQuantity({ quantity: 12 })
+  await detail.actions.Save()
+  await app.back()
+  const updated = await app.focused(InventoryList, {
+    _tag: "ready",
+    products: includes({ id: "product-123", quantity: 12 }),
+  })
+  await updated.actions.OpenProduct({ productId: "product-123" })
+  const reopened = await app.focused(InventoryDetail, {
+    _tag: "editing",
+    quantity: 12,
+    error: null,
+  })
+  await reopened.actions.SetQuantity({ quantity: 19 })
+  await failNextSave()
+  await reopened.actions.Save.expectError()
+  await app.focused(InventoryDetail, { _tag: "editing", quantity: 19, error: "Server error" })
+  await app.back()
+  const saved = await app.focused(InventoryList, {
+    _tag: "ready",
+    products: includes({ id: "product-123", quantity: 12 }),
+  })
+  await saved.actions.OpenSettings()
+  const settings = await app.focused(Settings, { _tag: "ready" })
+  await settings.actions.SetLowStockThreshold({ threshold: 3 })
+  await app.back()
+  const refreshed = await app.focused(InventoryList, { lowStockThreshold: 3 })
+  await refreshed.actions.OpenSettings()
+  await app.focused(Settings, { lowStockThreshold: 3 })
+}
+```
+
+### examples/inventory/src/app.ts
+
+<!-- file: examples/examples/inventory/src/app.ts -->
+```ts
+import { defineApp } from "@reflex/effect"
+import * as Layer from "effect/Layer"
+import { httpInventoryApi } from "./http-api.ts"
+import { memorySettings } from "./settings-store.ts"
+import { InventoryListLive } from "./features/inventory-list.ts"
+import { InventoryDetailLive } from "./features/inventory-detail.ts"
+import { SettingsLive } from "./features/settings.ts"
+import { InventoryList } from "./screens.ts"
+import { Nav } from "./navigation.ts"
+
+export default defineApp({
+  name: "inventory",
+  navigation: Nav.implement([InventoryListLive, InventoryDetailLive, SettingsLive], {
+    initial: InventoryList,
+  }),
+  defaultScenario: "live-services",
+  scenarios: {
+    "live-services": {
+      description: "Local HTTP inventory and in-memory settings",
+      layer: Layer.merge(httpInventoryApi("http://127.0.0.1:4318"), memorySettings),
+    },
+  },
+})
+```
 
 ### examples/inventory/src/domain.ts
 
+<!-- file: examples/examples/inventory/src/domain.ts -->
 ```ts
 import * as Context from "effect/Context"
 import type * as Effect from "effect/Effect"
@@ -175,121 +618,9 @@ export const isLowStock = (product: Product, lowStockThreshold: number): boolean
   product.quantity < lowStockThreshold
 ```
 
-### examples/inventory/src/screens.ts
-
-```ts
-import { Screen } from "@reflex/effect"
-import * as Schema from "effect/Schema"
-import { Product, Quantity } from "./domain.ts"
-
-const InventoryListState = Schema.Union([
-  Schema.TaggedStruct("loading", {}),
-  Schema.TaggedStruct("failed", { error: Schema.String }),
-  Schema.TaggedStruct("ready", {
-    products: Schema.Array(Product),
-    lowStockThreshold: Schema.Int,
-  }),
-])
-
-export class InventoryList extends Screen<InventoryList>()("InventoryList", {
-  state: InventoryListState,
-  initial: () => ({ _tag: "loading" }),
-}) {
-  declare private readonly nominal: undefined
-}
-
-const Loaded = {
-  productId: Schema.String,
-  title: Schema.String,
-  quantity: Quantity,
-}
-
-const InventoryDetailState = Schema.Union([
-  Schema.TaggedStruct("loading", { productId: Schema.String }),
-  Schema.TaggedStruct("missing", { productId: Schema.String, error: Schema.String }),
-  Schema.TaggedStruct("editing", { ...Loaded, error: Schema.NullOr(Schema.String) }),
-  Schema.TaggedStruct("saving", Loaded),
-])
-
-export class InventoryDetail extends Screen<InventoryDetail>()("InventoryDetail", {
-  state: InventoryDetailState,
-  params: { productId: Schema.String },
-  initial: ({ productId }) => ({ _tag: "loading", productId }),
-}) {
-  declare private readonly nominal: undefined
-}
-
-const SettingsState = Schema.Union([
-  Schema.TaggedStruct("loading", {}),
-  Schema.TaggedStruct("ready", {
-    lowStockThreshold: Schema.Int,
-    apiToken: Schema.Redacted(Schema.String),
-  }),
-])
-
-export class Settings extends Screen<Settings>()("Settings", {
-  state: SettingsState,
-  initial: () => ({ _tag: "loading" }),
-}) {
-  declare private readonly nominal: undefined
-}
-```
-
-### examples/inventory/src/navigation.ts
-
-```ts
-import { defineNavigation } from "@reflex/effect"
-import { InventoryList, InventoryDetail, Settings } from "./screens.ts"
-
-export const Nav = defineNavigation([InventoryList, InventoryDetail, Settings])
-```
-
-### examples/inventory/src/features/inventory-list.ts
-
-```ts
-import { InventoryList, InventoryDetail, Settings } from "../screens.ts"
-import * as Effect from "effect/Effect"
-import * as Schema from "effect/Schema"
-import { InventoryApi, SettingsStore } from "../domain.ts"
-import { Nav } from "../navigation.ts"
-
-const load = InventoryList.handler(({ state }) =>
-  Effect.gen(function* () {
-    const api = yield* InventoryApi
-    const settings = yield* SettingsStore
-    yield* state.set({ _tag: "loading" })
-    const { lowStockThreshold } = yield* settings.load
-    yield* api.list.pipe(
-      Effect.matchEffect({
-        onFailure: ({ message }) => state.update(() => ({ _tag: "failed", error: message })),
-        onSuccess: (products) =>
-          state.update(() => ({ _tag: "ready", products, lowStockThreshold })),
-      }),
-    )
-  }),
-)
-
-export const InventoryListLive = InventoryList.implement({
-  onFocus: load,
-  actions: (action) => ({
-    OpenProduct: action.when("ready")({
-      description: "Open a product's detail screen",
-      input: Schema.Struct({ productId: Schema.String }),
-      handler: ({ productId }) => Effect.succeed(Nav.push(InventoryDetail, { productId })),
-    }),
-    OpenSettings: action({
-      handler: () => Effect.succeed(Nav.push(Settings)),
-    }),
-    Refresh: action({
-      available: (state) => (state._tag === "loading" ? "Products are loading" : true),
-      handler: (_, { state }) => load({ state }),
-    }),
-  }),
-})
-```
-
 ### examples/inventory/src/features/inventory-detail.ts
 
+<!-- file: examples/examples/inventory/src/features/inventory-detail.ts -->
 ```ts
 import { InventoryDetail } from "../screens.ts"
 import * as Effect from "effect/Effect"
@@ -358,7 +689,7 @@ export const InventoryDetailLive = InventoryDetail.implement({
       error: ApiError,
       handler: (_, { state }) => save({ state }),
     }),
-    SaveAndClose: action.when("editing")({
+    SaveAndClose: action.when("editing").navigates({
       description: "Persist the quantity and return to the previous screen",
       error: ApiError,
       handler: (_, { state }) =>
@@ -373,8 +704,54 @@ export const InventoryDetailLive = InventoryDetail.implement({
 })
 ```
 
+### examples/inventory/src/features/inventory-list.ts
+
+<!-- file: examples/examples/inventory/src/features/inventory-list.ts -->
+```ts
+import { InventoryList, InventoryDetail, Settings } from "../screens.ts"
+import * as Effect from "effect/Effect"
+import * as Schema from "effect/Schema"
+import { InventoryApi, SettingsStore } from "../domain.ts"
+import { Nav } from "../navigation.ts"
+
+const load = InventoryList.handler(({ state }) =>
+  Effect.gen(function* () {
+    const api = yield* InventoryApi
+    const settings = yield* SettingsStore
+    yield* state.set({ _tag: "loading" })
+    const { lowStockThreshold } = yield* settings.load
+    yield* api.list.pipe(
+      Effect.matchEffect({
+        onFailure: ({ message }) => state.update(() => ({ _tag: "failed", error: message })),
+        onSuccess: (products) =>
+          state.update(() => ({ _tag: "ready", products, lowStockThreshold })),
+      }),
+    )
+  }),
+)
+
+export const InventoryListLive = InventoryList.implement({
+  onFocus: load,
+  actions: (action) => ({
+    OpenProduct: action.when("ready").navigates({
+      description: "Open a product's detail screen",
+      input: Schema.Struct({ productId: Schema.String }),
+      handler: ({ productId }) => Effect.succeed(Nav.push(InventoryDetail, { productId })),
+    }),
+    OpenSettings: action.navigates({
+      handler: () => Effect.succeed(Nav.push(Settings)),
+    }),
+    Refresh: action({
+      available: (state) => (state._tag === "loading" ? "Products are loading" : true),
+      handler: (_, { state }) => load({ state }),
+    }),
+  }),
+})
+```
+
 ### examples/inventory/src/features/settings.ts
 
+<!-- file: examples/examples/inventory/src/features/settings.ts -->
 ```ts
 import { Settings } from "../screens.ts"
 import * as Schema from "effect/Schema"
@@ -420,6 +797,7 @@ export const SettingsLive = Settings.implement({
 
 ### examples/inventory/src/fixtures.ts
 
+<!-- file: examples/examples/inventory/src/fixtures.ts -->
 ```ts
 import { defineFixture } from "@reflex/effect"
 import type * as Duration from "effect/Duration"
@@ -518,6 +896,7 @@ export const fixtureSettings = Layer.sync(SettingsStore, () => {
 
 ### examples/inventory/src/http-api.ts
 
+<!-- file: examples/examples/inventory/src/http-api.ts -->
 ```ts
 import { INVENTORY_HTTP_BODY_BYTES_MAX, INVENTORY_HTTP_TIMEOUT_MS } from "./limits.ts"
 import * as Effect from "effect/Effect"
@@ -538,7 +917,11 @@ export const httpInventoryApi = (baseUrl: string) =>
     Effect.gen(function* () {
       const client = HttpClient.withScope(yield* HttpClient.HttpClient)
       const base = baseUrl.replace(/\/$/, "")
-      const request = <A>(path: string, schema: Schema.Codec<A>, quantity?: number) =>
+      const request = <C extends Schema.Codec<unknown, unknown>>(
+        path: string,
+        schema: C,
+        quantity?: number,
+      ) =>
         Effect.gen(function* () {
           const req =
             quantity === undefined
@@ -556,15 +939,12 @@ export const httpInventoryApi = (baseUrl: string) =>
           if (bytes.byteLength > INVENTORY_HTTP_BODY_BYTES_MAX) {
             return yield* new ApiError({ message: "Inventory response too large" })
           }
-          const json = yield* Effect.try({
-            try: () => JSON.parse(new TextDecoder().decode(bytes)),
-            catch: () => new ApiError({ message: "Invalid inventory JSON" }),
-          })
+          const json = new TextDecoder().decode(bytes)
           if (response.status < 200 || response.status >= 300) {
-            const body = yield* Schema.decodeUnknownEffect(ErrorBody)(json)
+            const body = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(ErrorBody))(json)
             return yield* new ApiError({ message: body.message })
           }
-          return yield* Schema.decodeUnknownEffect(schema)(json)
+          return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(schema))(json)
         }).pipe(
           Effect.scoped,
           Effect.mapError((error) =>
@@ -589,6 +969,7 @@ export const httpInventoryApi = (baseUrl: string) =>
 
 ### examples/inventory/src/limits.ts
 
+<!-- file: examples/examples/inventory/src/limits.ts -->
 ```ts
 /**
  * Limits of the example's own HTTP service. They belong to this app, not to Reflex:
@@ -602,113 +983,136 @@ export const INVENTORY_HTTP_TIMEOUT_MS = 4_000
 export const INVENTORY_HTTP_BODY_BYTES_MAX = 64 * 1024
 ```
 
-### examples/inventory/src/app.ts
+### examples/inventory/src/navigation.ts
 
+<!-- file: examples/examples/inventory/src/navigation.ts -->
 ```ts
-import { defineApp } from "@reflex/effect"
+import { defineNavigation } from "@reflex/effect"
+import { InventoryList, InventoryDetail, Settings } from "./screens.ts"
+
+export const Nav = defineNavigation({ InventoryList, InventoryDetail, Settings })
+```
+
+### examples/inventory/src/scenarios.ts
+
+<!-- file: examples/examples/inventory/src/scenarios.ts -->
+```ts
 import * as Layer from "effect/Layer"
+import app from "./app.ts"
 import { fixtureApi, fixtureSettings, seedProducts, InventoryFixture } from "./fixtures.ts"
-import { InventoryListLive } from "./features/inventory-list.ts"
-import { InventoryDetailLive } from "./features/inventory-detail.ts"
-import { SettingsLive } from "./features/settings.ts"
-import { InventoryList } from "./screens.ts"
-import { Nav } from "./navigation.ts"
 
 const services = (products: typeof seedProducts, saveDelay?: "1 second" | "30 seconds") =>
   Layer.merge(
     fixtureApi({ products, ...(saveDelay === undefined ? {} : { saveDelay }) }),
     fixtureSettings,
   )
-
-export default defineApp({
-  name: "inventory",
-  navigation: Nav.implement([InventoryListLive, InventoryDetailLive, SettingsLive], {
-    initial: InventoryList,
-  }),
-  defaultScenario: "inventory-with-products",
-  scenarios: {
-    "inventory-with-products": {
-      layer: services(seedProducts),
-      fixtures: [InventoryFixture],
-    },
-    "empty-inventory": {
-      layer: services([]),
-      fixtures: [InventoryFixture],
-    },
-    "sluggish-network": {
-      layer: services(seedProducts, "1 second"),
-      fixtures: [InventoryFixture],
+export default app.withScenarios(
+  {
+    "inventory-with-products": { description: "Three products", layer: services(seedProducts) },
+    "empty-inventory": { description: "No products", layer: services([]) },
+    "slow-network": {
+      description: "Save exceeds deadline",
+      layer: services(seedProducts, "30 seconds"),
       virtualTime: true,
     },
-    "slow-network": {
-      layer: services(seedProducts, "30 seconds"),
-      fixtures: [InventoryFixture],
+    "sluggish-network": {
+      description: "Save in flight",
+      layer: services(seedProducts, "1 second"),
       virtualTime: true,
     },
   },
-})
+  { defaultScenario: "inventory-with-products", fixtures: [InventoryFixture] },
+)
 ```
 
-### examples/inventory/journeys/services.ts
+### examples/inventory/src/screens.ts
 
+<!-- file: examples/examples/inventory/src/screens.ts -->
 ```ts
-import { includes, type JourneyClientFor } from "@reflex/test"
-import { InventoryList, InventoryDetail, Settings } from "../src/screens.ts"
-import type inventoryApp from "../src/app.ts"
+import { Screen } from "@reflex/effect"
+import * as Schema from "effect/Schema"
+import { Product, Quantity } from "./domain.ts"
 
-/** The same typed story runs against fixtures and the live CLI transport. */
-export const servicesJourney = async (
-  app: JourneyClientFor<typeof inventoryApp>,
-  failNextSave: () => Promise<void>,
-): Promise<void> => {
-  const list = await app.focused(InventoryList, {
-    _tag: "ready",
-    products: includes({ id: "product-123", quantity: 5 }),
-  })
-  await list.actions.OpenProduct({ productId: "product-123" })
-  const detail = await app.focused(InventoryDetail, {
-    _tag: "editing",
-    title: "Blue T-Shirt",
-    quantity: 5,
-  })
-  await detail.actions.SetQuantity({ quantity: 12 })
-  await detail.actions.Save()
-  await app.back()
-  const updated = await app.focused(InventoryList, {
-    _tag: "ready",
-    products: includes({ id: "product-123", quantity: 12 }),
-  })
-  await updated.actions.OpenProduct({ productId: "product-123" })
-  const reopened = await app.focused(InventoryDetail, {
-    _tag: "editing",
-    quantity: 12,
-    error: null,
-  })
-  await reopened.actions.SetQuantity({ quantity: 19 })
-  await failNextSave()
-  await reopened.expectFailure.Save()
-  await app.focused(InventoryDetail, { _tag: "editing", quantity: 19, error: "Server error" })
-  await app.back()
-  const saved = await app.focused(InventoryList, {
-    _tag: "ready",
-    products: includes({ id: "product-123", quantity: 12 }),
-  })
-  await saved.actions.OpenSettings()
-  const settings = await app.focused(Settings, { _tag: "ready" })
-  await settings.actions.SetLowStockThreshold({ threshold: 3 })
-  await app.back()
-  const refreshed = await app.focused(InventoryList, { lowStockThreshold: 3 })
-  await refreshed.actions.OpenSettings()
-  await app.focused(Settings, { lowStockThreshold: 3 })
+const InventoryListState = Schema.Union([
+  Schema.TaggedStruct("loading", {}),
+  Schema.TaggedStruct("failed", { error: Schema.String }),
+  Schema.TaggedStruct("ready", {
+    products: Schema.Array(Product),
+    lowStockThreshold: Schema.Int,
+  }),
+])
+
+export class InventoryList extends Screen("InventoryList", {
+  state: InventoryListState,
+  initial: () => ({ _tag: "loading" }),
+}) {
+  declare private readonly nominal: undefined
+}
+
+const Loaded = {
+  productId: Schema.String,
+  title: Schema.String,
+  quantity: Quantity,
+}
+
+const InventoryDetailState = Schema.Union([
+  Schema.TaggedStruct("loading", { productId: Schema.String }),
+  Schema.TaggedStruct("missing", { productId: Schema.String, error: Schema.String }),
+  Schema.TaggedStruct("editing", { ...Loaded, error: Schema.NullOr(Schema.String) }),
+  Schema.TaggedStruct("saving", Loaded),
+])
+
+export class InventoryDetail extends Screen("InventoryDetail", {
+  state: InventoryDetailState,
+  params: { productId: Schema.String },
+  initial: ({ productId }) => ({ _tag: "loading", productId }),
+}) {
+  declare private readonly nominal: undefined
+}
+
+const SettingsState = Schema.Union([
+  Schema.TaggedStruct("loading", {}),
+  Schema.TaggedStruct("ready", {
+    lowStockThreshold: Schema.Int,
+    apiToken: Schema.Redacted(Schema.String),
+  }),
+])
+
+export class Settings extends Screen("Settings", {
+  state: SettingsState,
+  initial: () => ({ _tag: "loading" }),
+}) {
+  declare private readonly nominal: undefined
 }
 ```
 
-### examples/inventory/test/journey.test.ts
+### examples/inventory/src/settings-store.ts
 
+<!-- file: examples/examples/inventory/src/settings-store.ts -->
+```ts
+import * as Layer from "effect/Layer"
+import * as Effect from "effect/Effect"
+import * as Redacted from "effect/Redacted"
+import { SettingsStore } from "./domain.ts"
+export const memorySettings = Layer.sync(SettingsStore, () => {
+  let lowStockThreshold = 10
+  return SettingsStore.of({
+    load: Effect.sync(() => ({ lowStockThreshold, apiToken: Redacted.make("") })),
+    setLowStockThreshold: (value) =>
+      Effect.sync(() => {
+        lowStockThreshold = value
+      }),
+  })
+})
+```
+
+### examples/inventory/test/journey.ts
+
+<!-- file: examples/examples/inventory/test/journey.ts -->
 ```ts
 import { expect, test } from "bun:test"
 import { connectJourney, createTestApp, includes } from "@reflex/test"
-import app from "../src/app.ts"
+import app from "../src/scenarios.ts"
 import { InventoryList, InventoryDetail } from "../src/screens.ts"
 import { InventoryFixture } from "../src/fixtures.ts"
 import { servicesJourney } from "../journeys/services.ts"
@@ -727,10 +1131,10 @@ test("slow save times out without losing edits", async () => {
   await list.actions.OpenProduct({ productId: "product-123" })
   const detail = await session.focused(InventoryDetail, { _tag: "editing" })
   await detail.actions.SetQuantity({ quantity: 12 })
-  const saving = await detail.start.Save()
+  const saving = await detail.actions.Save.start()
   await session.focused(InventoryDetail, { _tag: "saving" })
-  await session.advanceTime(5_000)
-  expect(await saving.expectFailure()).toMatchObject({ status: "domain-error" })
+  await session.advanceTime("5 seconds")
+  expect(await saving.expectError()).toMatchObject({ status: "error" })
   await session.focused(InventoryDetail, { _tag: "editing", quantity: 12, error: "Save timed out" })
   await session.back()
   await session.focused(InventoryList, { products: includes({ id: "product-123", quantity: 5 }) })
@@ -748,98 +1152,56 @@ test.skipIf(process.env.REFLEX_LIVE !== "1")("the same story through the device"
 })
 ```
 
-### apps/mobile/src/app.ts
+### acceptance/cancellation.ts
 
+<!-- file: examples/acceptance/cancellation.ts -->
 ```ts
-import { Layer } from "effect"
-import AsyncStorage from "@react-native-async-storage/async-storage"
-import * as Effect from "effect/Effect"
-import * as Redacted from "effect/Redacted"
-import * as Schema from "effect/Schema"
-import inventory from "@reflex/example-inventory"
-import { SettingsStore } from "@reflex/example-inventory/domain.ts"
-import { httpInventoryApi } from "@reflex/example-inventory/http-api.ts"
+import { expect } from "bun:test"
+import { defineStoreApp, defineStoreNode } from "@reflex/runtime"
+import { createTestApp } from "@reflex/test"
+import { createStore } from "zustand/vanilla"
 
-const SavedSettings = Schema.Struct({ lowStockThreshold: Schema.Int })
-const storage = Layer.succeed(
-  SettingsStore,
-  SettingsStore.of({
-    load: Effect.promise(() => AsyncStorage.getItem("inventory-settings")).pipe(
-      Effect.flatMap((raw) =>
-        raw === null
-          ? Effect.succeed({ lowStockThreshold: 10 })
-          : Schema.decodeUnknownEffect(Schema.fromJsonString(SavedSettings))(raw),
-      ),
-      Effect.catch(() => Effect.succeed({ lowStockThreshold: 10 })),
-      Effect.map((value) => ({ ...value, apiToken: Redacted.make("app-token") })),
-    ),
-    setLowStockThreshold: (lowStockThreshold) =>
-      Effect.promise(() =>
-        AsyncStorage.setItem("inventory-settings", JSON.stringify({ lowStockThreshold })),
-      ),
-  }),
-)
-const baseUrl = process.env.EXPO_PUBLIC_INVENTORY_API
-export default baseUrl === undefined
-  ? inventory
-  : inventory.withScenarios(
-      {
-        "live-services": { layer: Layer.merge(httpInventoryApi(baseUrl), storage), fixtures: [] },
-      },
-      { defaultScenario: "live-services" },
-    )
-```
-
-The conditional export intentionally has a union type. The mobile binding never promises
-fixture presence; the live-services scenario has none. A real-service test can reuse
-`servicesJourney` by supplying an application-owned HTTP fail-next-save function; fixture
-journeys above need no HTTP transport adapter. `connectJourney` itself owns CLI target
-discovery, auth, protocol negotiation, subscription and outcome decoding.
-
-### apps/mobile/src/routes.ts
-
-```ts
-import { createReflexExpo } from "@reflex/expo"
-import app from "./app.ts"
-
-export const reflex = createReflexExpo(app, {
-  InventoryList: "/",
-  InventoryDetail: "/inventory/[productId]",
-  Settings: "/settings",
-})
-```
-
-### apps/mobile/provider.tsx
-
-```tsx
-import type { ReactNode } from "react"
-import { developmentBridge } from "@reflex/expo/dev"
-import app from "./src/app.ts"
-import { reflex } from "./src/routes.ts"
-
-const bridge = developmentBridge()
-export function AppProvider({ children }: { children: ReactNode }) {
-  return (
-    <reflex.Provider app={app} bridge={bridge}>
-      {children}
-    </reflex.Provider>
-  )
+// Compile-only acceptance case until the target runtime exists. Ignores AbortSignal.
+export async function abortIgnoringPromise() {
+  let release = () => {}
+  const gate = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  const Counter = defineStoreNode({
+    name: "Counter",
+    store: () => createStore(() => ({ count: 0 })),
+    actions: (action) => ({
+      IgnoreAbort: action({
+        handler: async (_, { store }) => {
+          await gate
+          store.setState({ count: 99 })
+        },
+      }),
+    }),
+  })
+  const app = defineStoreApp({ name: "abort-ignoring", services: [Counter] })
+  await using first = await createTestApp(app)
+  const old = await first.node(Counter)
+  const operation = await old.actions.IgnoreAbort.start()
+  const next = await first.reset("default")
+  release()
+  await operation.cancelled()
+  const fresh = await next.node(Counter)
+  expect(await fresh.state()).toEqual({ count: 0 })
 }
 ```
 
 ### apps/mobile/app/_layout.tsx
 
+<!-- file: examples/apps/mobile/app/_layout.tsx -->
 ```tsx
-import { Suspense } from "react"
 import { Stack } from "expo-router"
 import { AppProvider } from "@inventory-provider"
 
 export default function Layout() {
   return (
     <AppProvider>
-      <Suspense fallback={null}>
-        <Stack />
-      </Suspense>
+      <Stack />
     </AppProvider>
   )
 }
@@ -847,6 +1209,7 @@ export default function Layout() {
 
 ### apps/mobile/app/index.tsx
 
+<!-- file: examples/apps/mobile/app/index.tsx -->
 ```tsx
 import { InventoryList } from "@reflex/example-inventory/screens.ts"
 import { isLowStock } from "@reflex/example-inventory/domain.ts"
@@ -857,6 +1220,17 @@ import { Action, Screen, styles } from "../src/ui.tsx"
 export default function InventoryListView() {
   const node = reflex.useScreen(InventoryList)
   const { status, state, actions } = node
+  if (status === "error") {
+    return (
+      <Text
+        onPress={() => {
+          void node.retry()
+        }}
+      >
+        {node.error.message} — Retry
+      </Text>
+    )
+  }
   if (status === "pending") {
     return null
   }
@@ -904,6 +1278,7 @@ export default function InventoryListView() {
 
 ### apps/mobile/app/inventory/[productId].tsx
 
+<!-- file: examples/apps/mobile/app/inventory/[productId].tsx -->
 ```tsx
 import { InventoryDetail } from "@reflex/example-inventory/screens.ts"
 import { reflex } from "../../src/routes.ts"
@@ -913,6 +1288,17 @@ import { Action, Screen, styles } from "../../src/ui.tsx"
 export default function InventoryDetailView() {
   const node = reflex.useScreen(InventoryDetail)
   const { status, state, actions } = node
+  if (status === "error") {
+    return (
+      <Text
+        onPress={() => {
+          void node.retry()
+        }}
+      >
+        {node.error.message} — Retry
+      </Text>
+    )
+  }
   if (status === "pending") {
     return null
   }
@@ -946,13 +1332,16 @@ export default function InventoryDetailView() {
 
 ### apps/mobile/app/settings.tsx
 
+<!-- file: examples/apps/mobile/app/settings.tsx -->
 ```tsx
+import type { ErrorBoundaryProps } from "expo-router"
+import { Suspense } from "react"
 import { Settings } from "@reflex/example-inventory/screens.ts"
 import { reflex } from "../src/routes.ts"
 import { Text } from "react-native"
 import { Action, Screen, styles } from "../src/ui.tsx"
 
-export default function SettingsView() {
+function SettingsContent() {
   const node = reflex.useScreenSuspense(Settings)
   const { state, actions } = node
   if (state._tag === "loading") {
@@ -968,10 +1357,294 @@ export default function SettingsView() {
     </Screen>
   )
 }
+
+export default function SettingsView() {
+  return (
+    <Suspense fallback={null}>
+      <SettingsContent />
+    </Suspense>
+  )
+}
+
+export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
+  return (
+    <Text
+      onPress={() => {
+        void retry()
+      }}
+    >
+      Retry Settings: {error.message}
+    </Text>
+  )
+}
+```
+
+### apps/mobile/e2e/provider.tsx
+
+<!-- file: examples/apps/mobile/e2e/provider.tsx -->
+```tsx
+import type { ReactNode } from "react"
+import * as Layer from "effect/Layer"
+import { developmentBridge } from "@reflex/expo/dev"
+import {
+  fixtureApi,
+  fixtureSettings,
+  InventoryFixture,
+  seedProducts,
+} from "@reflex/example-inventory/fixtures.ts"
+import app from "../src/app.ts"
+import { reflex } from "../src/routes.ts"
+
+const e2e = {
+  e2e: {
+    layer: Layer.merge(fixtureApi({ products: seedProducts }), fixtureSettings),
+    fixtures: [InventoryFixture],
+  },
+}
+const instrumented = app.withScenarios(e2e, { defaultScenario: "e2e" })
+const bridge = developmentBridge()
+export function AppProvider({ children }: { children: ReactNode }) {
+  return (
+    <reflex.Provider app={instrumented} fallback={null} bridge={bridge}>
+      {children}
+    </reflex.Provider>
+  )
+}
+```
+
+### apps/mobile/metro.config.js
+
+<!-- file: examples/apps/mobile/metro.config.js -->
+```js
+const path = require("node:path")
+const { getDefaultConfig } = require("expo/metro-config")
+
+const root = path.resolve(__dirname, "../..")
+const config = getDefaultConfig(__dirname)
+
+const original = config.resolver.resolveRequest
+const provider = process.env.REFLEX_E2E === "1" ? "e2e/provider.tsx" : "provider.tsx"
+/** @type {NonNullable<typeof original>} */
+const resolveRequest = (context, name, platform) => {
+  if (name === "@inventory-provider") {
+    return { type: "sourceFile", filePath: path.join(__dirname, provider) }
+  }
+  return original == null
+    ? context.resolveRequest(context, name, platform)
+    : original(context, name, platform)
+}
+module.exports = {
+  ...config,
+  watchFolders: [path.join(root, "packages"), path.join(root, "examples")],
+  resolver: {
+    ...config.resolver,
+    disableHierarchicalLookup: true,
+    nodeModulesPaths: [path.join(__dirname, "node_modules")],
+    resolveRequest,
+    extraNodeModules: {
+      "@reflex/protocol": path.join(root, "packages/protocol"),
+      "@reflex/runtime": path.join(root, "packages/runtime"),
+      "@reflex/rpc": path.join(root, "packages/rpc"),
+      "@reflex/effect": path.join(root, "packages/effect"),
+      "@reflex/live": path.join(root, "packages/live"),
+      "@reflex/react": path.join(root, "packages/react"),
+      "@reflex/navigation": path.join(root, "packages/navigation"),
+      "@reflex/expo": path.join(root, "packages/expo"),
+      "@reflex/example-plain": path.join(root, "examples/plain"),
+      "@reflex/example-inventory": path.join(root, "examples/inventory"),
+    },
+  },
+}
+```
+
+### apps/mobile/plain/app/_layout.tsx
+
+<!-- file: examples/apps/mobile/plain/app/_layout.tsx -->
+```tsx
+import { Stack } from "expo-router"
+import { developmentBridge } from "@reflex/expo/dev"
+import { reflex } from "../routes.ts"
+
+const bridge = developmentBridge()
+export default function Layout() {
+  return (
+    <reflex.Provider fallback={null} bridge={bridge}>
+      <Stack />
+    </reflex.Provider>
+  )
+}
+```
+
+### apps/mobile/plain/app/index.tsx
+
+<!-- file: examples/apps/mobile/plain/app/index.tsx -->
+```tsx
+import { Pressable, Text, View } from "react-native"
+import { Counter } from "@reflex/example-plain"
+import { reflex } from "../routes.ts"
+
+export default function CounterView() {
+  const view = reflex.useService(Counter)
+  if (view.status === "error") {
+    return (
+      <Text
+        onPress={() => {
+          void view.retry()
+        }}
+      >
+        {view.error.message} — Retry
+      </Text>
+    )
+  }
+  if (view.status === "pending") {
+    return null
+  }
+  return (
+    <View>
+      <Text>Count: {view.state.count}</Text>
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => {
+          void view.actions.Add.run({ by: 1 })
+        }}
+      >
+        <Text>Add one</Text>
+      </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        disabled={!view.actions.Reset.available}
+        onPress={() => {
+          void view.actions.Reset.run()
+        }}
+      >
+        <Text>Reset</Text>
+      </Pressable>
+    </View>
+  )
+}
+```
+
+### apps/mobile/plain/index.tsx
+
+<!-- file: examples/apps/mobile/plain/index.tsx -->
+```tsx
+import "expo-router/entry"
+```
+
+### apps/mobile/plain/routes.ts
+
+<!-- file: examples/apps/mobile/plain/routes.ts -->
+```ts
+import { createReflex } from "@reflex/react"
+import app from "@reflex/example-plain"
+export const reflex = createReflex(app)
+```
+
+### apps/mobile/provider.tsx
+
+<!-- file: examples/apps/mobile/provider.tsx -->
+```tsx
+import type { ReactNode } from "react"
+import { developmentBridge } from "@reflex/expo/dev"
+import { reflex } from "./src/routes.ts"
+
+const bridge = developmentBridge()
+export function AppProvider({ children }: { children: ReactNode }) {
+  return (
+    <reflex.Provider fallback={null} bridge={bridge}>
+      {children}
+    </reflex.Provider>
+  )
+}
+```
+
+### apps/mobile/src/app.ts
+
+<!-- file: examples/apps/mobile/src/app.ts -->
+```ts
+import * as Layer from "effect/Layer"
+import AsyncStorage from "@react-native-async-storage/async-storage"
+import * as Effect from "effect/Effect"
+import * as Redacted from "effect/Redacted"
+import * as Schema from "effect/Schema"
+import inventory from "@reflex/example-inventory"
+import { SettingsStore } from "@reflex/example-inventory/domain.ts"
+import { httpInventoryApi } from "@reflex/example-inventory/http-api.ts"
+
+const KEY = "inventory-settings:v1"
+const SETTINGS_BYTES_MAX = 1024
+const SavedSettings = Schema.Struct({
+  version: Schema.Literal(1),
+  lowStockThreshold: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 1000 })),
+})
+const defaults = { version: 1, lowStockThreshold: 10 } as const
+// No credentials in AsyncStorage or EXPO_PUBLIC variables. Supply real credentials
+// through the app's secure credential service; an absent credential is empty here.
+const storage = Layer.succeed(
+  SettingsStore,
+  SettingsStore.of({
+    load: Effect.tryPromise({
+      try: () => AsyncStorage.getItem(KEY),
+      catch: () => new Error("Settings read failed"),
+    }).pipe(
+      Effect.flatMap((raw) =>
+        raw === null || new TextEncoder().encode(raw).byteLength > SETTINGS_BYTES_MAX
+          ? Effect.succeed(defaults)
+          : Schema.decodeUnknownEffect(Schema.fromJsonString(SavedSettings))(raw),
+      ),
+      Effect.catch(() => Effect.succeed(defaults)),
+      Effect.map((value) => ({
+        lowStockThreshold: value.lowStockThreshold,
+        apiToken: Redacted.make(""),
+      })),
+    ),
+    setLowStockThreshold: (lowStockThreshold) =>
+      Schema.encodeEffect(Schema.fromJsonString(SavedSettings))({
+        version: 1,
+        lowStockThreshold,
+      }).pipe(
+        Effect.flatMap((raw) =>
+          Effect.tryPromise({
+            try: () => AsyncStorage.setItem(KEY, raw),
+            catch: () => new Error("Settings write failed"),
+          }),
+        ),
+        Effect.orDie,
+      ),
+  }),
+)
+const baseUrl = __DEV__ ? process.env.EXPO_PUBLIC_INVENTORY_API : undefined
+const deviceScenarios = {
+  "device-services": {
+    description: "Development HTTP and device settings",
+    layer: Layer.merge(httpInventoryApi(baseUrl ?? "http://127.0.0.1:4318"), storage),
+    fixtures: [],
+  },
+}
+const deviceApp = inventory.withScenarios(deviceScenarios, {
+  defaultScenario: baseUrl === undefined ? "live-services" : "device-services",
+})
+
+export default deviceApp
+```
+
+### apps/mobile/src/routes.ts
+
+<!-- file: examples/apps/mobile/src/routes.ts -->
+```ts
+import { createReflexExpo } from "@reflex/expo"
+import app from "./app.ts"
+
+export const reflex = createReflexExpo(app, {
+  InventoryList: "/",
+  InventoryDetail: "/inventory/[productId]",
+  Settings: "/settings",
+})
 ```
 
 ### apps/mobile/src/ui.tsx
 
+<!-- file: examples/apps/mobile/src/ui.tsx -->
 ```tsx
 import type { ReactNode } from "react"
 import { Pressable, StyleSheet, Text, View } from "react-native"
@@ -1012,60 +1685,9 @@ export function Action({
 }
 ```
 
-### apps/mobile/e2e/provider.tsx
-
-```tsx
-import type { ReactNode } from "react"
-import * as Layer from "effect/Layer"
-import { developmentBridge } from "@reflex/expo/dev"
-import {
-  fixtureApi,
-  fixtureSettings,
-  InventoryFixture,
-  seedProducts,
-} from "@reflex/example-inventory/fixtures.ts"
-import app from "../src/app.ts"
-import { reflex } from "../src/routes.ts"
-
-const e2e = {
-  e2e: {
-    layer: Layer.merge(fixtureApi({ products: seedProducts }), fixtureSettings),
-    fixtures: [InventoryFixture],
-  },
-}
-const instrumented = app.withScenarios(e2e, { defaultScenario: "e2e" })
-const bridge = developmentBridge()
-export function AppProvider({ children }: { children: ReactNode }) {
-  return (
-    <reflex.Provider app={instrumented} bridge={bridge}>
-      {children}
-    </reflex.Provider>
-  )
-}
-```
-
-### apps/mobile/metro.config.js
-
-```js
-const path = require("node:path")
-const { getDefaultConfig } = require("expo/metro-config")
-
-const config = getDefaultConfig(__dirname)
-const original = config.resolver.resolveRequest
-const provider = process.env.REFLEX_E2E === "1" ? "e2e/provider.tsx" : "provider.tsx"
-config.resolver.resolveRequest = (context, name, platform) => {
-  if (name === "@inventory-provider") {
-    return { type: "sourceFile", filePath: path.join(__dirname, provider) }
-  }
-  return original === undefined
-    ? context.resolveRequest(context, name, platform)
-    : original(context, name, platform)
-}
-module.exports = config
-```
-
 ### apps/mobile/tsconfig.json
 
+<!-- file: examples/apps/mobile/tsconfig.json -->
 ```json
 {
   "extends": "expo/tsconfig.base",
@@ -1110,14 +1732,9 @@ module.exports = config
 }
 ```
 
-Metro selects the E2E provider only with `REFLEX_E2E=1`; production build jobs forbid
-that setting. The alias's TypeScript shape is the production provider's public shape.
-The filename changes from `[id].tsx` to `[productId].tsx`. provider.tsx is the dev entry:
-its bridge helper is imported from the Effect-free dev subpath. Production provider.tsx
-contains no test import or dynamic provider selector.
-
 ### apps/web/src/app.ts
 
+<!-- file: examples/apps/web/src/app.ts -->
 ```ts
 import { defineStoreApp, defineStoreNode } from "@reflex/runtime"
 import { createStore } from "zustand/vanilla"
@@ -1135,7 +1752,7 @@ export const List = defineStoreNode({
 export const Detail = defineStoreNode({
   name: "Detail",
   params: z.strictObject({ id: z.string() }),
-  store: ({ id }) => createStore(() => ({ id, count: 0 })),
+  store: ({ id }: { id: string }) => createStore(() => ({ id, count: 0 })),
   actions: (action) => ({
     Increment: action({
       handler: (_, { store }) => store.setState((s) => ({ count: s.count + 1 })),
@@ -1145,8 +1762,44 @@ export const Detail = defineStoreNode({
 export default defineStoreApp({ name: "web-counter", screens: [List, Detail] })
 ```
 
+### apps/web/src/main.tsx
+
+<!-- file: examples/apps/web/src/main.tsx -->
+```tsx
+import { Suspense } from "react"
+import { createRoot } from "react-dom/client"
+import { createBrowserRouter, RouterProvider } from "react-router"
+import { developmentBridge } from "@reflex/live/dev"
+import { reflex } from "./routes.ts"
+import { ListView, DetailView } from "./views.tsx"
+
+const router = createBrowserRouter(
+  reflex.routes({
+    List: { Component: ListView },
+    Detail: {
+      Component: DetailView,
+      loader: async ({ params }) => ({ id: params.id }),
+      errorElement: <p>Could not load detail</p>,
+    },
+  }),
+)
+const bridge = developmentBridge()
+const root = document.getElementById("root")
+if (root === null) {
+  throw new Error("Missing root element")
+}
+createRoot(root).render(
+  <reflex.Provider fallback={null} bridge={bridge}>
+    <Suspense fallback={<p>Loading…</p>}>
+      <RouterProvider router={router} />
+    </Suspense>
+  </reflex.Provider>,
+)
+```
+
 ### apps/web/src/routes.ts
 
+<!-- file: examples/apps/web/src/routes.ts -->
 ```ts
 import { createReflexRouter } from "@reflex/react-router"
 import app from "./app.ts"
@@ -1156,13 +1809,28 @@ export const reflex = createReflexRouter(app, { List: "/", Detail: "/detail/:id"
 
 ### apps/web/src/views.tsx
 
+<!-- file: examples/apps/web/src/views.tsx -->
 ```tsx
 import { List, Detail } from "./app.ts"
 import { reflex } from "./routes.ts"
 
 export function ListView() {
   const view = reflex.useScreen(List)
-  if (view.status === "pending") return <p>Loading…</p>
+  if (view.status === "error") {
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          void view.retry()
+        }}
+      >
+        Retry: {view.error.message}
+      </button>
+    )
+  }
+  if (view.status === "pending") {
+    return <p>Loading…</p>
+  }
   return (
     <main>
       <h1>List</h1>
@@ -1176,7 +1844,7 @@ export function ListView() {
       >
         Add one
       </button>
-      <reflex.Link to="Detail" params={{ id: "one" }}>
+      <reflex.Link to={Detail} params={{ id: "one" }}>
         Open detail
       </reflex.Link>
     </main>
@@ -1197,135 +1865,193 @@ export function DetailView() {
       >
         Add one
       </button>
-      <reflex.Link to="List">List</reflex.Link>
+      <reflex.Link to={List}>List</reflex.Link>
     </main>
   )
 }
 ```
 
-### apps/web/src/main.tsx
+### codecs.ts
 
-```tsx
-import { Suspense } from "react"
-import { createRoot } from "react-dom/client"
-import { createBrowserRouter, RouterProvider } from "react-router"
-import { developmentBridge } from "@reflex/live/dev"
-import app from "./app.ts"
-import { reflex } from "./routes.ts"
-import { ListView, DetailView } from "./views.tsx"
-
-const router = createBrowserRouter(reflex.routes({ List: ListView, Detail: DetailView }))
-const bridge = developmentBridge()
-const root = document.getElementById("root")
-if (root === null) throw new Error("Missing root element")
-createRoot(root).render(
-  <reflex.Provider app={app} bridge={bridge}>
-    <Suspense fallback={<p>Loading…</p>}>
-      <RouterProvider router={router} />
-    </Suspense>
-  </reflex.Provider>,
-)
-```
-
-### examples/plain/src/app.ts
-
+<!-- file: examples/codecs.ts -->
 ```ts
+import { Screen, defineApp, defineNavigation } from "@reflex/effect"
 import { defineStoreNode, defineStoreApp } from "@reflex/runtime"
+import { createReflex } from "@reflex/react"
+import { createReflexRouter } from "@reflex/react-router"
+import { routeCodec } from "@reflex/react-router/advanced"
+import { jsonCodec } from "@reflex/effect/advanced"
+import * as Effect from "effect/Effect"
+import * as Schema from "effect/Schema"
 import { createStore } from "zustand/vanilla"
 import { z } from "zod"
 
-// The existing Zustand store remains usable without Reflex.
-export const createCounterStore = () => createStore(() => ({ count: 0, token: "private-token" }))
-export const Counter = defineStoreNode({
-  name: "Counter",
-  store: createCounterStore,
-  project: ({ count }) => ({ count }),
+export class Count extends Screen("Count", {
+  state: Schema.Struct({ count: Schema.Number }),
+  params: { count: Schema.NumberFromString },
+  initial: ({ count }) => ({ count }),
+}) {
+  declare private readonly nominal: undefined
+}
+export const Nav = defineNavigation({ Count })
+export const CountLive = Count.implement({
   actions: (action) => ({
-    Add: action({
-      input: z.strictObject({ by: z.int() }),
-      handler: ({ by }, { store }) => store.setState((s) => ({ count: s.count + by })),
+    Set: action({
+      input: Schema.NumberFromString,
+      error: Schema.NumberFromString,
+      handler: (n, { state }) => (n < 0 ? Effect.fail(n) : state.set({ count: n })),
     }),
-    Reset: action({
-      available: ({ count }) => (count === 0 ? "Already zero" : true),
-      handler: (_, { store }) => store.setState({ count: 0 }),
+    Stay: action.navigates({ handler: () => Effect.succeed(Nav.stay) }),
+  }),
+})
+export const app = defineApp({
+  name: "codecs",
+  navigation: Nav.implement([CountLive], { initial: { screen: Count, params: { count: 1 } } }),
+})
+export const reflex = createReflexRouter(app, { Count: "/count/:count" })
+// Commands use decoded values; href/Link use encoded values.
+Nav.push(Count, { count: 2 })
+reflex.href(Count, { count: "2" })
+const effectBinding = createReflex(app)
+export function useSetCount() {
+  const view = effectBinding.useScreen(Count)
+  return async () => {
+    if (view.status !== "ready") {
+      return null
+    }
+    const outcome = await view.actions.Set.run("2")
+    if (outcome.status === "error") {
+      const encodedError: string = outcome.error
+      return encodedError
+    }
+    return null
+  }
+}
+export const custom = createReflexRouter(app, {
+  Count: routeCodec({
+    path: "/count/*",
+    decode: (raw) => ({ count: typeof raw.tail === "string" ? raw.tail : "0" }),
+    encode: (params) => `/count/${encodeURIComponent(params.count)}`,
+  }),
+})
+const encodeCount = (n: number) => ({ count: n })
+const wireSpec = {
+  encode: encodeCount,
+  decode: (value: unknown) =>
+    Schema.decodeUnknownEffect(Schema.Struct({ count: Schema.Number }))(value).pipe(
+      Effect.map((value) => value.count),
+    ),
+  jsonSchema: { type: "object" },
+}
+export const wire = jsonCodec(Schema.NumberFromString, wireSpec)
+interface CounterState {
+  count: number
+}
+const initial: CounterState = { count: 0 }
+export const StoreCounter = defineStoreNode({
+  name: "StoreCounter",
+  store: () => createStore(() => initial),
+  actions: (action) => ({
+    Set: action({
+      input: z.string().transform(Number),
+      error: z.string().transform(Number),
+      projectError: (n) => String(n),
+      handler: (n, { store, fail }) => {
+        if (n < 0) {
+          fail(n)
+        }
+        store.setState({ count: n })
+      },
     }),
   }),
 })
-export default defineStoreApp({ name: "plain-counter", screens: [Counter] })
-```
+export const storeApp = defineStoreApp({ name: "store-codecs", services: [StoreCounter] })
+export const storeBinding = createReflex(storeApp)
 
-### apps/mobile/plain/index.tsx
-
-```tsx
-import "expo-router/entry"
-```
-
-The existing plain package keeps `main: "index.tsx"`; this entry now delegates to Expo
-Router so the following file routes supply its Effect-free screen and layout.
-
-### apps/mobile/plain/routes.ts
-
-```ts
-import { createReflexExpo } from "@reflex/expo"
-import app from "@reflex/example-plain"
-export const reflex = createReflexExpo(app, { Counter: "/" })
-```
-
-### apps/mobile/plain/app/_layout.tsx
-
-```tsx
-import { Stack } from "expo-router"
-import { developmentBridge } from "@reflex/expo/dev"
-import app from "@reflex/example-plain"
-import { reflex } from "../routes.ts"
-
-const bridge = developmentBridge()
-export default function Layout() {
-  return (
-    <reflex.Provider app={app} bridge={bridge}>
-      <Stack />
-    </reflex.Provider>
-  )
+export class WireCount extends Screen("WireCount", { state: wire, initial: () => 1 }) {
+  declare private readonly nominal: undefined
 }
 ```
 
-### apps/mobile/plain/app/index.tsx
+### consumer-state.ts
 
-```tsx
-import { Pressable, Text, View } from "react-native"
-import { Counter } from "@reflex/example-plain"
-import { reflex } from "../routes.ts"
+<!-- file: examples/consumer-state.ts -->
+```ts
+import { Screen, defineApp } from "@reflex/effect"
+import { createReflex } from "@reflex/react"
+import * as Redacted from "effect/Redacted"
+import * as Schema from "effect/Schema"
+import * as Layer from "effect/Layer"
+import { InventoryList } from "./examples/inventory/src/screens.ts"
+import { InventoryApi } from "./examples/inventory/src/domain.ts"
+import * as Effect from "effect/Effect"
+import { httpInventoryApi } from "./examples/inventory/src/http-api.ts"
+import { memorySettings } from "./examples/inventory/src/settings-store.ts"
 
-export default function CounterView() {
-  const view = reflex.useScreen(Counter)
-  if (view.status === "pending") return null
-  return (
-    <View>
-      <Text>Count: {view.state.count}</Text>
-      <Pressable
-        accessibilityRole="button"
-        onPress={() => {
-          void view.actions.Add.run({ by: 1 })
-        }}
-      >
-        <Text>Add one</Text>
-      </Pressable>
-      <Pressable
-        accessibilityRole="button"
-        disabled={!view.actions.Reset.available}
-        onPress={() => {
-          void view.actions.Reset.run()
-        }}
-      >
-        <Text>Reset</Text>
-      </Pressable>
-    </View>
-  )
+export class EncodedState extends Screen("EncodedState", {
+  state: Schema.NumberFromString,
+  initial: () => 1,
+}) {
+  declare private readonly nominal: undefined
+}
+export const EncodedLive = EncodedState.implement({
+  actions: (action) => ({ Increment: action.reduce({ reducer: (_, n) => n + 1 }) }),
+})
+const reflex = createReflex(defineApp({ name: "encoded-state", screens: [EncodedLive] }))
+export function EncodedView() {
+  const view = reflex.useScreen(EncodedState)
+  if (view.status === "ready") {
+    const encoded: string = view.state
+    void encoded
+  }
+  return null
+}
+const Reader = InventoryList.implement({
+  actions: (action) => ({
+    Read: action({
+      handler: () =>
+        Effect.gen(function* () {
+          yield* InventoryApi
+        }),
+    }),
+  }),
+})
+const commonLayer = Layer.merge(httpInventoryApi("http://127.0.0.1:4318"), memorySettings)
+export const common = defineApp({
+  name: "common",
+  screens: [Reader],
+  layer: commonLayer,
+  scenarios: { default: {} },
+  defaultScenario: "default",
+})
+export const extended = common.withScenarios({ other: {} }, { defaultScenario: "other" })
+export const twice = extended.withScenarios({ third: {} })
+const oldDefault: "default" = common.defaultScenario
+const newDefault: "other" = twice.defaultScenario
+void oldDefault
+void newDefault
+
+export class Secret extends Screen("Secret", {
+  state: Schema.Struct({ token: Schema.Redacted(Schema.String) }),
+  initial: () => ({ token: Redacted.make("fixture-only") }),
+}) {
+  declare private readonly nominal: undefined
+}
+const SecretLive = Secret.implement({ actions: () => ({}) })
+const secretBinding = createReflex(defineApp({ name: "secret", screens: [SecretLive] }))
+export function SecretView() {
+  const view = secretBinding.useScreen(Secret)
+  if (view.status === "ready") {
+    const safe: "<redacted>" = view.state.token
+    void safe
+  }
+  return null
 }
 ```
 
 ### examples/live-counter/src/app.ts
 
+<!-- file: examples/examples/live-counter/src/app.ts -->
 ```ts
 import { defineStoreApp, defineStoreNode } from "@reflex/runtime"
 
@@ -1344,7 +2070,9 @@ export const Counter = defineStoreNode({
       },
       increment: () => {
         state = { count: state.count + 1 }
-        for (const listener of listeners) listener()
+        for (const listener of listeners) {
+          listener()
+        }
       },
     }
   },
@@ -1355,6 +2083,7 @@ export default defineStoreApp({ name: "live-counter", services: [Counter] })
 
 ### examples/live-counter/src/serve.ts
 
+<!-- file: examples/examples/live-counter/src/serve.ts -->
 ```ts
 import { serveLive } from "@reflex/live"
 import app from "./app.ts"
@@ -1371,875 +2100,189 @@ process.once("SIGINT", shutdown)
 process.once("SIGTERM", shutdown)
 ```
 
-## 3. Public declarations and package boundaries
+### reset.ts
 
-The exports below are exhaustive for the seven changed userland packages. Type parameters
-named `C`, `D`, `A`, `S`, `P`, `W`, `E`, `R` mean contract, definition, checked action map,
-decoded state, decoded params, wire state, declared decoded error and Effect requirements.
-`AnyContract`, `AnyDefinition`, `AnyApp`, `AnyImplementation` are existential implementation
-constraints, not exported types that consumers instantiate. The declarations abbreviate
-schema extraction and the mapped validations using the named rules immediately below;
-no user writes those generic arguments. Omitted properties are not public compatibility
-aliases. Protocol, RPC, CLI and navigation keep their existing protocol/integration APIs;
-this design adds no exports to them. Their explicit existing exports are outside the
-userland redesign. Ownership seams move from `/internal` to each package's advanced
-entry; private cross-package imports must stay within the existing dependency DAG.
-
-### Shared rules used by declarations
-
-- `MapByName<T>` maps the literal `name` of every tuple item to that item. `Unique<T>`
-  rejects repeated names and repeated contract objects. Literal tuples get a diagnostic
-  marker; widened arrays get the same runtime validation. No last-wins merge exists.
-- `Selected<A,C>` indexes `A.screens[C.name]` then checks its **nominal contract**, not
-  only its name. It extracts only that implementation's actions. Actions are not carried
-  in the navigation contract graph. `InferActions<A,C>` and `InferState<A,C>` are the
-  only public selection helpers; definitions can also be used alone as `InferState<D>`.
-- `Wire<T>` defaults only when Schema's encoded type is statically JSON, with built-in
-  redaction transformation. Unknown/custom encoding hooks require `jsonCodec`; this
-  replaces the current recursive best-effort PublicState derivation. Arrays/tuples keep
-  their shape. UI and journey receive `DeepReadonly<W>`, handlers receive decoded S.
-- `Checked<X,Message>` (X is the boolean check result) evaluates to unknown on success and a required object property
-  `{ readonly [Message]: never }` on failure. Intersect it with the erroneous argument,
-  using `NoInfer` in the check so it cannot widen the inferred operand to pass. It never
-  makes the entire parameter `never`. Ordinary TS scalar/arity errors stay ordinary TS
-  errors; the library cannot replace the compiler's English text. The misuse table
-  specifies the stable marker text for relationships and runtime sentences for dynamics.
-- `ScreenMember<A,C>` checks nominal membership; `ServiceMember<A,D>` checks service
-  membership. `ScenarioFixtures<A,K>` is the **intersection** of fixture memberships
-  for every K, not their union. For a literal K, just that scenario's tuple is indexed.
-  Scenario fixtures are automatically mounted from the tuple before scenario layer build.
-- `Needs<A>` is the union of selected implementation requirements. Every scenario must
-  supply `Exclude<Needs<A>, Navigator<Key> | Scope | fixture services of that scenario>`.
-  Extra unrelated services are allowed. A missing service is a labeled property named
-  `Scenario 'x' must provide InventoryApi`; a missing navigation provider prints the
-  shallow requirement `Navigator<"key">`, not the implementation graph. For unnamed
-  third-party Effect services whose name is not retained statically, use the ordinary
-  Effect identifier type; a runtime build failure names its actual key.
-- `ValidateRoutes` applies the grammar and rules in decision 11, on encoded params.
-  Every screen is covered exactly once. Literal keys outside the app are rejected;
-  dynamic keys/paths belong in advanced `routeCodec`, which does the same runtime checks.
-- `Member` checks occur at hooks, journeys, mounting and app composition, not through
-  global declaration merging. Multi-app tests can coexist in one TS program.
-
-### Normalized public values
-
-These are the public read-only shapes used by the declarations below. Runtime internals
-keep mutable registries and ownership maps out of these objects. `App` carries a private
-library brand for compatible-app typing; actual identity is validated by a WeakMap entry,
-so spreading an app object does not clone its identity.
-
+<!-- file: examples/reset.ts -->
 ```ts
-interface App<Screens, Services, Scenarios> {
-  readonly name: string
-  readonly screens: Screens
-  readonly services: Services
-  readonly scenarioNames: readonly (keyof Scenarios & string)[]
-  readonly defaultScenario: keyof Scenarios & string
+import { createTestApp, connectJourney } from "@reflex/test"
+import app from "./examples/inventory/src/scenarios.ts"
+import { InventoryFixture } from "./examples/inventory/src/fixtures.ts"
+import { InventoryList } from "./examples/inventory/src/screens.ts"
+import { servicesJourney } from "./examples/inventory/journeys/services.ts"
+
+export async function resetAndReacquire() {
+  await using initial = await createTestApp(app)
+  const next = await initial.reset("empty-inventory")
+  const list = await next.focused(InventoryList, { _tag: "ready" })
+  await list.actions.OpenSettings()
+  // initial and its handles are invalid now. Ownership stays with initial's disposer.
 }
-interface ScreenContract<Name, StateCodec, ParamsCodec, Self> {
-  new (): { readonly self: (value: Self) => Self }
-  readonly name: Name
-  readonly state: StateCodec
-  readonly params: ParamsCodec
+export async function fixtureStory() {
+  await using session = await createTestApp(app, { scenario: "inventory-with-products" })
+  const fixture = await session.node(InventoryFixture)
+  await servicesJourney(session, async () => {
+    await fixture.actions.FailNextSave()
+  })
 }
-interface ScreenImplementation<C, A, R> {
-  readonly contract: C
-  readonly actions: A
-  readonly onFocus:
-    | ((ctx: EffectContext<DecodedState<C>>) => Effect.Effect<void, never, R>)
-    | undefined
-}
-interface StoreDefinition<N, P, W, A, T> {
-  readonly name: N
-  readonly params: StandardValidator<P> | undefined
-  readonly actions: A
-  readonly createStore: (params: P) => T
-  readonly project: (state: ReturnType<T["getState"]>) => W
-}
-interface NodeHandle<D> {
-  readonly id: NodeId
-  readonly name: string
-  readonly actions: InferActions<D>
-  getSnapshot(): DeepReadonly<InferState<D>>
-  subscribe(listener: () => void): () => void
+export async function realServiceStory(failNextSave: () => Promise<void>) {
+  await using session = await connectJourney(app, { target: "device", scenario: "live-services" })
+  await servicesJourney(session, failNextSave)
 }
 ```
 
-Implementation/definition type constructors above are constrained by their corresponding
-schema/store interfaces in the actual declarations. Consumers use the exported Infer
-helpers; the R parameter stops at the Effect composition boundary. The App's Screens table
-is flattened to `{ contract, wireState, wireParams, consumerActions }` per entry before
-host inference, with no retained Layer or Effect requirement types. DefinedApp retains
-its construction requirements only for withScenarios. These are distinct type parameters,
-so passing it to a host does not force traversal of the construction graph.
+### static-limits.ts
 
-### @reflex/runtime
-
-Root value exports: **defineStoreNode, defineStoreApp, standardInput**.
-Root type exports: **Store, StandardValidator, StoreInput, StoreDefinition, StoreApp,
-StoreScenario, StoreActionBuilder, StoreContext, App, SessionControls, ActionOutcome,
-NodeHandle, InferState, InferActions, InferInput, InferError, ScenarioName, DeepReadonly**.
-`App` is the host-neutral descriptor; Effect does not become a runtime dependency.
-
+<!-- file: examples/static-limits.ts -->
 ```ts
-interface Store<S> {
-  getState(): S
-  subscribe(listener: () => void): () => void
-}
-interface StandardValidator<Out, In = Out> {
-  readonly "~standard": StandardSchemaV1<In, Out>["~standard"]
-}
-interface StoreInput<Out, In> {
-  readonly validator: StandardValidator<Out, In>
-  readonly jsonSchema: JsonSchema
-}
-function standardInput<O, I>(
-  schema: StandardValidator<O, I>,
-  jsonSchema: JsonSchema,
-): StoreInput<O, I>
+import * as Effect from "effect/Effect"
+import * as Schema from "effect/Schema"
+import { Screen } from "@reflex/effect"
+import { Nav } from "./examples/inventory/src/navigation.ts"
+import { InventoryDetail, InventoryList } from "./examples/inventory/src/screens.ts"
+import { createReflexRouter } from "@reflex/react-router"
+import { app } from "./codecs.ts"
+import { Count } from "./codecs.ts"
 
-function defineStoreNode<const N extends string, P, T extends Store<S>, S, W, A>(
-  spec: {
-    name: N
-    params?: StandardValidator<P> | StoreInput<P, Json>
-    store: (params: P) => T
-    project?: (state: S) => W
-    actions: (action: StoreActionBuilder<S, T>) => A
-  } & ValidStoreState<S, W>,
-): StoreDefinition<N, P, W, A, T>
-// Without params: store is () => T, P is empty; without project: W=S and S must be JSON.
-// Availability uses raw S consistently, even with a projected W.
-
-interface StoreContext<T, E = never> {
-  readonly store: T
-  readonly signal: AbortSignal
-  // `fail` exists only when error: was declared; never exposed as a never parameter.
-  fail(error: E): never
+// Deliberate compilable counterexamples, NOT recommended author idioms.
+// TypeScript erases commands through Effect<void>. Lint/runtime remains necessary.
+const erased: Effect.Effect<void> = Effect.succeed(Nav.back)
+InventoryList.implement({ actions: (action) => ({ Erased: action({ handler: () => erased }) }) })
+// A plain action can discard an expression. The runtime rejects an unused command.
+InventoryList.implement({
+  actions: (action) => ({
+    Dropped: action({
+      handler: () =>
+        Effect.gen(function* () {
+          yield* Effect.void
+          Nav.back
+        }),
+    }),
+  }),
+})
+// Private declarations are inherited. Registry lookup must use exact constructors.
+export class Subclass extends InventoryDetail {}
+const assignable: typeof InventoryDetail = Subclass
+void assignable
+// Private nominal line cannot be inspected structurally by a library.
+export class MissingNominal extends Screen("MissingNominal", {
+  state: Schema.Number,
+  initial: () => 0,
+}) {}
+// JS class name differs from declared contract name. Diagnostics use the latter.
+export class DifferentClassName extends Screen("DeclaredName", {
+  state: Schema.Number,
+  initial: () => 0,
+}) {
+  declare private readonly nominal: undefined
 }
-interface StoreActionBuilder<S, T> {
-  <I = undefined, E = never, EW = E>(
-    spec: {
-      description?: string
-      input?: StandardValidator<I> | StoreInput<I, Json>
-      error?: StandardValidator<E>
-      projectError?: (error: E) => EW
-      available?: (state: S) => true | string
-      handler: (
-        input: NoInfer<I>,
-        ctx: StoreContext<T, E>,
-      ) => void | NavigationCommand | Promise<void | NavigationCommand>
-      onRefused?: (error: NavigationRefused, ctx: StoreContext<T, never>) => void | Promise<void>
-    } & ValidStoreError<E, EW>,
-  ): CheckedStoreAction<I, E, EW>
-}
-// Overloads remove fail when E=never; I is schema output, consumer input is schema input.
-// Store action maps accept only branded results of this builder; arbitrary raw handlers fail.
-
-function defineStoreApp<
-  const N extends string,
-  D extends readonly StoreDefinition[],
-  V extends readonly StoreDefinition[],
-  Sc,
->(
-  spec: {
-    name: N
-    screens?: D & Unique<D>
-    services?: V & Unique<V>
-    scenarios?: Sc
-    defaultScenario?: keyof Sc
-  } & ValidStoreScenarios<Sc, D, V>,
-): StoreApp<N, MapByName<D>, MapByName<V>, Sc>
-interface StoreScenario {
-  description?: string
-  // Overrides keyed by declared definition name; parameterized screens keep (params) => Store.
-  stores?: Record<string, (params: Json) => Store<Json>>
-}
-// Actual mapped stores member uses each selected definition's P and T; Record above is
-// the existential shape only. An override cannot change T, W, actions, params or identity.
-// Sc omitted creates { default: {} }; one key chooses itself; 2+ keys require defaultScenario.
+// A 60-segment root route is accepted without TS2589 (tail accumulator parser).
+export const longPath = createReflexRouter(app, {
+  Count:
+    "/part/part/part/part/part/part/part/part/part/part/part/part/part/part/part/part/part/part/part/part/part/part/part/part/part/part/part/part/part/part/part/part/part/part/part/part/part/part/part/part/part/part/part/part/part/part/part/part/part/part/part/part/part/part/part/part/part/part/part/part/:count",
+})
+longPath.href(Count, { count: "1" })
 ```
 
-`ActionOutcome<E>` is exactly the existing semantic union: completed, domain-error with
-encoded/redacted E, refused with public reason, cancelled, defect. No error data omitted
-on the wire is ever asserted as E. Consumer action functions return Promise<ActionOutcome>.
-StoreFailure is private; only the current invocation's validated fail helper can create
-a domain-error. Thrown Error values are defects. A duplicate definition in screens and
-services is an error; screens are route-mounted, services are session-mounted exactly once.
-A store-only app with one param-free screen starts it headless; several screens require
-`initial` in the scenario (contract value plus params) for headless tests, or the first
-router location for UI. A parameterized initial screen always needs params. No guessed
-first member is used for multiple screens. This is a `StoreScenario.initial` optional
-member, typed as the union of `{ screen: D, params: Params<D> }` or a param-free D.
+## 5. Changes against review items 1–31
 
-Advanced value exports: **createRuntime, createSessionController, restrictController,
-mountOwned, createAppAdapter, createRouteRegistry**.
-Advanced type exports: **Runtime, Controller, ControllerMethod, ControllerSubscription,
-AppSession, AppAdapter, NodeAdapter, OwnedNode, RouteRegistry, RouteLease,
-SessionStartOptions, BackgroundReporter, Timers, NavigationCommand, NavigationRefused**.
-These are existing low-level contracts narrowed to owned lifetimes; no wildcard exports.
+| Item | Revision and evidence                                                                                                                                                                                                                                                                                  |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1    | getState-derived StateOf, NoInfer for store projections, availability and builders; plain/live stores and JSON interface compile. Parameterized factories document their one annotation.                                                                                                               |
+| 2    | Whole codec/validator inference separates handler decoded output and consumer encoded input; codecs.ts covers action input, errors, jsonCodec, navigation and URL params. Store transformed errors explicitly project because Standard Schema cannot invert them.                                      |
+| 3    | JsonShape compatibility accepts interfaces; Date/functions fail in asserted cases. Runtime publication validates richer constraints.                                                                                                                                                                   |
+| 4    | Contextual `includes<E>` uses Partial<NoInfer<E>>; typo and cross-variant match cases assert actual diagnostics.                                                                                                                                                                                       |
+| 5    | Links and href accept contracts in both host declarations; web views demonstrate Link and codecs.ts demonstrates href.                                                                                                                                                                                 |
+| 6    | Full tuple unions for push/href and complete initial-route objects, including zero params; union and encoded/decoded negative cases compile-fail.                                                                                                                                                      |
+| 7    | action.navigates requires a returned command and Nav.stay; plain action/onFocus use inferred-success markers. Erasure remains a documented lint/runtime limit, including services/fixtures.                                                                                                            |
+| 8    | Guarded state writes explicitly fail with StateChanged; builders exclude it from domain error declarations and convert it to refusal. Runtime conversion remains acceptance work.                                                                                                                      |
+| 9    | Tail accumulator parser rejects repeats, excluded grammar, optional path fields, non-string encodings and mapping errors with interpolated names; long path compiles.                                                                                                                                  |
+| 10   | Removed Self; private line preserves independent nominal classes. Chose exact runtime constructors and documented inherited/missing-line static limits and class/string name mismatch.                                                                                                                 |
+| 11   | Generation isolation/revoked writes/filtered notifications specified; abort-ignoring Promise acceptance program compiles but awaits runtime implementation.                                                                                                                                            |
+| 12   | App/extension-level fixture defaults with per-scenario overrides; normalized memberships preserve previous extension defaults. scenarios.ts lists defaults once.                                                                                                                                       |
+| 13   | App-bound Provider, optional compatible extension prop, fallback, boundary startup behavior, observable statuses and onBackgroundError defined consistently.                                                                                                                                           |
+| 14   | screens/services in both backends; useService throughout the plain examples and declarations.                                                                                                                                                                                                          |
+| 15   | error/status:error/expectError; reset returns new controls/client; Duration.Input; one mountOwned, mountEffect, one shared routeCodec, one bridge helper re-export and Bridge type; TypedClient aliases JourneyClient mode; store command returns rejected.                                            |
+| 16   | Screen.define one-step tier added; first ten actual lines per tier appear in three compiled small files.                                                                                                                                                                                               |
+| 17   | First plain counter uses services and useService with no Reflex router binding; web routing follows it.                                                                                                                                                                                                |
+| 18   | Inferred-then-checked handler and lifecycle errors verified at source lines. Same-name identity marker corrected; TS2488 accepted; missing navigator names action/app. Missing component/input use honest TS diagnostics. Context key message and last-state timeout specified as runtime obligations. |
+| 19   | React Router host route options preserved, loader/errorElement authored; paths/wrappers stay registered. Framework/route-module mode explicitly excluded.                                                                                                                                              |
+| 20   | Removed Stack-wide Suspense; Settings owns its boundary. Error-boundary retry is a runtime acceptance case.                                                                                                                                                                                            |
+| 21   | Effect namespace imports, tryPromise, fromJsonString, Duration.Input; removed untyped JSON.parse and hard-coded production credential.                                                                                                                                                                 |
+| 22   | One terminal command, void refusal recovery; explicit state/action replacement workflows for multi-step and refusal redirects.                                                                                                                                                                         |
+| 23   | Shared story takes Pick<JourneyClientFor, focused/back>; fixture and live-services calls compile; reset.ts reacquires after returned reset.                                                                                                                                                            |
+| 24   | One journey action map with call/expectError/expectRefusal/start members; removed five parallel maps.                                                                                                                                                                                                  |
+| 25   | Every created/connected test session is await using; resource owner remains disposable across resets.                                                                                                                                                                                                  |
+| 26   | Fingerprint excludes scenario metadata; withScenarios immutable/additive/default-preserving semantics and repeated-extension fixture normalization specified. Transport behavior remains runtime acceptance work.                                                                                      |
+| 27   | Pending view has state:null/actions:null and normal build errors have the same slots; mobile destructuring and ready narrowing compile.                                                                                                                                                                |
+| 28   | Production app.ts uses real services only; scenarios.ts imports fixtures and only tests/E2E use it. E2E alias remains separate. Bundle proof is runtime work.                                                                                                                                          |
+| 29   | `__DEV__` gate, bounded versioned settings, no embedded production token, credential warning, scenario descriptions, complete Metro resolver/watchFolders/module paths and consistent import style restored.                                                                                           |
+| 30   | Navigation record retained and alias keys rejected; only implementation selection uses a tuple with duplicate checking.                                                                                                                                                                                |
+| 31   | Complete compiled codec transformations, store domain error, loader/errorElement, advanced catchall codec, and returned-reset client files added.                                                                                                                                                      |
 
-```ts
-function mountOwned<D>(runtime: Runtime, definition: D, ...params: ParamsArgs<D>): OwnedNode<D>
-// ParamsArgs<D> is [] for no params, [params: Params<D>] otherwise.
-interface OwnedNode<D> extends NodeHandle<D> {
-  dispose(): Promise<void>
-}
-function createAppAdapter<C>(spec: AppAdapter<C>): App<C>
-interface AppAdapter<C> {
-  name: string
-  start(scenario: string, options: SessionStartOptions): Promise<AppSession<C>>
-  // Descriptor tables and scenario metadata use the same membership rules as built-ins.
-  screens: C
-  services: Readonly<Record<string, AnyDefinition>>
-  scenarios: readonly ScenarioDescriptor[]
-}
-function createRouteRegistry(factories: ReadonlyMap<object, RouteFactory>): RouteRegistry
-interface RouteRegistry {
-  acquire(contract: object, entryKey: string, params: Json): RouteLease
-  discard(entryKey: string): Promise<void>
-  dispose(): Promise<void>
-}
-interface RouteLease {
-  readonly ready: Promise<NodeHandle>
-  retain(): () => void
-}
-```
+## 6. Scores and validation report
 
-The existing runtime/controller methods keep their current wire signatures; they are
-integration APIs, not independently redefined typed dispatch paths. No raw access is on
-SessionControls. `createRuntime`, controller creation and restriction retain their current
-option interfaces and access-policy types. `createRouteRegistry` is the only route owner.
-Advanced callers must use its leases rather than keep independent mount caches.
+The target remains **9 on each factor**, not a self-certified reviewer result. Honest
+predictions for an independent review of this revision:
 
-### @reflex/effect
+| Factor                      | Predicted score | Remaining reason to withhold 9 where applicable                                                      |
+| --------------------------- | --------------: | ---------------------------------------------------------------------------------------------------- |
+| Common-case brevity         |               9 | One-step screen and router-free store counter.                                                       |
+| Inference                   |               9 | No call-site generics; parameterized factories and advanced wire helpers use definition annotations. |
+| End-to-end typing           |               9 | Encoded/redacted consumer-state examples compile.                                                    |
+| Misuse resistance           |             8.5 | Command erasure and lifecycle safety depend on unimplemented lint/runtime guards.                    |
+| Naming and consistency      |               9 | Shared vocabulary, roles and command surface.                                                        |
+| Layering and escape hatches |               9 | Common layer coverage and repeated extensions compile.                                               |
+| Errors                      |             8.5 | Marker locations asserted; service key strings/runtime sentences still unexecuted.                   |
+| Host idiom fit              |               9 | Host options, namespace Effect imports and screen-level Suspense.                                    |
+| No leaked internals         |               9 | Examples use public entries and no unchecked decoded-value assertions.                               |
+| Testability                 |               9 | Shared capability story, one action map and reset/reacquire ownership.                               |
+| Examples                    |               9 | Entire authored graph and JS configuration typecheck; runtime acceptance distinguished.              |
+| Type performance            |               9 | Screen slope passes the gate; editor latency is still unmeasured.                                    |
 
-Root values: **Screen, defineService, defineFixture, defineNavigation, defineApp**.
-Root types: **ScreenContract, ScreenImplementation, ServiceDefinition, FixtureDefinition,
-DefinedApp, Scenario, Navigator, InferState, InferActions, InferInput, InferError**.
-The inference helpers re-export the same runtime helpers, with no parallel definitions.
+This design does **not yet meet 9 on every factor**. The remaining lint/runtime evidence
+above is concrete acceptance work, not hidden
+behind predicted implementation success. No runtime test count is claimed for this target.
+Repository `bun run check` validates compatibility with the unchanged implementation.
+The executable-spec results and final validation command outcomes are recorded below.
 
-```ts
-function Screen<Self>(): <
-  const N extends string,
-  C extends Schema.Codec,
-  const Fields extends Schema.Struct.Fields = Record<never, never>,
->(
-  name: N,
-  spec: {
-    state: C
-    params?: Fields
-    initial: (params: Schema.Struct<Fields>["Type"]) => NoInfer<C["Type"]>
-  },
-) => ScreenBase<Self, N, C, Fields>
-interface ScreenBase<Self, N, C, Fields> {
-  new (): { readonly self: (value: Self) => Self }
-  readonly name: N
-  readonly state: C
-  readonly params: Schema.Struct<Fields>
-  implement<This extends ScreenContract, A, R>(
-    this: This,
-    spec: {
-      actions: (action: EffectActionBuilder<State<This>>) => A
-      onFocus?: (ctx: EffectContext<State<This>>) => Effect.Effect<void, never, R>
-    },
-  ): ScreenImplementation<This, A, Requirements<A> | R>
-  handler<A, E, R>(f: (ctx: EffectContext<Decoded<C>>) => Effect.Effect<A, E, R>): typeof f
-  when<K extends Tags<Decoded<C>>>(
-    tag: K,
-  ): {
-    handler<A, E, R>(
-      f: (ctx: EffectContext<Narrow<Decoded<C>, K>, Decoded<C>>) => Effect.Effect<A, E, R>,
-    ): typeof f
-  }
-}
-interface EffectContext<S, All = S> {
-  readonly state: StateAccess<S, All>
-}
-interface StateAccess<S, All = S> {
-  readonly get: Effect.Effect<S>
-  set(value: All): Effect.Effect<void>
-  update(f: (state: S) => All): Effect.Effect<void>
-  when<K extends Tags<All>>(tag: K): StateAccess<Narrow<All, K>, All>
-}
-interface EffectActionBuilder<S> {
-  <I = undefined, E = never, R = never, K extends string = never, Recovery = void>(spec: {
-    description?: string
-    input?: Schema.Codec<I>
-    error?: Schema.Codec<E>
-    available?: (state: S) => true | string
-    handler: (
-      input: NoInfer<I>,
-      ctx: EffectContext<S>,
-    ) => Effect.Effect<void | NavigationCommand<K>, NoInfer<E>, R>
-    onRefused?: ((
-      error: NavigationRefused,
-      ctx: EffectContext<S>,
-    ) => Effect.Effect<Recovery, never, R>) &
-      Checked<
-        [Recovery] extends [void] ? true : false,
-        "Navigation refusal recovery must return void"
-      >
-  }): CheckedEffectAction<I, E, R | ([K] extends [never] ? never : Navigator<K>)>
-  when<K extends Tags<S>>(tag: K, reason?: string): GuardedEffectActionBuilder<Narrow<S, K>, S>
-}
-// Guarded builder has the same call signature but narrows ctx.state/get and availability.
-// Its .reduce({ input?, description?, available?, reducer(input, state): All }) is synchronous.
-// set/update after suspension recheck the phase before commit. A changed phase refuses
-// the operation with StateChanged; it never silently overwrites a newer unrelated phase.
+### Recorded validation, TypeScript 5.9.3
 
-function defineService<const N, C, A, R>(spec: {
-  name: N
-  state: C
-  initial: () => Decoded<C>
-  actions: (action: EffectActionBuilder<Decoded<C>>) => A
-}): ServiceDefinition<N, C, A, R>
-function defineFixture<const N, C, A>(spec: {
-  name: N
-  state: C
-  initial: () => Decoded<C>
-  actions: (action: EffectActionBuilder<Decoded<C>>) => A
-}): FixtureDefinition<N, C, A>
-// FixtureDefinition is yieldable as Effect<StateAccess<Decoded<C>>, never, FixtureService<N>>.
-// defineService is for ambient Effect nodes, not domain Context.Service dependencies.
+`bun docs/design/prototypes/check.ts` passes. **44 authored files** are mirrored exactly:
+42 TS/TSX files and the Metro JavaScript file typecheck; the JSON config parses.
+All **75 executable negative cases** assert their marker text and exact source line,
+and the table's marker and link are checked against the same source. The checker itself
+is typechecked. Declaration-body checking reports no target declaration errors.
 
-function defineNavigation<const C extends readonly ScreenContract[]>(
-  contracts: C & Unique<C>,
-  options?: { key?: string },
-): Navigation<C>
-interface Navigation<C> {
-  push<T extends C[number]>(to: T, ...params: ParamsArgs<T>): NavigationCommand<KeyOf<this>>
-  readonly back: NavigationCommand<KeyOf<this>>
-  implement<const I extends readonly ScreenImplementation[]>(
-    implementations: I & ExactlyOnePerContract<C, I>,
-    options: { initial: InitialRoute<C> },
-  ): NavigationSelection<C, I>
-}
-// InitialRoute is a param-free contract OR { screen: Contract, params: Params<Contract> }.
-// Explicit key uses a const generic overload, preserving Navigator<"inventory"> literally.
+| Graph                               | Instantiations |
+| ----------------------------------- | -------------: |
+| Harness                             |          1,088 |
+| Complete authored API/example graph |         90,535 |
+| Negative graph                      |         77,643 |
 
-function defineApp<const N, Selection, Sc>(
-  spec: {
-    name: N
-    navigation?: Selection
-    screens?: readonly ScreenImplementation[]
-    services?: readonly ServiceDefinition[]
-    layer?: Layer.Layer
-    scenarios?: Sc
-    defaultScenario?: keyof Sc
-  } & ValidAppComposition<Selection, Sc>,
-): DefinedApp<N, Selection, Sc>
-interface Scenario<Provided, RequiredFixtures> {
-  layer: Layer.Layer<Provided, never, RequiredFixtures>
-  fixtures?: readonly FixtureDefinition[]
-  virtualTime?: boolean
-  description?: string
-}
-// navigation XOR screens; services are additive; no root Layer/node-map alternative.
-// layer is common service provisioning. A scenario's layer is composed with it.
-// No scenarios => one implicit "default", optional layer defaults Layer.empty.
-// One explicit scenario => default inferred. Two or more => defaultScenario required.
-// All inference occurs before checking service coverage for EACH scenario.
-interface DefinedApp<N, Selection, Sc> extends App<Selection, Sc> {
-  withScenarios<const Extra>(
-    extra: Extra & ValidNewScenarios<Extra>,
-    options?: { defaultScenario?: keyof Sc | keyof Extra },
-  ): DefinedApp<N, Selection, Sc & Extra>
-}
-```
+| Screens | Definitions/app only | One unique hook per screen | Ten identical hooks per screen |
+| ------- | -------------------: | -------------------------: | -----------------------------: |
+| 0       |                  449 |                        449 |                            449 |
+| 10      |               16,316 |                     19,834 |                         19,834 |
+| 50      |               58,556 |                     74,794 |                         74,794 |
+| 100     |              115,856 |                    147,994 |                        147,994 |
 
-`withScenarios` adds fresh names only, never replaces existing names or selected
-implementations. This avoids incompatible intersection types for overwritten scenarios.
-StoreApp has the identical method with store scenarios. Common layers cannot depend on
-scenario fixtures; otherwise every scenario would have to list them. A scenario may use
-a fixture in its layer only if its own list includes it. Fixture state is initialized
-exactly once; yielding access does not mount another node. The app brand/runtime reference
-is retained by withScenarios. There is no public app constructor that can copy that brand.
+The definition/app slope is **1,056** (10→50) and **1,146** (50→100) instantiations per
+screen. Including one unique hook makes those slopes **1,374** and **1,464**. The
+marginal unique-hook slope is **318**, compared with the reviewers' roughly 660; the
+whole-app declaration graph differs, so this is a workload comparison, not a controlled
+before/after benchmark. Repeating an identical hook adds **0 measured instantiations**
+because TypeScript caches it. That does not establish zero editor or checker work.
+The proposed **2,000 per-screen / 100 per repeated-hook gates pass**.
 
-Advanced values: **mountOwned, jsonCodec**.
-Advanced types: **StateAccess, EffectContext, EffectActionBuilder, GuardedEffectActionBuilder,
-NavigationCommand, NavigationRefused, Registry, WireCodec, OwnedEffectNode**.
+The first implementation of this executable target failed the screen gate (about 10,000
+per screen). Duplicate detection now maps definitions to a tuple of names before tail
+recursion, avoiding recursively copying full definitions. Hook signatures are generated
+once as an overload intersection at binding creation, with a diagnostic fallback for
+misuse, rather than re-instantiating the complete app union at each call. The 100-screen
+measurement validates this specific overload design; no claim is made about arbitrary
+thousands of screens or editor completion latency.
 
-```ts
-function mountOwned<D>(
-  definition: D,
-  initial: DecodedState<D>,
-): Effect.Effect<OwnedEffectNode<D>, never, Requirements<D> | Registry | Scope.Scope>
-function jsonCodec<S, W extends Json>(
-  codec: Schema.Codec<S>,
-  wire: {
-    encode(value: S): W
-    decode(value: unknown): Effect.Effect<S, Schema.SchemaError>
-    jsonSchema: JsonSchema
-  },
-): WireCodec<S, W>
-```
-
-jsonCodec must be an explicit opt-in for nonstandard schema hooks, not a promise that
-an arbitrary JSON annotation changes TypeScript's encoded type. Redacted values always
-pass through the redaction pass before publication, including custom encoders.
-
-### @reflex/react
-
-Root value: **createReflex**.
-Root types: **ReflexBinding, NodeView, ReadyNodeView, ScreenView, ActionViews**.
-No unbound Provider/useNode/useRuntime/useMountedNode root exports remain.
-
-```ts
-function createReflex<A extends App>(app: A): ReflexBinding<A>
-interface ReflexBinding<A> {
-  Provider: ComponentType<{ app: CompatibleApp<A>; bridge?: Bridge; children: ReactNode }>
-  useScreen<C>(contract: C & ScreenMember<A, C>): ScreenView<Selected<A, C>>
-  useScreenSuspense<C>(contract: C & ScreenMember<A, C>): ReadyNodeView<Selected<A, C>>
-  useNode<D>(definition: D & ServiceMember<A, D>): NodeView<D>
-  useSession(): SessionControls<A>
-}
-type NodeView<D> = { readonly status: "pending" } | ReadyNodeView<D>
-interface ReadyNodeView<D> {
-  readonly status: "ready"
-  readonly state: DeepReadonly<InferState<D>>
-  readonly actions: ActionViews<InferActions<D>>
-}
-// Each ActionView has run(...encodedArgs): Promise<ActionOutcome<EncodedError>>,
-// available: boolean, reason: string|null, pending: boolean. No send or dispose.
-interface SessionControls<A> {
-  readonly scenario: string
-  readonly status: "starting" | "live" | "failed" | "closed"
-  reset<K extends ScenarioName<A>>(scenario: K): Promise<void>
-  forScenario<B extends CompatibleApp<A>, K extends ScenarioName<B>>(
-    app: B,
-    scenario: K,
-  ): ScenarioControls<B, K> | undefined
-}
-// ScenarioControls adds use-free node lookup for fixtures of K, and is invalid after reset.
-// Its node(D) returns Promise<NodeHandle<SelectedOrFixture<B,K,D>>>; hooks are never conditional.
-```
-
-A plain React binding requires a route entry context from a router adapter for useScreen;
-without it the runtime sentence explains the missing route context. useNode handles
-ambient services only. Applications rendering a single store screen can use createReflex
-with the headless initial entry. Hooks never invent a second route. SessionControls
-contains no raw runtime or `node` admitting scenario-optional fixtures. UI event handlers
-may ignore outcome promises because defects/domain failures also reach the background
-reporter, and the state/actions view updates. Journeys always fail fast.
-
-Advanced values: **createRouteAdapter, useRuntimeSession, useNodeView**.
-Advanced types: **RouteAdapter, RuntimeSession, StateSource, Bridge**.
-
-```ts
-function createRouteAdapter<A>(binding: ReflexBinding<A>, adapter: RouteAdapter): ComponentType
-interface RouteAdapter {
-  useLocation(): {
-    key: string
-    contract: object
-    params: Json
-    navigationType: "POP" | "PUSH" | "REPLACE"
-  }
-  project?(stack: readonly RouteEntry[]): void
-}
-function useRuntimeSession(): RuntimeSession
-function useNodeView<D>(source: StateSource<D> | null): NodeView<D>
-```
-
-These are composition seams, not another userland mount lifecycle. createRouteAdapter
-uses the same session registry and focus reporting as the built-in hosts. Raw runtime
-access validates Provider presence, not a caller-supplied type witness.
-
-### @reflex/expo
-
-Root value: **createReflexExpo**. Root types: **ExpoBinding, ExpoRegistration**.
-Advanced value: **routeCodec**. Advanced types: **ExpoRouteCodec, RouterActions**.
-`/dev` value: **developmentBridge**, type: **Bridge** (type-only re-export).
-
-```ts
-function createReflexExpo<A extends App, const R>(
-  app: A,
-  routes: R & ValidateRoutes<A, R, "expo">,
-): ExpoBinding<A, R>
-interface ExpoBinding<A, R> extends ReflexBinding<A> {
-  // Provider wraps children in the session and includes RouterProjection automatically.
-  href<C>(to: C & ScreenMember<A, C>, ...params: ParamsArgs<C>): Href
-}
-function routeCodec<P>(options: {
-  path: string
-  decode(raw: Readonly<Record<string, string | string[] | undefined>>): P
-  encode(params: P): Href
-}): ExpoRouteCodec<P>
-function developmentBridge(): Bridge | undefined
-```
-
-Registrations are `"/literal"` or `{ path: "/literal/[x]", params: { renamedField: "x" } }`.
-`pathname` is removed; use `path` consistently in both hosts. Only renamed fields need
-mapping. Advanced routeCodec is checked against that screen's encoded params and every
-returned URL is revalidated before dispatch. It is also the documented catchall escape.
-Root and dev have no executable Effect imports, including transitive imports. Effect
-apps supply host-neutral factories through their app descriptor. No RouterProjection
-export is needed: the Provider owns it. No platform-private router action import escapes
-router-actions.ts.
-
-### @reflex/react-router
-
-Root value: **createReflexRouter**. Root types: **RouterBinding, RouterRegistration**.
-Advanced value: **routeCodec**. Advanced type: **RouterRouteCodec**.
-
-```ts
-function createReflexRouter<A extends App, const R>(
-  app: A,
-  routes: R & ValidateRoutes<A, R, "react-router">,
-): RouterBinding<A, R>
-interface RouterBinding<A, R> extends ReflexBinding<A> {
-  routes(views: { [K in ScreenNames<A>]: ComponentType }): RouteObject[]
-  Link: <K extends ScreenNames<A>>(props: {
-    to: K
-    params: EncodedParamsFor<A, K>
-    children?: ReactNode
-    replace?: boolean
-    state?: unknown
-    className?: string
-  }) => ReactElement
-  href<K extends ScreenNames<A>>(to: K, ...params: ParamsArgsFor<A, K>): string
-}
-// Link has a param-free overload omitting params; remaining props are the host LinkProps
-// minus to, discover/prefetch route data remains governed by React Router.
-function routeCodec<P>(options: {
-  path: string
-  decode(raw: Readonly<Record<string, string | undefined>>, search: URLSearchParams): P
-  encode(params: P): string
-}): RouterRouteCodec<P>
-```
-
-The wrapper RouteObject reads the actual matched pathname/params/location.key and reports
-focus in a layout effect; no useResolvedPath(".") substitute. Parent layout composition
-is ordinary `{ element, children: reflex.routes(views) }`. Router errors from invalid params
-render the host errorElement and fail the pending protocol navigation as refused; the
-previous core entry is kept until commit. Provider supports rendering outside RouterProvider:
-projection is in the returned route wrappers, where router context actually exists.
-No new independent navigation context is introduced. Router registration is shared by
-routes, href, Link and location decoding; JSX never repeats path strings.
-
-### @reflex/live
-
-Root values: **connectBridge, serveLive**.
-Root types: **Bridge, BridgeOptions, BridgeStatus, LiveServer**.
-Advanced values: **createLiveSessions, createLiveController, createSessionOwner, nodeSource**.
-Advanced types: **LiveSessions, LiveController, SessionOwner, StateSource, BridgeSocket**.
-`/dev` value: **developmentBridge**. `/session` and `/vite` are removed (migration to
-advanced and dev respectively). React imports only advanced modules that exclude bridge
-code through explicit named modules/exports; bundle tests must prove this edge stays cold.
-
-```ts
-function connectBridge(setting: string, options?: BridgeOptions): Bridge
-function serveLive<A extends App>(
-  app: A,
-  options: {
-    setting: string
-    scenario?: ScenarioName<A>
-    onBackgroundError?: BackgroundReporter
-  },
-): Promise<LiveServer<A>>
-interface LiveServer<A> {
-  readonly client: TypedClient<A>
-  close(): Promise<void>
-}
-// TypedClient<A> is a scenario-generation-bound consumer using the SAME membership and
-// selected-action helpers as JourneyClientFor<A>; raw RPC is advanced only.
-function createLiveSessions(): LiveSessions
-function createLiveController(
-  sessions: LiveSessions,
-  report: BackgroundReporter,
-  timers?: Timers,
-): Controller
-function createSessionOwner(app: App, options?: SessionOwnerOptions): SessionOwner
-function nodeSource(runtime: Runtime, id: NodeId): StateSource
-function developmentBridge(): Bridge | undefined
-```
-
-`TypedClient` is a root **type export** too. It exposes `focused`, `node`, `reset` and
-`scenario` with the same signatures below, but ordinary actions return ActionOutcome
-rather than enforce journey success. Bridge remains an untyped transport lifecycle
-capability; it cannot claim membership. BridgeOptions/BridgeStatus/BridgeSocket retain
-their current transport-only signatures. No Effect import is introduced.
-
-### @reflex/test
-
-Root values: **createTestApp, createTestAppPool, connectJourney, includes, explore**.
-Root types: **JourneyClientFor, JourneyClient, JourneyNode, JourneyOperation, StateMatch,
-MatchedState, Includes, TestAppPool, ExploreOptions, ExploreResult**.
-Advanced values: **createJourneyClient**. Advanced types: **JourneyTransport, RawJourney**.
-Every export is explicit. Inference helpers come from runtime; there is no test-specific
-redefinition of action signatures.
-
-```ts
-function createTestApp<A extends App, K extends ScenarioName<A> = DefaultScenario<A>>(
-  app: A,
-  options?: { scenario?: K; timeoutMs?: number },
-): Promise<JourneyClientFor<A, K>>
-function connectJourney<A extends App, K extends ScenarioName<A> = DefaultScenario<A>>(
-  app: A,
-  options: { target: "headless" | "device"; scenario?: K; timeoutMs?: number; directory?: string },
-): Promise<JourneyClientFor<A, K>>
-interface JourneyClientFor<A, K = DefaultScenario<A>> {
-  readonly scenario: K
-  focused<C, const M extends StateMatch<InferState<A, C>>>(
-    contract: C & ScreenMember<A, C>,
-    match?: M,
-  ): Promise<JourneyNode<Selected<A, C>, M>>
-  node<D>(definition: D & SessionMember<A, K, D>): Promise<JourneyNode<SelectedOrFixture<A, K, D>>>
-  back(): Promise<Completed>
-  advanceTime(ms: number): Promise<void>
-  reset<S extends ScenarioName<A>>(scenario: S): Promise<JourneyClientFor<A, S>>
-  dispose(): Promise<void>
-  [Symbol.asyncDispose](): Promise<void>
-}
-interface JourneyNode<D, M = unknown> {
-  state(): Promise<MatchedState<InferState<D>, M>>
-  actions: CheckedActions<D, "completed">
-  expectFailure: CheckedActions<D, "domain-error">
-  expectRefusal: CheckedActions<D, "refused">
-  allowCancellation: CheckedActions<D, "completed" | "cancelled">
-  start: { [K in ActionNames<D>]: (...input: InputArgs<D, K>) => Promise<JourneyOperation<D, K>> }
-}
-interface JourneyOperation<D, K> {
-  completed(): Promise<Completed>
-  expectFailure(): Promise<DomainError<InferError<D, K>>>
-  expectRefusal(): Promise<Refused>
-  cancel(): Promise<void>
-}
-function createTestAppPool(): TestAppPool
-interface TestAppPool {
-  open: typeof createTestApp
-  disposeAll(): Promise<void>
-}
-function includes<const M>(...items: readonly M[]): Includes<M>
-function explore<A>(app: A, options: ExploreOptions<A>): Promise<ExploreResult>
-// ExploreOptions preserves existing budget/seed, typed per-member invariants and knownInputs.
-function createJourneyClient<A, K>(
-  app: A,
-  scenario: K,
-  transport: JourneyTransport,
-): JourneyClientFor<A, K>
-```
-
-JourneyClient is the exported structural interface underlying JourneyClientFor (same
-methods; no app selection is erased). Ordinary actions throw an assertion with node,
-action, expected success and actual outcome on refusal/domain-error/cancellation/defect.
-`expectFailure` only includes actions with declared domain errors. Narrowed state()
-rechecks a requested discriminant on each read; it never promises arbitrary matched
-quantities remain unchanged. start permits virtual-clock tests without deadlocking an
-await before advancing time. `raw` is removed from the root client; advanced RawJourney
-is obtained only by createJourneyClient with a protocol transport, for protocol tests.
-
-`connectJourney` imports session discovery from the platform RPC layer, not CLI command
-implementations. It connects to an already-running target, performs describe, checks app
-name/scenario/action schema compatibility, resets to the requested scenario, and takes a
-subscription before reading focus. It never starts a daemon or resets an unrequested app.
-Runtime constructor identity cannot cross a transport: a canonical descriptor fingerprint
-covers names, schemas and selected action names, and the client validates every response
-against local wire schemas. Matching names alone is insufficient. Semantically different
-handlers with identical descriptors are intentionally indistinguishable remotely; this is
-not a claim to authenticate application code. close disposes the client connection only;
-headless createTestApp additionally closes its owned controller/session.
-
-### Reduction budget and deletion plan
-
-Measured baseline for `src` in the seven packages is **8,500 lines** at 2a26d9e (including
-entry modules). Implementation acceptance ceiling is **7,600 total lines**, not +3,200.
-Tests are counted separately and must not hide production logic. Per-package planning
-ceilings: effect 2,350; runtime 2,550; react 600; expo 400; react-router 250; live 700;
-test 750 = 7,600. These are allocation ceilings, not proof of achievable implementation.
-Resource ownership work must fit them; do not cut validation to meet a line count.
-
-Delete screen-identity.ts, definition-identity.ts, action-navigation.ts and their tokens;
-delete queued afterAction handling, public resolve methods, factory/schema navigation
-compatibility wrappers and Nav.layer. Delete `/internal` package entries, the unbound
-React root hooks/Provider, separate screen-ready.ts Suspense resources, duplicate
-useMountedNode/useSuspenseRoute registries, the append-only store nodes retention array,
-Expo Effect-only routes/binding plumbing, route-token symbol lookup and manual identity
-options. Replace rather than retain capability-vs-screen duplicated mount façades.
-Keep the protocol dispatch engine, redaction safeguards, route projection controller,
-network/auth implementations, limits and controller behavior. Reuse those primitives.
-Delete hand-written live journey transports and repeated JSX path registrations.
-Internal low-level mount primitives may remain, but have exactly one owner implementation.
-
-## 4. Misuse and diagnostic contract
-
-“Compile marker” means the exact required property text, inside the compiler's normal
-assignability diagnostic. TS chooses prefixes, quotes and type display; this design does
-not promise control over those. Ordinary compiler diagnostics below name their stable
-TS message. Runtime sentences include concrete example names. Dynamic/JS/`as` callers
-always get runtime checks even when a literal caller would fail statically. Error markers
-must be snapshot-tested with TS 5.9.3 during implementation; only the risky relationship
-markers in the prototypes have been proved here. No entire argument becomes `never`.
-
-| #   | Mistake and code                                                                  | Intended diagnostic                                                                                     | Why / phase                                                                                                                                    |
-| --- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | `reflex.useScreen(InventoryFixture)`                                              | `InventoryFixture is not a screen of app 'inventory'`                                                   | Compile marker; wrong role.                                                                                                                    |
-| 2   | `reflex.useScreen(ForeignDetail)`                                                 | `InventoryDetail is not a screen of app 'inventory'`                                                    | Compile marker; nominal check even with same name.                                                                                             |
-| 3   | `reflex.useNode(InventoryDetail)`                                                 | `InventoryDetail is not a service of app 'inventory'`                                                   | Compile marker; route hooks own screens.                                                                                                       |
-| 4   | `reflex.useNode(InventoryFixture)`                                                | `InventoryFixture is scenario-specific; use session.forScenario(app, name)`                             | Compile marker; optional fixture is not an ambient base member.                                                                                |
-| 5   | `liveServices.node(InventoryFixture)`                                             | `InventoryFixture is not a fixture of scenario 'live-services'`                                         | Compile marker; no fixture declared.                                                                                                           |
-| 6   | `unionSession.node(InventoryFixture)`                                             | `InventoryFixture is not present in every selected scenario`                                            | Compile marker; union requires intersection.                                                                                                   |
-| 7   | `Nav.implement([ListLive, ListLive], { initial: InventoryList })`                 | `InventoryList has more than one implementation`                                                        | Compile marker; literal tuple duplicate.                                                                                                       |
-| 8   | `Nav.implement([ListLive], { initial: InventoryList })`                           | `InventoryDetail requires one implementation`                                                           | Compile marker; first missing contract in declaration order.                                                                                   |
-| 9   | `Nav.implement([ForeignLive, DetailLive, SettingsLive], options)`                 | `InventoryList implementation must belong to its declared contract`                                     | Compile marker; identity, not shape.                                                                                                           |
-| 10  | `defineStoreApp({ name: 'x', services: [Counter, Counter] })`                     | `Counter is declared more than once`                                                                    | Compile marker for tuples; same runtime sentence for widened arrays.                                                                           |
-| 11  | `defineStoreApp({ name: 'x', screens: dynamicDefinitions })` with duplicate names | `App 'x' declares Counter more than once; keep one definition.`                                         | Runtime; widened arrays hide duplicate counts.                                                                                                 |
-| 12  | `mountOwned(runtime, Detail)`                                                     | `Expected 3 arguments, but got 2.`                                                                      | TS arity; params required.                                                                                                                     |
-| 13  | `Nav.push(InventoryDetail, {})`                                                   | `Property 'productId' is missing in type '{}' but required in type '{ readonly productId: string; }'.`  | Ordinary TS shape error.                                                                                                                       |
-| 14  | `Nav.push(ForeignDetail, { productId: 'p' })`                                     | `InventoryDetail is not a screen of navigator 'default'`                                                | Compile marker, using nominal contract set.                                                                                                    |
-| 15  | `yield* Nav.back`                                                                 | `NavigationCommand must be returned from the handler, not yielded`                                      | Cannot replace TS iterator diagnostic; stable marker is on non-iterable command's display name. Actual TS reports missing `[Symbol.iterator]`. |
-| 16  | `Nav.back.pipe(Effect.catchTag(...))`                                             | `Property 'pipe' does not exist on type 'NavigationCommand<"default">'.`                                | Ordinary TS error; command is not an Effect.                                                                                                   |
-| 17  | Action returns `Nav.back` but app has no navigation                               | `Navigator<"default">`                                                                                  | Compile requirement/marker on composition; handler cannot fabricate a navigator.                                                               |
-| 18  | `onRefused: () => Effect.succeed(Nav.back)`                                       | `Navigation refusal recovery must return void`                                                          | Compile marker; recovery cannot schedule another terminal command.                                                                             |
-| 19  | `onFocus: () => Effect.fail(new ApiError({message:'x'}))`                         | `Handle onFocus failures into state`                                                                    | Compile marker; lifecycle has no declared error channel.                                                                                       |
-| 20  | `action({ handler: (x: {by:number}) => ... })` without input                      | `Declare input: before annotating handler input`                                                        | Compile marker; annotation cannot invent a codec.                                                                                              |
-| 21  | `action({ handler: () => Effect.fail(new ApiError({message:'x'})) })`             | `Declare action failures with error:`                                                                   | Compile marker; error presence controls channel.                                                                                               |
-| 22  | `view.actions.Add.run({ by: 'one' })`                                             | `Type 'string' is not assignable to type 'number'.`                                                     | Ordinary TS scalar error at by.                                                                                                                |
-| 23  | `view.actions.Reset.run({})`                                                      | `Expected 0 arguments, but got 1.`                                                                      | Ordinary TS arity.                                                                                                                             |
-| 24  | `action({ input: z.unknown(), handler })`; then `.run()`                          | `Expected 1 arguments, but got 0.`                                                                      | Presence of unknown input still requires one argument.                                                                                         |
-| 25  | `ctx.fail({message:'x'})` with no error declaration                               | `Property 'fail' does not exist on type 'StoreContextWithoutError<...>'.`                               | Ordinary TS missing member; overload removes it.                                                                                               |
-| 26  | `error: z.instanceof(Error)` with no projectError                                 | `Store error must be JSON; provide projectError`                                                        | Compile marker; class instance cannot publish by default.                                                                                      |
-| 27  | `store: () => createStore(() => ({ now: new Date() }))` without project           | `Store state must be JSON; provide project`                                                             | Compile marker; rich object is not JSON.                                                                                                       |
-| 28  | `project: () => ({ count: NaN })`                                                 | `Counter state.count must be a finite JSON number; fix the projection.`                                 | Runtime; number type cannot express finiteness.                                                                                                |
-| 29  | `createReflexExpo(app, { InventoryDetail: '/inventory/[id]', ...otherRoutes })`   | `Path placeholder id has no matching param; add a params mapping`                                       | Compile marker (prototype proves generic sentence without interpolated id).                                                                    |
-| 30  | `{ InventoryDetail: '/inventory' }`                                               | `Required route param productId must appear as a path placeholder`                                      | Compile marker; cannot lose a required param.                                                                                                  |
-| 31  | `{ Detail: { path: '/:id', params: { productId:'id', tab:'id' } } }`              | `URL param mapping targets must be unique`                                                              | Compile marker/runtime fallback; default targets included.                                                                                     |
-| 32  | `{ Detail: { path: '/:id', params: { typo:'id' } } }`                             | `URL param mapping names must be schema fields`                                                         | Compile marker.                                                                                                                                |
-| 33  | `createReflexRouter(app, { List: '/' })`                                          | `Detail needs a route registration`                                                                     | Compile marker; every screen covered.                                                                                                          |
-| 34  | `<reflex.Link to="Detail" />`                                                     | `Detail requires params`                                                                                | Compile marker; param-free overload cannot absorb Detail.                                                                                      |
-| 35  | `reflex.routes({ List: ListView })`                                               | `Detail needs a route component`                                                                        | Compile marker.                                                                                                                                |
-| 36  | `{ Detail: dynamicPath }`                                                         | `Route path must be a literal; use advanced routeCodec for dynamic paths`                               | Compile marker, runtime codec is escape hatch.                                                                                                 |
-| 37  | Numeric codec encodes number in `Detail.params`                                   | `URL param id must encode a string; use a string codec`                                                 | Compile marker; URL is not decoded number.                                                                                                     |
-| 38  | Deep link `/inventory/` or malformed encoded id                                   | `InventoryDetail route params.productId are invalid; correct the URL.`                                  | Runtime schema validation; raw URL is unknown.                                                                                                 |
-| 39  | `<reflex.Provider app={anotherApp} />`                                            | `Provider app must share the binding's app identity`                                                    | Runtime for independently constructed structural matches; compile when types differ.                                                           |
-| 40  | `defineApp({ scenarios: { a, b }, ...composition })` without default              | `Choose defaultScenario when declaring multiple scenarios`                                              | Compile marker; no order-dependent default.                                                                                                    |
-| 41  | `app.withScenarios({ existingName: replacement })`                                | `Scenario existingName already exists; choose a new name`                                               | Compile marker/runtime fallback; only additive extensions.                                                                                     |
-| 42  | `createTestApp(app, { scenario: 'typo' })`                                        | `typo is not a scenario of app 'inventory'`                                                             | Compile marker, runtime validation for string from environment.                                                                                |
-| 43  | Scenario layer requires InventoryFixture but fixtures is empty                    | `Scenario 'live-services' must declare fixture InventoryFixture`                                        | Compile marker; list provides the service.                                                                                                     |
-| 44  | Scenario layer omits InventoryApi                                                 | `Scenario 'empty-inventory' must provide InventoryApi`                                                  | Compile marker; coverage independent per scenario.                                                                                             |
-| 45  | Read old client after `await session.reset('empty-inventory')`                    | `Session was reset; use the client returned by reset.`                                                  | Runtime generation check; TS cannot revoke aliases.                                                                                            |
-| 46  | `detail.state()` after an explicitly matched editing tag became saving            | `InventoryDetail changed state tag; acquire a new handle with focused().`                               | Runtime revalidation of narrowing.                                                                                                             |
-| 47  | `await detail.actions.Save()` returns domain error                                | `InventoryDetail.Save expected completed, received domain-error (ApiError: Server error).`              | Runtime journey assertion, not silently ignored outcome.                                                                                       |
-| 48  | `connectJourney(wrongApp, {target:'device'})`                                     | `Connected app descriptor differs from inventory; connect to the matching target.`                      | Runtime; remote identity is a descriptor, never a constructor object.                                                                          |
-| 49  | `useScreen` outside Provider                                                      | `Reflex hooks need their bound Provider; wrap this tree with reflex.Provider.`                          | Runtime; React tree cannot be statically proved.                                                                                               |
-| 50  | Same history key, different decoded params                                        | `InventoryDetail entry key changed params; use a new history entry.`                                    | Runtime registry consistency.                                                                                                                  |
-| 51  | Call `A.resolve(runtime)`                                                         | `Property 'resolve' does not exist on type 'ScreenImplementation<...>'.`                                | Ordinary TS error; resolution can only use the selected app entry.                                                                             |
-| 52  | No private declaration on two empty same-name Screen subclasses                   | No compile error; runtime `App 'inventory' declares InventoryDetail more than once; keep one contract.` | TS limitation proved in prototype. Nominal guarantee requires the authored private line; lint/template check should flag its omission.         |
-| 53  | Store input validator returns Promise                                             | `Counter.Add input validator must be synchronous; use synchronous validation before dispatch.`          | Runtime; Standard Schema validate signature admits promises.                                                                                   |
-| 54  | Back at root                                                                      | `Navigation refused: already at the root screen.`                                                       | Runtime refused outcome with reason AtRoot; onRefused runs if supplied.                                                                        |
-| 55  | Retained fixture view used after another reset                                    | `Scenario view expired; acquire it again with forScenario(app, name).`                                  | Runtime generation check.                                                                                                                      |
-
-## 5. Feasibility, performance and acceptance evidence
-
-### Proven boundaries
-
-Run `bunx tsc --noEmit -p docs/design/prototypes/tsconfig.json --extendedDiagnostics`.
-The project uses installed TypeScript 5.9.3 and Effect 4.1.2 with strict mode,
-exactOptionalPropertyTypes and noUncheckedIndexedAccess. It imports no Reflex package.
-`@ts-expect-error` cases assert rejection rather than silence arbitrary diagnostics.
-These are declaration prototypes, not substitute implementations or runtime tests.
-
-- **contracts.ts:** curried Self factory, nominal declaration, inherited static `this`
-  extraction, independent A/B action maps, bound selection and readable membership
-  intersection. Same-name empty subclasses are intentionally shown assignable.
-- **routes.ts:** template-literal segment recursion for Expo and Router placeholders,
-  identity default mapping, renamed required fields, duplicate default/explicit targets,
-  missing required params and dynamic path rejection. The local curried route validator
-  isolates this mechanism; the host registration will invoke it per named screen.
-- **scenarios.ts:** intersection membership for literal and union scenario keys, and
-  honest string controls with explicit refinement. This isolates the set operation;
-  actual app factories retain schema/action types in parallel tables.
-- **navigation.ts:** an opaque command is not an Effect; terminal handler output carries
-  a shallow Navigator requirement, validates params and rejects foreign nominal contracts.
-  The prototype proves the type model, not atomic navigation/cancellation execution.
-
-### Implementation of remaining type-level claims
-
-| Claim                                                    | Implementation strategy                                                                                                                                                                                                                                       | Instantiation risk / acceptance                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Self actions and helpers infer without cycles            | Infer static `this` constructor; extract state from its schema, not recursively from Self. Self exists only in a shallow invariant instance slot. Navigation imports contracts only; implementations import navigation; app imports implementations.          | Medium. Do not recurse through the app from a contract. Verify the three-file import cycle example.                                                                                                                                                                                                                                                                                                                                                                              |
-| No-input and declared unknown stay distinct              | Overloads selected by schema **presence**, not `unknown extends I`. NoInfer on handler input/error; action's inferred I/E come only from schemas.                                                                                                             | Medium; overload count stays constant, not multiplied by action count. Existing regression tests migrate.                                                                                                                                                                                                                                                                                                                                                                        |
-| Error schema limits Effect channel                       | Infer E from schema, check handler against Effect<void\|Command, E, R>; provide labeled alternatives for absent schema. Infer R from handler only, never from a whole app union.                                                                              | Medium. Prove annotated callback cannot broaden E; preserve existing negative tests.                                                                                                                                                                                                                                                                                                                                                                                             |
-| Human errors instead of never/dumps                      | A shallow Check property on the value, separated inference and validation with NoInfer. Ordinary shape errors stay native. Missing service helpers use service identifiers/literal keys.                                                                      | Medium. Compiler formatting is not controllable; snapshot marker text and location, not complete compiler prose. No claim that every TypeScript error can be rewritten.                                                                                                                                                                                                                                                                                                          |
-| Exactly one implementation per contract                  | Map tuple once by contract.name; check nominal assignability at each indexed slot; a shallow tuple uniqueness fold checks duplicate names. Runtime Map uses constructor objects and implementation objects separately.                                        | Medium for large tuples; O(n²) uniqueness checks capped by existing node limits. Avoid union-to-tuple permutations.                                                                                                                                                                                                                                                                                                                                                              |
-| Services/layers covered per scenario                     | Infer requirement union once from each selected action. Exclude built-in Scope/Registry/Navigator and listed fixture services; compare against Layer output. Never use layer object metadata to infer fixture presence.                                       | High until integrated. Must stay below budget on inventory and 50 synthetic screens; do not carry Layer types through UI bindings.                                                                                                                                                                                                                                                                                                                                               |
-| Fixture service yields access                            | defineFixture returns a Context.Service-compatible yielding facade keyed by its actual definition object; mounted fixtures provide that service. Compile witness is FixtureService<Name>; duplicate same-name fixture objects are caught at app construction. | Low static cost. Function calls cannot mint fresh types; runtime identity remains required for same-name independently made fixtures. Do not claim generative nominality for defineFixture.                                                                                                                                                                                                                                                                                      |
-| Per-scenario fixture membership                          | Literal scenario indexes a cached membership table; union scenario checks each candidate against all possible keys (prototype). Defaults are a separate literal parameter, not keyof Sc. reset returns a new specialization.                                  | Medium O(scenarios × fixture count), local to opening/narrowing a client. Hooks do not instantiate every scenario graph.                                                                                                                                                                                                                                                                                                                                                         |
-| withScenarios preserves identity but extends truth       | Runtime reference is reused; implementation selection frozen. Additive name-only check avoids intersection overrides. Base Provider validates runtime reference; base controls use string; checked scenario views require the extended app witness.           | Low. Full generative nominality of factory apps is impossible; runtime validation is intentional.                                                                                                                                                                                                                                                                                                                                                                                |
-| Route placeholder mapping                                | Split on `/`, recognize one segment at a time; cache defaulted mapping once per registration. Match required-field keys to placeholders and optional fields to query. Partial mapping uses identity for absent keys.                                          | Low at normal URL length; reject paths exceeding protocol string limits at runtime. Advanced codec avoids unbounded recursive types for runtime strings.                                                                                                                                                                                                                                                                                                                         |
-| Host accepts store and Effect apps without Effect import | App descriptor holds public schema validators/factory closures and a flattened consumer table. Bindings never import Effect implementation types/executable modules. `InferState` reads the public table.                                                     | Medium declaration/bundle risk. Inspect emitted declarations and production/Effect-free module graphs.                                                                                                                                                                                                                                                                                                                                                                           |
-| Default project is honest                                | Conditional overload requires S extends Json (readonly forms allowed); runtime deep JSON validator checks prototypes, accessors, cycles, sparse arrays, nonfinite values and size. Error output uses E or projected EW under the same check.                  | Medium. Limit recursive validation types to JSON shape extraction; runtime handles recursive values. Do not infer Date as `{}` via mapped keys.                                                                                                                                                                                                                                                                                                                                  |
-| Narrowed state across async suspension                   | StateAccess carries Narrow + All. Guarded commit rechecks the tag. Journey state() validates the requested discriminant every read; all other fields remain mutable values, not literal proofs.                                                               | Low type cost; runtime races need tests. An expired view cannot be made statically unusable in TS.                                                                                                                                                                                                                                                                                                                                                                               |
-| Suspense does not double mount                           | One registry keyed by constructor and entry key owns the memoized promise, generation and disposer; both hooks share lookup/acquisition and differ only in read behavior.                                                                                     | Runtime claim, no generic proof. StrictMode, abandoned render, pending eviction/reset and normal/Suspense mixed tests are mandatory.                                                                                                                                                                                                                                                                                                                                             |
-| Terminal navigation requirement                          | Branded success value carries literal Key; action extracts Key once and adds Navigator<Key> to requirements. No command => no requirement. Refusal callback admits void only and runs under operation supervisor before source disposal.                      | Medium. Prototype covers one key, ordinary void actions and refusal callbacks. Recovery success must be inferred as its own generic and then checked: Effect<Command> can otherwise flow into Effect<void> through TypeScript void-return assignability. Runtime also rejects a recovery result containing a command. Union-of-keys tests remain required. No discarded-command detection is claimed: TS permits unused expressions; optional lint can catch an ignored command. |
-| Live membership and wire types                           | Local descriptor carries encoded schemas; handshake compares descriptor and validates responses. A/B implementation selection comes from the local app table. No remote constructor identity assertion.                                                       | Low type cost; runtime compatibility tests mandatory, including descriptor mismatch and omitted error data.                                                                                                                                                                                                                                                                                                                                                                      |
-
-### Measured versus predicted
-
-The isolated prototypes measured **6,115 instantiations**, **0.34 seconds total**, and
-about **137 MB** (TypeScript 5.9.3, this checkout). The run uses the small prototype
-tsconfig rather than the integrated workspace program. This is a small proof, **not** an estimate of the final integrated
-program. The current branch is about 349k of 357.5k, leaving only about 8.5k. Do not add
-prototype counts to that number: separate TS programs count shared library work differently.
-The implementation must replace the old generic graph and stay at or below 357,500;
-target ≤325,000 to regain margin. Keep the gate unchanged. Record --extendedDiagnostics
-for root/mobile/web and fixture projects, plus 10/50/100-screen scaling cases. Compare
-per-node hook additions separately so a large union does not hide superlinear cost.
-
-For budget control, the implementation erases service requirements at the host-neutral
-app boundary, uses flat per-contract consumer entries, caches scenario tables, and computes
-route validation only once in the binding factory. UI useScreen indexes one name then
-checks nominal identity; it never maps every action of every screen. No global module
-augmentation, app-wide distributive recursive conditional, or schema re-derivation in each
-hook is permitted. If 50-screen validation exceeds the gate, simplify selection tables
-before implementation review; raising the ceiling is not an accepted escape.
-
-### Implementation acceptance plan (future work)
-
-1. Build declarations and compile every authored file above in linked fixture projects,
-   including both store and Effect apps in Expo/Router. Put every misuse row into a
-   diagnostic/runtime test with its marker/message; preserve existing protocol conformance.
-2. Implement the single registry and supervisor once; run lifecycle tests for A/B selected
-   implementations, duplicate names, pending eviction, normal/Suspense sharing, stale
-   reset handles, store unsubscribe/disposal, navigation refusal/recovery and self-back.
-3. Check root/advanced/dev export allowlists, no `/internal` imports, and production
-   Metro/Vite graphs for test code, Effect on the plain path, bridge tokens and diallers.
-4. Run bun run check, host E2E journeys, descriptor mismatch tests, and type budgets.
-   Require line totals ≤7,600 and reviewers' independent 9/10-per-factor acceptance before
-   declaring the implementation finished. This design turn does not launch reviewers or
-   claim their approval; the requested deliverable is the design and feasibility evidence.
-
-### Honest predicted rubric scores
-
-These are predictions for this specification, not independent review results or measured
-implementation scores. A 9 is not asserted where prototype/host evidence is still missing.
-
-| Factor                                          | Prediction | Main remaining risk                                                                        |
-| ----------------------------------------------- | ---------: | ------------------------------------------------------------------------------------------ |
-| Ceremony / common-case brevity                  |          8 | Private nominal line and contract/implementation split remain visible.                     |
-| Inference                                       |          9 | Self annotation is the sole contract annotation; integrated layer inference unproved.      |
-| End-to-end typing                               |          9 | Selection is explicit; remote compatibility needs validation implementation.               |
-| Correctness by construction / misuse resistance |          8 | Alias revocation and omitted nominal declarations need runtime/lint safeguards.            |
-| Consistency                                     |          9 | Same Provider/app, hooks, roles and handler shape across adapters.                         |
-| Progressive disclosure                          |          9 | Explicit root/advanced tiers; dev is platform-only.                                        |
-| Errors                                          |          8 | Relationship markers proved locally; full negative diagnostic suite still required.        |
-| Host idioms                                     |          9 | Zustand stores, Effect layers, RouteObject[], Link and Expo Stack are preserved.           |
-| Surface hygiene                                 |          9 | Explicit exports, no public internal paths or duplicate resolution API.                    |
-| Testability                                     |          9 | Shared stories and built-in connection; virtual-time start is explicit.                    |
-| Examples                                        |          8 | Complete authored files are specified; they cannot compile against unimplemented APIs yet. |
-| Type performance                                |          8 | Small prototype measured; integrated 349k baseline leaves little margin.                   |
-
-The design is ready for independent criticism, not a claim that the 9/10 threshold has
-already been reached. In particular, reviewers should decide whether the one-line nominal
-trade-off is acceptable and challenge the supervisor/host integration before packages change.
-
-## 6. Validation of this design change
-
-The prototype project passes `bunx tsc --noEmit -p docs/design/prototypes/tsconfig.json`.
-All negative cases are consumed. Removing the expected-error directives in an in-memory
-compiler run confirms the foreign-contract and fixture errors include the intended
-`is not a screen of app 'inventory'` property marker at the calling expression.
-
-`bun run check` passes on this checkout: formatting/lint, existing documentation snippets,
-root/mobile/web typechecks and 631 tests pass (3 platform-specific tests skipped). This
-validates that the documentation-only branch preserves the existing implementation; it
-does not validate unimplemented target APIs or the authored target example files.
+`bun run check` passes: formatting/lint, documentation snippets, root/mobile/web typechecks,
+**631 tests passed, 3 platform-specific skips, 0 failures**. These tests validate the
+unchanged implementation, not the proposed runtime. `git diff --check` is clean.
+No packages, live examples or apps changed, and no PR was opened.

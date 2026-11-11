@@ -1,0 +1,125 @@
+{
+  "typescript": "5.9.3",
+  "authoredFiles": 44,
+  "negativeCases": 75,
+  "compiledFiles": 43,
+  "jsonFiles": 1,
+  "checker": 1088,
+  "examples": 90535,
+  "negative": 77643,
+  "measurements": [
+    {
+      "screens": 0,
+      "hooks": 0,
+      "instantiations": 449
+    },
+    {
+      "screens": 0,
+      "hooks": 1,
+      "instantiations": 449
+    },
+    {
+      "screens": 0,
+      "hooks": 10,
+      "instantiations": 449
+    },
+    {
+      "screens": 10,
+      "hooks": 0,
+      "instantiations": 16316
+    },
+    {
+      "screens": 10,
+      "hooks": 1,
+      "instantiations": 19834
+    },
+    {
+      "screens": 10,
+      "hooks": 10,
+      "instantiations": 19834
+    },
+    {
+      "screens": 50,
+      "hooks": 0,
+      "instantiations": 58556
+    },
+    {
+      "screens": 50,
+      "hooks": 1,
+      "instantiations": 74794
+    },
+    {
+      "screens": 50,
+      "hooks": 10,
+      "instantiations": 74794
+    },
+    {
+      "screens": 100,
+      "hooks": 0,
+      "instantiations": 115856
+    },
+    {
+      "screens": 100,
+      "hooks": 1,
+      "instantiations": 147994
+    },
+    {
+      "screens": 100,
+      "hooks": 10,
+      "instantiations": 147994
+    }
+  ],
+  "slopes": [
+    {
+      "hooks": 0,
+      "from": 10,
+      "to": 50,
+      "perScreen": 1056
+    },
+    {
+      "hooks": 0,
+      "from": 50,
+      "to": 100,
+      "perScreen": 1146
+    },
+    {
+      "hooks": 1,
+      "from": 10,
+      "to": 50,
+      "perScreen": 1374
+    },
+    {
+      "hooks": 1,
+      "from": 50,
+      "to": 100,
+      "perScreen": 1464
+    },
+    {
+      "hooks": 10,
+      "from": 10,
+      "to": 50,
+      "perScreen": 1374
+    },
+    {
+      "hooks": 10,
+      "from": 50,
+      "to": 100,
+      "perScreen": 1464
+    }
+  ],
+  "repeated": [
+    {
+      "screens": 10,
+      "perAdditionalHook": 0
+    },
+    {
+      "screens": 50,
+      "perAdditionalHook": 0
+    },
+    {
+      "screens": 100,
+      "perAdditionalHook": 0
+    }
+  ],
+  "maxSlope": 1464
+}

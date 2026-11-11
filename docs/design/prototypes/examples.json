@@ -1,0 +1,53 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "exactOptionalPropertyTypes": true,
+    "noUncheckedIndexedAccess": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "types": ["bun"],
+    "lib": ["ES2023", "DOM"],
+    "allowImportingTsExtensions": true,
+    "jsx": "react-jsx",
+    "baseUrl": ".",
+    "paths": {
+      "@reflex/effect": ["api/effect.d.ts"],
+      "@reflex/runtime": ["api/runtime.d.ts"],
+      "@reflex/react": ["api/react.d.ts"],
+      "@reflex/expo": ["api/expo.d.ts"],
+      "@reflex/react-router": ["api/react-router.d.ts"],
+      "@reflex/live": ["api/live.d.ts"],
+      "@reflex/test": ["api/test.d.ts"],
+      "@reflex/effect/advanced": ["api/effect-advanced.d.ts"],
+      "@reflex/runtime/advanced": ["api/runtime-advanced.d.ts"],
+      "@reflex/react/advanced": ["api/react-advanced.d.ts"],
+      "@reflex/expo/advanced": ["api/expo-advanced.d.ts"],
+      "@reflex/react-router/advanced": ["api/react-router-advanced.d.ts"],
+      "@reflex/live/advanced": ["api/live-advanced.d.ts"],
+      "@reflex/test/advanced": ["api/test-advanced.d.ts"],
+      "@reflex/live/dev": ["api/live-dev.d.ts"],
+      "@reflex/expo/dev": ["api/expo-dev.d.ts"],
+      "@reflex/example-inventory": ["examples/examples/inventory/src/app.ts"],
+      "@reflex/example-inventory/*": ["examples/examples/inventory/src/*"],
+      "@reflex/example-plain": ["examples/examples/plain/src/app.ts"],
+      "@inventory-provider": ["examples/apps/mobile/provider.tsx"],
+      "react": ["../../../apps/mobile/node_modules/@types/react/index.d.ts"],
+      "react/jsx-runtime": ["../../../apps/mobile/node_modules/@types/react/jsx-runtime.d.ts"],
+      "react-dom/*": ["../../../apps/web/node_modules/@types/react-dom/*"],
+      "react-native": ["../../../apps/mobile/node_modules/react-native/types_generated/index.d.ts"],
+      "expo-router": ["../../../apps/mobile/node_modules/expo-router"],
+      "react-router": ["../../../apps/web/node_modules/react-router/dist/production/index.d.ts"],
+      "@react-native-async-storage/async-storage": [
+        "../../../apps/mobile/node_modules/@react-native-async-storage/async-storage"
+      ],
+      "expo/metro-config": ["../../../apps/mobile/node_modules/expo/metro-config.d.ts"]
+    },
+    "allowJs": true,
+    "checkJs": true
+  },
+  "include": ["api/**/*.d.ts", "examples/**/*.ts", "examples/**/*.tsx", "examples/**/*.js"],
+  "exclude": ["examples/apps/mobile/tsconfig.json"]
+}

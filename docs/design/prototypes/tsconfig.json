@@ -1,16 +1,3 @@
 {
-  "compilerOptions": {
-    "target": "ES2022",
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "strict": true,
-    "exactOptionalPropertyTypes": true,
-    "noUncheckedIndexedAccess": true,
-    "noEmit": true,
-    "skipLibCheck": true,
-    "types": [],
-    "lib": ["ES2023"],
-    "allowImportingTsExtensions": true
-  },
-  "include": ["*.ts"]
+  "extends": "./examples.json"
 }

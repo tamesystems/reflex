@@ -1,0 +1,4 @@
+{
+  "extends": "./examples.json",
+  "include": ["check.ts"]
+}

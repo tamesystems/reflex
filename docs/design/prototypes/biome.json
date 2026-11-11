@@ -1,0 +1,23 @@
+{
+  "extends": ["../../../biome.json"],
+  "files": {
+    "includes": ["!.generated"]
+  },
+  "overrides": [
+    {
+      "includes": ["negative/**"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noUnusedVariables": "off",
+            "noUnusedImports": "off"
+          },
+          "nursery": {
+            "noFloatingPromises": "off"
+          }
+        }
+      }
+    }
+  ],
+  "root": false
+}
