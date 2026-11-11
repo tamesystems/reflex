@@ -1,12 +1,8 @@
 # Reflex userland API specification, revision 3 (implementation contract)
 
-Status: A1–C implemented; D legacy cleanup is in progress. The React, React Router and
-Expo root/advanced export-name sets now match these declarations. Full-package legacy
-deletion and the 7,600-line acceptance target remain outstanding. This document is not
-yet marked fully implemented. Decisions: [ADR 0020](../decisions/0020-userland-api.md).
-Revision 1 baseline: `9debc24` on `origin/userland-api-spec`. Rubric:
-[api-principles.md](../api-principles.md). Architecture, protocol/controller parity,
-access policy and dependency boundaries remain authoritative.
+Status: implemented. All 16 specified root, advanced and dev entry export-name sets
+match the declarations. The accepted implementation deviations and retained internal
+shrink candidates are recorded in [ADR 0020](../decisions/0020-userland-api.md).
 
 ## 1. Reading and verification contract
 
@@ -423,18 +419,16 @@ The compiled abort-ignoring case is an acceptance program, not runtime evidence.
 | transformed store error         | Validate explicit projectError output and detach it; automatic inversion of Standard Schema transforms is unavailable.                                                                                         | Runtime obligation                                       |
 | redacted/encoded consumer state | Validate actual encode/redaction behavior and custom wire codecs; consumer-state.ts verifies the derived encoded/read-only/redacted types.                                                                     | Runtime obligation; static types verified                |
 | common layer extensions         | Runtime provisioning agrees with the retained common output; two extensions/defaults compile in consumer-state.ts.                                                                                             | Runtime obligation; static coverage verified             |
-| resource/type budgets           | Prove registry deadlines and limits under abort/reset; implement within the 7,600-line allocation, without hiding logic in tests.                                                                              | Runtime obligation; implementation size unproven         |
+| resource/type budgets           | Prove registry deadlines and limits under abort/reset; preserve the root type and per-screen performance budgets.                                                                                              | Runtime and type-performance gates verified              |
 
-The implementation allocation remains 7,600 source lines across the seven packages
-(effect 2,350; runtime 2,550; react 600; expo 400; react-router 250; live 700; test 750).
-This is a planning ceiling, not measured implementation feasibility. Delete redundant
-identity tokens, queued afterAction navigation, separate Suspense caches, append-only
-store retention, manual provider wrappers and duplicate typed clients. Reuse protocol
-validation, access checks, redaction, transport/auth, projection and controllers.
+The original allocation was 7,600 source lines across seven packages. It is a planning
+target and no longer a landing requirement. ADR 0020 records current per-package counts,
+the gap, necessary runtime behavior and specific internal shrink candidates. Resource
+limits, root instantiation budgets and screen/hook performance gates remain requirements.
 
 ## 4. Complete authored files
 
-These paths describe the future app layout. The physical compiled copies are under
+These paths describe the implemented app layout. The physical compiled copies are under
 prototypes/examples/. Production scenarios live in app.ts; test fixtures enter only
 through scenarios.ts or the E2E provider alias. The plain example precedes routing.
 One-step, split and advanced tiers show their actual first ten lines, with no hidden
@@ -2293,17 +2287,17 @@ longPath.href(Count, { count: "1" })
   acceptance requirement; declaration-only compilation cannot establish runtime parity.
 
 The implementation packs author metadata under a symbol and compiles extracted author,
-store, host and journey examples against the real packages. Legacy cleanup, complete
-export equality and the source budget remain acceptance work; command-erasure lint is
-deferred.
+store, host and journey examples against the real packages. Exact public export names
+are checked for all 16 specified entries; retained internal paths and the deferred
+command-erasure lint rule are recorded in ADR 0020.
 
 ## 6. Validation
 
 Run bun docs/design/prototypes/check.ts for the executable target. This validates the
-proposed declarations and compiled examples; it does not validate the package runtime.
-The implementation migration must additionally compile these exact examples against real
-package exports and run the runtime/browser/production-exclusion suites. Do not mark this
-reference implemented until that evidence exists.
+reference declarations, compiled examples, negative diagnostics and performance gates.
+Run with --real for exact public export equality and compilation against the packages,
+and with --real --performance for the real-package scale gates. Runtime, browser and
+production-exclusion suites are described in development.md.
 
 ### Restored capabilities
 
@@ -2526,8 +2520,9 @@ implementation and Metro to Expo's Effect-free helper. Sibling integration plumb
 internal entries; Expo's specified advanced entry exposes `routeCodec`. The E2E provider
 retains startup-failure probes and scenario selection in its separate instrumented module.
 
-Internal Effect/test legacy paths remain pending D deletion; their retention is temporary,
-not an accepted final deviation. The eight Effect/React/React Router/Expo root and advanced name
-sets are checked against the declarations by the real-package harness. The complete
-export equality gate and source budget remain pending. The command-erasure lint rule
-remains explicit follow-up work. See ADR 0020 for the design and implementation status.
+All 16 runtime/live/test/React/React Router/Expo/Effect root, advanced and dev export-name
+sets are checked against the declarations by the real-package harness. Private capability,
+guard, decoded-dispatch, consumer-type and raw-host test paths remain to avoid a large
+internal refactor during landing. The original source-line allocation is no longer an
+acceptance gate. ADR 0020 is the final record of counts, reasons and shrink candidates.
+The command-erasure lint rule remains explicit follow-up work.

@@ -5,7 +5,7 @@ Call `createReflex(app)` once at module scope and destructure its `Provider`,
 The default entry is host-neutral and imports no Effect, router or native framework.
 
 `useScreen(Contract)` suspends until ready and throws build errors to the nearest
-boundary. `useScreenSuspense` is its compatibility alias. `useScreenStatus(Contract)`
+boundary. `useScreenSuspense` is its explicit alias. `useScreenStatus(Contract)`
 returns pending/error/ready; an error includes `error` and `retry()`. Screen membership
 uses a name-indexed type table, with exact constructor checks at runtime.
 `useService(Definition)` subscribes to ambient service state and action controls.

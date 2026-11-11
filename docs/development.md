@@ -88,7 +88,7 @@ The `bun test` suites, by kind:
 
 - **Unit**, beside each package (`packages/*/test`): pure functions and one class at a
   time, with ports faked (timers, the router, sockets).
-- **Journeys**, through `@reflex/test`: `createTestApp(host)` drives an app through the real
+- **Journeys**, through `@reflex/test`: `createTestApp(app)` drives an app through the real
   protocol, serialized to JSON as a remote peer would see it. `advanceTime` moves virtual
   time; nothing sleeps. `explore(host, { invariant })` walks random available actions with
   schema-generated inputs and shrinks a failure, within a budget of 200 replays. Give it
@@ -290,10 +290,11 @@ inference cases, complete documentation snippets, root/mobile/web typechecks and
 Intentionally partial snippets use `ts partial: reason` or `tsx partial: reason`.
 
 `bun docs/design/prototypes/check.ts --real` also compares the exact type and value
-export-name sets for the Effect, React, React Router and Expo root/advanced entries against the
-spec declarations. Internal Effect and runtime/live/test export cleanup remains in progress. The store author entry now
+export-name sets for all 16 specified runtime, live, test, Effect, React, React Router
+and Expo root/advanced/dev entries against the declarations. Internal entries serve
+sibling integration and deliberately malformed host fixtures. The store author entry
 accepts only screen/service arrays and withStore overrides; conformance tests drive the
-wire client directly. Raw store mounting and throwable failure exports have been removed. Run
+wire client directly. Run
 `bun docs/design/prototypes/check.ts` for the declaration examples, diagnostic locations
 and reference performance gates. Run `bun docs/design/prototypes/check.ts --real --performance`
 for the real-package gates. Measurements print to stdout; no generated reports are tracked.
@@ -319,23 +320,7 @@ These cover production bridge/token/instrumentation exclusion and the plain Metr
 graph's Effect exclusion as well as browser behavior. All three frozen installs are
 required before checking a checkout.
 
-D's first cleanup on macOS measured 503,424 root instantiations, 534,982 K memory,
-2.05 s check and 2.78 s total. Exact real-package examples compiled with 254,482
-instantiations. The real-package screen gate measured 1.22/2.41/3.75 s for
-100/200/400 screens (564,961 / 1,195,561 / 2,876,761 instantiations); slopes were
-11.90/6.70 ms per screen and additional hooks at most 0.223 ms. Reference declarations
-passed at 8.80 ms per screen and at most 0.912 ms per additional hook. These local runs
-included concurrent browser work; the root instantiation ceiling remains unchanged.
-
-The partial D2 store/conformance cleanup passes the unchanged root type gate at 504,641
-instantiations. Regression tests construct store definitions directly; overlapping store
-inference cases live in `packages/runtime/test/store-author.types.ts`. See ADR 0020 for
-remaining cleanup and source counts; this checkpoint does not meet final acceptance.
-
-The D3 Effect checkpoint passes the unchanged root gate at 486,449 instantiations
-(539,368 K memory, 1.51 s check locally). Eight public root/advanced export sets match
-the declarations. Real-package examples compiled with 248,857 instantiations. Reference
-performance gates passed at 8.60 ms per added screen and at most 0.050 ms per added hook;
-real-package gates passed at 19.0 ms per screen and at most 0.117 ms per hook. These
-measurements include local scheduler noise; no budget was raised. See ADR 0020 and its
-Effect inventory for the two remaining low-level fixture suites and internal cleanup.
+Current local root diagnostics: 495,490 instantiations under the unchanged 505,132
+ceiling. Both reference-declaration and real-package harness modes pass their screen
+and hook gates. Timing depends on scheduler load; rerun the commands above for local
+measurements. ADR 0020 records final source counts and retained internal shrink work.

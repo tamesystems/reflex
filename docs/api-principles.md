@@ -1,6 +1,6 @@
 # API principles
 
-The scoring standard for reviewing Reflex's application-author-facing APIs (`Screen`, `defineService`, `defineFixture`, `defineNavigation`, `defineApp`, `defineStoreNode`, `defineStoreApp`, the React, Expo Router and React Router hooks, and journeys). Define a contract once, attach it to a runtime value, and derive every consumer type from it. These principles also judge ceremony, lifetimes, naming and teaching.
+The scoring standard for reviewing Reflex's application-author-facing APIs (`Screen`, `defineService`, `defineFixture`, `defineNavigation`, `defineApp`, `defineStoreNode`, `defineStoreApp`, the app-bound `createReflex`, `createReflexExpo` and `createReflexRouter` bindings, and journeys). Define a contract once, attach it to a runtime value, and derive every consumer type from it. These principles also judge ceremony, lifetimes, naming and teaching.
 
 North star: APIs "should be easy to use and hard to misuse. It should be easy to do simple things; possible to do complex things; and impossible, or at least difficult, to do wrong things" (Bloch). Users should "simply fall into winning practices" (Mariani, the Pit of Success).
 

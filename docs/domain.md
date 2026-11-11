@@ -122,12 +122,12 @@ the protocol name for a focus-gated node. Expo Router projection is one optional
 **Definition.** A real value carrying state, input, actions, declared errors and guards.
 UI bindings and journeys consume this value; they do not reconstruct its types.
 
-**Node handle** (`NodeHandle`). The consumer's typed snapshot/subscription, action object,
-availability. Ownership is separate from consumer access. Distinct from its opaque protocol id. `actions.Save()` takes no
-input; `actions.SetQuantity({ quantity })` requires exactly that action's input.
+**Owned node.** Advanced ownership exposes state, change subscriptions, typed action
+controls and disposal. Ordinary UI bindings expose node views; journeys expose typed
+state reads and actions. Ownership is separate from the opaque protocol node id.
 
 **Action outcome.** The local result: completed, cancelled, refused with a reason,
-domain-error with safe declared data, or defect. Wire operations retain their original
+error with safe declared data, or defect. Wire operations retain their original
 running/completed/failed/cancelled statuses. Consumers see encoded/redacted public state and error data; handlers retain decoded state.
 
 **Guarded reducer.** `action.when(tag).reduce(...)` narrows state and rechecks its tag before

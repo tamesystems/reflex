@@ -36,7 +36,7 @@ live bridge need no React, React Native or Expo.
 - **Effect integration**: `Screen`, `defineService`, `defineFixture`, `defineNavigation`, `defineApp`.
 - **CLI**: background sessions, the device bridge and the MCP server.
 - **Live serving**: `@reflex/live` connects any JS app to the bridge with a global WebSocket.
-- **React bindings**: `@reflex/react` provides the provider and hooks without a router dependency.
+- **React bindings**: `createReflex(app)` from `@reflex/react` binds a Provider and typed hooks without a router dependency.
 - **Router-neutral projection**: `@reflex/navigation` owns the pure rules and port controller.
 - **React Router binding**: `@reflex/react-router` reports focus for existing routes;
   [apps/web](apps/web/README.md) proves live CLI/MCP control without Effect.

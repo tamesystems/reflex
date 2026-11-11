@@ -171,4 +171,4 @@ Cancellation aborts the handler's signal and revokes its store facade, including
 methods, before abort listeners run. Independently retained raw stores remain application
 owned. Pass signals to I/O; JavaScript cannot stop a Promise that ignores cancellation.
 Effect scopes interrupt owned fibers. See [architecture](ARCHITECTURE.md) for flows and
-[ADR 0020](decisions/0020-userland-api.md) for the design and remaining cleanup.
+[ADR 0020](decisions/0020-userland-api.md) for the final API and retained internals.

@@ -475,7 +475,7 @@ decision is in its ADR; what is still to do is in [roadmap.md](roadmap.md).
 
 ## 10. Author contracts and host bindings
 
-[ADR 0020](decisions/0020-userland-api.md) records the redesign and remaining cleanup.
+[ADR 0020](decisions/0020-userland-api.md) records the final API and retained internals.
 Effect uses `Screen`, `defineService` and `defineFixture`; stores use `defineStoreNode`.
 A screen contract precedes handlers and navigation. Implementations attach actions;
 app composition registers screens, services, fixtures and scenarios. Symbol-keyed host
