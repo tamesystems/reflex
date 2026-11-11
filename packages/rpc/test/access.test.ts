@@ -12,7 +12,7 @@ import {
 } from "@reflex/rpc"
 import { createController, restrictController } from "@reflex/runtime/internal"
 import { waitUntil } from "@reflex/test"
-import app from "../../../examples/inventory/src/app.ts"
+import app from "../../../examples/inventory/src/scenarios.ts"
 
 const cleanups: Array<() => Promise<void> | void> = []
 afterEach(async () => {

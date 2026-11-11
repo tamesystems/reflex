@@ -1,3 +1,4 @@
+import { legacyApp } from "@reflex/effect/internal"
 import { expect, test } from "bun:test"
 import { createController } from "@reflex/runtime/internal"
 import { defineApp } from "@reflex/effect"
@@ -12,10 +13,10 @@ import * as FetchHttpClient from "effect/http/FetchHttpClient"
 import { Nav } from "../examples/inventory/src/navigation.ts"
 import { InventoryList } from "../examples/inventory/src/features/inventory-list.ts"
 import { InventoryDetail } from "../examples/inventory/src/features/inventory-detail.ts"
+import { InventoryList as InventoryListContract } from "../examples/inventory/src/screens.ts"
 import { Settings } from "../examples/inventory/src/features/settings.ts"
-const root = Nav.layer({
-  screens: { InventoryList, InventoryDetail, Settings },
-  initial: "InventoryList",
+const navigation = Nav.implement([InventoryList, InventoryDetail, Settings], {
+  initial: InventoryListContract,
 })
 import { InventoryApi } from "../examples/inventory/src/domain.ts"
 import { fixtureSettings, seedProducts } from "../examples/inventory/src/fixtures.ts"
@@ -125,11 +126,11 @@ for (const leave of ["pop", "reset"] as const) {
     })
     const host = defineApp({
       name: "cancellation",
-      root,
+      navigation,
       defaultScenario: "http",
       scenarios: { http: { layer: withFetch(fetcher) } },
     })
-    const controller = await createController(host)
+    const controller = await createController(legacyApp(host))
     const client = createLoopbackClient(controller)
     try {
       await client.request("app.wait", { idle: true })

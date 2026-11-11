@@ -382,15 +382,20 @@ export type ActionCalls<A> = {
     ...args: ConsumerArgs<A[K]>
   ) => Promise<ActionOutcome<ActionError<A[K]>>>
 }
-type ConsumerArgs<D> = D extends { readonly input: Schema.Codec<unknown, infer In> }
-  ? [input: PublicState<In>]
-  : D extends ActionDefinition<Erased, infer I, Erased, Erased, Erased, Erased, infer In>
-    ? [I] extends [NoInput]
-      ? []
-      : [input: PublicState<In>]
-    : never
-type ActionError<D> =
-  D extends ActionDefinition<Erased, Erased, Erased, Erased, Erased, infer W>
+type ConsumerArgs<D> = D extends import("./author-model.ts").Action<infer I, Erased, Erased, Erased>
+  ? [I] extends [undefined]
+    ? []
+    : [input: I]
+  : D extends { readonly input: Schema.Codec<unknown, infer In> }
+    ? [input: PublicState<In>]
+    : D extends ActionDefinition<Erased, infer I, Erased, Erased, Erased, Erased, infer In>
+      ? [I] extends [NoInput]
+        ? []
+        : [input: PublicState<In>]
+      : never
+type ActionError<D> = D extends import("./author-model.ts").Action<Erased, infer E, Erased, Erased>
+  ? E
+  : D extends ActionDefinition<Erased, Erased, Erased, Erased, Erased, infer W>
     ? PublicState<W>
     : never
 
@@ -622,6 +627,20 @@ const toOutcome = (
   const failure = Cause.findErrorOption(exit.cause)
   if (Option.isSome(failure)) {
     const tag = failureFields(failure.value)._tag
+    if (tag === "NavigationRefused" || tag === "StateChanged") {
+      return {
+        status: "failed",
+        error: {
+          tag,
+          message: boundedText(
+            String(
+              (failure.value as { reason?: string }).reason ?? "State changed during the action",
+            ),
+          ),
+          defect: false,
+        },
+      }
+    }
     if (tag === "NavigationStackFull" || tag === "ScreenBuildTimedOut") {
       return { status: "failed", error: describeFailure(failure.value, undefined) }
     }
@@ -764,7 +783,7 @@ class NodeInstance<S, A extends ActionsOf<S>, R, P, W>
 
   isInstanceOf(capability: unknown): boolean {
     return (
-      typeof capability === "object" &&
+      (typeof capability === "object" || typeof capability === "function") &&
       capability !== null &&
       contractIdentity(this.capability) === contractIdentity(capability)
     )
@@ -985,7 +1004,9 @@ class NodeInstance<S, A extends ActionsOf<S>, R, P, W>
     schema: WireCodec<unknown> | undefined,
   ): Invocation {
     const pending: Effect.Effect<void, unknown>[] = []
-    let fiber = this.host.fork(Effect.provideService(effect, ActionNavigation, { pending }))
+    let fiber = this.host.fork(
+      Effect.provideService(Effect.scoped(effect), ActionNavigation, { pending }),
+    )
     this.host.supervise(fiber)
     return {
       done: new Promise((resolve) => {
@@ -998,7 +1019,9 @@ class NodeInstance<S, A extends ActionsOf<S>, R, P, W>
           }
           // The handler is finished before a pop can retire its scope. Navigation's
           // own lifetime belongs to the navigator rather than the departed screen.
-          fiber = this.host.fork(Effect.forEach(pending, (work) => work, { discard: true }))
+          fiber = this.host.fork(
+            Effect.scoped(Effect.forEach(pending, (work) => work, { discard: true })),
+          )
           fiber.addObserver(finish)
         })
       }),

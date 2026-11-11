@@ -16,6 +16,6 @@ export * from "./store-app.ts"
 export type { OwnedRoute } from "./route-mount.ts"
 export { registerRouteFactories, mountSessionRoute } from "./route-mount.ts"
 
-export { DEFINITION_IDENTITY, definitionIdentity } from "./definition-identity.ts"
+export { DEFINITION_IDENTITY, definitionIdentity, APP_HOST_ADAPTER } from "./definition-identity.ts"
 
 export { publishJson } from "./publication.ts"

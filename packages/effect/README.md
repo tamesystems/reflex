@@ -1,60 +1,68 @@
 # @reflex/effect
 
 Contracts precede implementations. Navigation imports contracts; features import navigation.
-One app value then supplies host bindings and journey membership.
+Actions receive decoded input and `{ state }`. Consumers observe encoded JSON values.
 
 ```ts
-import { defineApp, defineNavigation, defineScreen } from "@reflex/effect"
-import * as Layer from "effect/Layer"
+import { Screen, defineApp, defineNavigation } from "@reflex/effect"
 import * as Schema from "effect/Schema"
 
-const DetailScreen = defineScreen({
-  name: "Detail",
+class DetailScreen extends Screen("Detail", {
   state: Schema.NumberFromString,
-  params: Schema.Struct({ id: Schema.String }),
+  params: { id: Schema.String },
   initial: () => 0,
-})
-const Nav = defineNavigation("app/Navigation", { Detail: DetailScreen })
+}) {}
+const Nav = defineNavigation({ Detail: DetailScreen })
 const Detail = DetailScreen.implement({
   actions: (action) => ({
-    Open: action({ handler: () => Nav.push("Detail", { id: "next" }) }),
-    Close: action({ handler: () => Nav.back }),
+    Increment: action.reduce({ reducer: (_, count) => count + 1 }),
+    Open: action.navigates({ handler: () => Nav.push(DetailScreen, { id: "next" }) }),
+    Close: action.navigates({ handler: () => Nav.back }),
   }),
 })
 export const app = defineApp({
   name: "detail",
-  navigation: Nav.implement({ Detail }, { initial: { route: "Detail", params: { id: "first" } } }),
-  scenarios: { default: { layer: Layer.empty } },
-  defaultScenario: "default",
+  navigation: Nav.implement([Detail], {
+    initial: { screen: DetailScreen, params: { id: "first" } },
+  }),
 })
 ```
 
-A param-free initial route can be a string. Navigation runs after a successful handler;
-returning from a pop reports `completed`. Stack/build refusals become `refused` without
-an action error declaration. Other failures require `error: Schema`. Only checked values
-from the action builder may appear in an action map.
+Use `Screen.define(name, spec)` for a one-step screen with no params. `defineService`
+creates ambient service nodes. `defineFixture` creates scenario-local state access that
+can also be yielded from a service Layer. Its controls remain observable fixture nodes.
 
-Contracts share runtime identity with every implementation. Composition checks identity,
-checks literal names, and rejects duplicate/conflicting implementations. TypeScript cannot
-generate a fresh nominal type on every function call: where independently declared
-same-name contracts must be distinguished statically, pass `identity: token` with an
-explicit `const token = Symbol("Detail")` unique symbol. No token is needed for ordinary
-unique names. Navigator keys must be unique in an app.
+`action.when(tag)` narrows state and checks availability before dispatch. Guarded writes
+recheck the current tag atomically; a suspended handler cannot overwrite another variant.
+`state.set`, `state.update` and `state.when(tag)` share the same validated write path.
+`Screen.handler` and `Screen.when(tag).handler` infer shared `(input, ctx)` helpers.
+Focus hooks handle expected failures into state.
 
-`InferState`, `InferInput` and `InferError` describe encoded consumer values; handlers keep
-decoded values. Tuples retain positions and length. `action.when(tag)` narrows state and
-rechecks the tag at commit. `state.when(tag)` selects another phase after suspension.
-`Screen.handler` and `Screen.when(tag).handler` infer shared helper arguments. Focus hooks
-handle expected load errors into state; their error channel is empty.
+`action.navigates` accepts bare commands or Effects returning a command. Return
+`Nav.push(Screen, params)`, `Nav.back` or `Nav.stay`. The handler and its child scope
+finish before navigation runs. Push/back report `completed`; navigation refusal reports
+`refused` after optional `onRefused` state recovery. Discarded commands and commands
+from a different navigator produce diagnostics. Navigation uses exact contract identity.
 
-Root exports are the four definers, `action` (a standalone state-bound builder factory)
-and `Infer*` types. `/advanced` holds ownership types and `mount` for custom non-navigation
-roots. `/internal` holds registry, `mountWithAccess` for fixtures, redaction, decoded
-dispatch and custom factory navigation. Scenarios stay plain Layers; declare fixtures once
-with `defineApp({ fixtures: { Fixture }, ... })`.
+Inputs, errors, params and state must encode JSON. `/advanced` exports `jsonCodec` for
+explicit custom wire representations. `InferState`, `InferActions`, `InferInput` and
+`InferError` describe encoded consumer values; handlers keep decoded values.
 
-[ADR 0022](../../docs/decisions/0022-contract-identity-and-app-bindings.md) records these changes.
+App provision order is fixtures → common `layer` → scenario `layer` → handlers. Each
+stage must satisfy its inputs from earlier stages. A layer cannot satisfy its own inputs.
+Omitting scenarios creates the literal `default` scenario and still checks coverage.
+`.withScenarios(extra, options)` adds names, preserves existing scenario fixtures, and
+can select a new default and fixture defaults for the new scenarios.
 
-State access belongs to its mounted node. After disposal, reads and updates fail before
-calling application transitions. Published encoded state is detached and deeply frozen
-through the same JSON publication boundary as store nodes.
+The current journey and UI APIs use `legacyApp(app)` from `@reflex/effect/internal`.
+Inventory's `scenarios.ts` supplies that adapter; its production entry stays an authored
+app, which the CLI recognizes through the same internal host adapter.
+
+Legacy `defineScreen`, `defineCapability`, `action` and the old app/navigation overloads
+remain available until their consumers migrate. Their explicit internal names are
+`legacyDefineApp` and `legacyDefineNavigation`. `/advanced` retains legacy ownership
+APIs; `/internal` retains registry, scoped mounting and integration plumbing.
+
+State access belongs to its mounted node. Published state is detached and deeply frozen
+through the same JSON publication boundary as store nodes. See
+[ADR 0024](../../docs/decisions/0024-additive-effect-author-api.md).

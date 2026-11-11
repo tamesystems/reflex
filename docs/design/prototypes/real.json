@@ -1,0 +1,5 @@
+{
+  "extends": "./examples.json",
+  "compilerOptions": { "paths": {} },
+  "include": ["examples/examples/inventory/src/**/*.ts"]
+}

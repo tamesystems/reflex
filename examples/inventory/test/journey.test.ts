@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from "bun:test"
 import { createTestAppPool, includes } from "@reflex/test"
-import app from "../src/app.ts"
+import app from "../src/scenarios.ts"
 import { InventoryList } from "../src/features/inventory-list.ts"
 import { InventoryDetail } from "../src/features/inventory-detail.ts"
 import { InventoryFixture } from "../src/fixtures.ts"

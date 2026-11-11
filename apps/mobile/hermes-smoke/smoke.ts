@@ -3,7 +3,7 @@
  * `run.ts` builds it; the last line printed is the verdict.
  */
 import "./shims.ts"
-import app from "@reflex/example-inventory"
+import app from "@reflex/example-inventory/scenarios.ts"
 import { ProtocolError } from "@reflex/protocol"
 
 declare const print: (...args: Array<unknown>) => void

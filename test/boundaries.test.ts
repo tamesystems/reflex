@@ -196,9 +196,12 @@ test("headless inventory host excludes real HTTP and device storage implementati
       {
         name: "fixture-service-boundary",
         setup(builder) {
-          builder.onLoad({ filter: /(?:http-api|settings-store)\.ts$/ }, () => {
-            throw new Error("Headless inventory imported real services")
-          })
+          builder.onLoad(
+            { filter: /(?:http-api\.ts|apps[\\/]mobile[\\/]src[\\/]settings-store\.ts)$/ },
+            () => {
+              throw new Error("Headless inventory imported real services")
+            },
+          )
           builder.onResolve({ filter: /^@react-native-async-storage\// }, () => {
             throw new Error("Headless inventory imported device storage")
           })

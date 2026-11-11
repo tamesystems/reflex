@@ -1,4 +1,8 @@
-import { defineApp, defineNavigation, defineScreen, defineCapability } from "@reflex/effect"
+import {
+  legacyDefineApp as defineApp,
+  legacyDefineNavigation as defineNavigation,
+} from "@reflex/effect/internal"
+import { defineScreen, defineCapability } from "@reflex/effect"
 import type { InferState, InferError } from "@reflex/effect"
 import { defineStoreNode, standardInput } from "@reflex/runtime"
 import { createTestAppPool } from "@reflex/test"

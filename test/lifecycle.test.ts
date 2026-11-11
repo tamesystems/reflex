@@ -41,7 +41,7 @@ import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
 import * as Redacted from "effect/Redacted"
 import * as Schema from "effect/Schema"
-import inventory from "../examples/inventory/src/app.ts"
+import inventory from "../examples/inventory/src/scenarios.ts"
 
 const pool = createTestAppPool()
 const controllers: Array<Controller> = []

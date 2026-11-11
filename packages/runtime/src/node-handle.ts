@@ -51,6 +51,8 @@ export const actionOutcome = async <E>(
         return { status: "cancelled" }
       case "failed":
         if (
+          operation.error.tag === "NavigationRefused" ||
+          operation.error.tag === "StateChanged" ||
           operation.error.tag === "NavigationStackFull" ||
           operation.error.tag === "ScreenBuildTimedOut"
         ) {

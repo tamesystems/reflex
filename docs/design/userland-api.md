@@ -1,11 +1,10 @@
 # Reflex userland API specification, revision 3 (implementation contract)
 
-Status: proposed target API; **no runtime implementation is changed or claimed**.
+Status: Effect author tier implemented in A1; consumer and store tiers remain proposed.
 Revision 1 baseline: `9debc24` on `origin/userland-api-spec`. Rubric:
 [api-principles.md](../api-principles.md). Architecture, protocol/controller parity,
-access policy and dependency boundaries remain authoritative. This design does not
-implement a roadmap item or supersede a shipped ADR. An implementation needs its own
-ADR and roadmap update. Changes in this revision stay in this file and prototypes/.
+access policy and dependency boundaries remain authoritative. A1 is recorded in [ADR 0024](../decisions/0024-additive-effect-author-api.md). It does not
+implement a roadmap item. The remaining consumer migration is not claimed by A1.
 
 ## 1. Reading and verification contract
 
@@ -36,9 +35,8 @@ harness. A **runtime obligation** means required future behavior with acceptance
 not a passing test against an imaginary implementation. **Unproven** means the proposed
 surface or policy still lacks executable evidence. Runtime obligations are listed
 separately from the executable misuse table, rather than misrepresented as tsc failures.
-The repository check does not invoke this proposed API; both commands are required for
-this design review. Wiring the harness into CI is an implementation acceptance task
-because this change may not edit package.json or scripts/.
+The repository check now invokes the real-package inventory mode. The full declaration
+harness remains a separate check for consumer and store tiers that have not migrated.
 
 ## 2. Core model and decisions
 
@@ -954,6 +952,7 @@ import * as Layer from "effect/Layer"
 import * as Schema from "effect/Schema"
 import * as FetchHttpClient from "effect/http/FetchHttpClient"
 import * as HttpClient from "effect/http/HttpClient"
+import * as HttpClientResponse from "effect/http/HttpClientResponse"
 import * as HttpClientRequest from "effect/http/HttpClientRequest"
 import { ApiError, InventoryApi, Product } from "./domain.ts"
 
@@ -965,13 +964,9 @@ export const httpInventoryApi = (baseUrl: string) =>
   Layer.effect(
     InventoryApi,
     Effect.gen(function* () {
-      const client = HttpClient.withScope(yield* HttpClient.HttpClient)
+      const client = HttpClient.filterStatusOk(HttpClient.withScope(yield* HttpClient.HttpClient))
       const base = baseUrl.replace(/\/$/, "")
-      const request = <C extends Schema.Codec<unknown, unknown>>(
-        path: string,
-        schema: C,
-        quantity?: number,
-      ) =>
+      const request = <A>(path: string, schema: Schema.Codec<A, unknown>, quantity?: number) =>
         Effect.gen(function* () {
           const req =
             quantity === undefined
@@ -979,7 +974,15 @@ export const httpInventoryApi = (baseUrl: string) =>
               : HttpClientRequest.put(`${base}${path}`).pipe(
                   HttpClientRequest.bodyJsonUnsafe({ quantity }),
                 )
-          const response = yield* client.execute(req)
+          const response = yield* client
+            .execute(req)
+            .pipe(
+              Effect.catchTag("HttpClientError", (error) =>
+                error.reason._tag === "StatusCodeError"
+                  ? Effect.succeed(error.reason.response)
+                  : Effect.fail(error),
+              ),
+            )
           // A declared size is refused before any of it is read; the rest is checked after.
           const declared = Number(response.headers["content-length"] ?? Number.NaN)
           if (declared > INVENTORY_HTTP_BODY_BYTES_MAX) {
@@ -989,19 +992,28 @@ export const httpInventoryApi = (baseUrl: string) =>
           if (bytes.byteLength > INVENTORY_HTTP_BODY_BYTES_MAX) {
             return yield* new ApiError({ message: "Inventory response too large" })
           }
-          const json = new TextDecoder().decode(bytes)
+          const buffered = HttpClientResponse.fromWeb(req, new Response(bytes))
+          const decode = <T>(codec: Schema.Codec<T, unknown>) =>
+            HttpClientResponse.schemaBodyJson(codec)(buffered)
           if (response.status < 200 || response.status >= 300) {
-            const body = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(ErrorBody))(json)
+            const body = yield* decode(ErrorBody)
             return yield* new ApiError({ message: body.message })
           }
-          return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(schema))(json)
+          return yield* decode(schema)
         }).pipe(
           Effect.scoped,
-          Effect.mapError((error) =>
-            error instanceof ApiError
-              ? error
-              : new ApiError({ message: "Inventory request failed" }),
-          ),
+          Effect.catchTags({
+            HttpClientError: (error) =>
+              Effect.fail(
+                new ApiError({
+                  message:
+                    error.reason._tag === "DecodeError"
+                      ? "Invalid inventory JSON"
+                      : "Inventory request failed",
+                }),
+              ),
+            SchemaError: () => Effect.fail(new ApiError({ message: "Inventory request failed" })),
+          }),
           Effect.timeoutOrElse({
             duration: INVENTORY_HTTP_TIMEOUT_MS,
             orElse: () => Effect.fail(new ApiError({ message: "Inventory request timed out" })),
@@ -2279,11 +2291,10 @@ longPath.href(Count, { count: "1" })
 - Real-package compilation of the exact authored examples is an implementation
   acceptance requirement; declaration-only compilation cannot establish runtime parity.
 
-The target declarations and examples below are still proposed, not a shipped API.
-The symbol-metadata packing, HTTP rewrite, complete type-export example coverage,
-runtime message catalogue and real-package harness are not yet implemented in this
-reference checkpoint. These are outstanding implementation requirements, not silently
-removed capabilities. The command-erasure lint rule alone is deliberately follow-up.
+The Effect author tier now packs phantom metadata under a symbol and implements the
+HTTP rewrite, runtime command diagnostics and real-package inventory harness. Consumer
+and store tiers, complete type-export example coverage, and the command-erasure lint
+rule remain later work; the full design is not yet a shipped API.
 
 ## 6. Validation
 
@@ -2494,3 +2505,23 @@ export const Metrics = defineService({
   actions: (a) => ({ Increment: a.reduce({ reducer: (_, n) => n + 1 }) }),
 })
 ```
+
+## Implementation deviations
+
+A1 retains legacy overloads and adds `legacyApp` under `@reflex/effect/internal` while
+old consumers migrate. Inventory's `scenarios.ts` exports the authored value as
+`authoredApp` and adapts its default export to the existing journey API. Feature and
+screen aliases preserve mobile imports. Production composition remains the exact
+compiled example, with no implicit HTTP fallback.
+
+TypeScript 5.9 requires two declaration-level inference corrections: one-step builders
+use the already inferred codec state directly (the outer `NoInfer` made tagged guards
+infer `never`), and the omitted-scenarios `defineApp` overload infers the whole spec
+before checking common-layer coverage. Callable behavior and coverage rules are
+unchanged. The declaration harness and real-package negative tests include these
+corrections. Author phantom metadata is symbol-packed in the implementation; the
+reference model's consumer fields remain declaration plumbing until their migration.
+
+The HTTP example now uses `filterStatusOk`, `schemaBodyJson`, and `catchTags`, while
+retaining byte/deadline bounds and the established invalid-JSON error message. Its
+extracted example and this document are kept identical.

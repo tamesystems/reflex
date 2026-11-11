@@ -12,7 +12,7 @@ import { afterEach, expect, test } from "bun:test"
 import { ErrorCode } from "@reflex/protocol"
 import { createConnection } from "@reflex/rpc"
 import { type Controller, createController } from "@reflex/runtime/internal"
-import app from "../../examples/inventory/src/app.ts"
+import app from "../../examples/inventory/src/scenarios.ts"
 import { createEffectRpcConnection } from "./connection.ts"
 
 const REPLY_DEADLINE_MS = 10_000

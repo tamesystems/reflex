@@ -59,6 +59,13 @@ for (const file of authored) {
 if (blocks.length !== authored.length) {
   throw new Error("Spec has an unextracted example")
 }
+if (process.argv.includes("--real")) {
+  const result = tsc(join(home, "real.json"))
+  console.log(
+    `Real @reflex/effect inventory examples: passed (${result.instantiations} instantiations)`,
+  )
+  process.exit(0)
+}
 function checkPublicExamples() {
   const config = ts.readConfigFile(join(home, "examples.json"), ts.sys.readFile)
   const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, home)

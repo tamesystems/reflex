@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from "bun:test"
 import { ErrorCode, toNodeId } from "@reflex/protocol"
 import { createTestAppPool, type InferState } from "@reflex/test"
-import app from "../examples/inventory/src/app.ts"
+import app from "../examples/inventory/src/scenarios.ts"
 import { QUANTITY_MAX } from "../examples/inventory/src/domain.ts"
 
 import { InventoryFixture } from "../examples/inventory/src/fixtures.ts"

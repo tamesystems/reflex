@@ -6,7 +6,9 @@ import { testHost, E2EBridge } from "./instrumentation.tsx"
 
 const bridge = developmentBridge()
 export const E2EProvider = ({ children }: { readonly children: ReactNode }) => {
-  const [scenario, setScenario] = useState(testHost.defaultScenario)
+  const [scenario, setScenario] = useState<(typeof testHost.scenarioNames)[number]>(
+    testHost.defaultScenario,
+  )
   return (
     <ReflexProvider
       host={testHost}

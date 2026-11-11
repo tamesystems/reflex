@@ -4,6 +4,7 @@ import * as Layer from "effect/Layer"
 import * as Schema from "effect/Schema"
 import * as FetchHttpClient from "effect/http/FetchHttpClient"
 import * as HttpClient from "effect/http/HttpClient"
+import * as HttpClientResponse from "effect/http/HttpClientResponse"
 import * as HttpClientRequest from "effect/http/HttpClientRequest"
 import { ApiError, InventoryApi, Product } from "./domain.ts"
 
@@ -15,9 +16,9 @@ export const httpInventoryApi = (baseUrl: string) =>
   Layer.effect(
     InventoryApi,
     Effect.gen(function* () {
-      const client = HttpClient.withScope(yield* HttpClient.HttpClient)
+      const client = HttpClient.filterStatusOk(HttpClient.withScope(yield* HttpClient.HttpClient))
       const base = baseUrl.replace(/\/$/, "")
-      const request = <A>(path: string, schema: Schema.Codec<A>, quantity?: number) =>
+      const request = <A>(path: string, schema: Schema.Codec<A, unknown>, quantity?: number) =>
         Effect.gen(function* () {
           const req =
             quantity === undefined
@@ -25,7 +26,15 @@ export const httpInventoryApi = (baseUrl: string) =>
               : HttpClientRequest.put(`${base}${path}`).pipe(
                   HttpClientRequest.bodyJsonUnsafe({ quantity }),
                 )
-          const response = yield* client.execute(req)
+          const response = yield* client
+            .execute(req)
+            .pipe(
+              Effect.catchTag("HttpClientError", (error) =>
+                error.reason._tag === "StatusCodeError"
+                  ? Effect.succeed(error.reason.response)
+                  : Effect.fail(error),
+              ),
+            )
           // A declared size is refused before any of it is read; the rest is checked after.
           const declared = Number(response.headers["content-length"] ?? Number.NaN)
           if (declared > INVENTORY_HTTP_BODY_BYTES_MAX) {
@@ -35,22 +44,28 @@ export const httpInventoryApi = (baseUrl: string) =>
           if (bytes.byteLength > INVENTORY_HTTP_BODY_BYTES_MAX) {
             return yield* new ApiError({ message: "Inventory response too large" })
           }
-          const json = yield* Effect.try({
-            try: () => JSON.parse(new TextDecoder().decode(bytes)) as unknown,
-            catch: () => new ApiError({ message: "Invalid inventory JSON" }),
-          })
+          const buffered = HttpClientResponse.fromWeb(req, new Response(bytes))
+          const decode = <T>(codec: Schema.Codec<T, unknown>) =>
+            HttpClientResponse.schemaBodyJson(codec)(buffered)
           if (response.status < 200 || response.status >= 300) {
-            const body = yield* Schema.decodeUnknownEffect(ErrorBody)(json)
+            const body = yield* decode(ErrorBody)
             return yield* new ApiError({ message: body.message })
           }
-          return yield* Schema.decodeUnknownEffect(schema)(json)
+          return yield* decode(schema)
         }).pipe(
           Effect.scoped,
-          Effect.mapError((error) =>
-            error instanceof ApiError
-              ? error
-              : new ApiError({ message: "Inventory request failed" }),
-          ),
+          Effect.catchTags({
+            HttpClientError: (error) =>
+              Effect.fail(
+                new ApiError({
+                  message:
+                    error.reason._tag === "DecodeError"
+                      ? "Invalid inventory JSON"
+                      : "Inventory request failed",
+                }),
+              ),
+            SchemaError: () => Effect.fail(new ApiError({ message: "Inventory request failed" })),
+          }),
           Effect.timeoutOrElse({
             duration: INVENTORY_HTTP_TIMEOUT_MS,
             orElse: () => Effect.fail(new ApiError({ message: "Inventory request timed out" })),

@@ -4,7 +4,7 @@ import { createTestAppPool } from "@reflex/test"
 import { defineStoreApp, defineStoreNode, standardInput } from "@reflex/runtime"
 import { z } from "zod"
 import { createStore } from "zustand/vanilla"
-import app from "../examples/inventory/src/app.ts"
+import app from "../examples/inventory/src/scenarios.ts"
 const screens = app.screens
 import { InventoryList } from "../examples/inventory/src/features/inventory-list.ts"
 import { InventoryDetail } from "../examples/inventory/src/features/inventory-detail.ts"

@@ -9,7 +9,7 @@ import { EventLog } from "../packages/runtime/src/event-log.ts"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
 import * as Schema from "effect/Schema"
-import inventory from "../examples/inventory/src/app.ts"
+import inventory from "../examples/inventory/src/scenarios.ts"
 
 const REQUEST_COUNT = 2_000
 const FRAME_COUNT = 200

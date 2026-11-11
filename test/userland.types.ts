@@ -1,4 +1,8 @@
-import { defineApp, defineCapability, defineNavigation, defineScreen } from "@reflex/effect"
+import {
+  legacyDefineApp as defineApp,
+  legacyDefineNavigation as defineNavigation,
+} from "@reflex/effect/internal"
+import { defineCapability, defineScreen } from "@reflex/effect"
 import type { NodeOf } from "@reflex/effect/advanced"
 import { defineStoreApp, defineStoreNode, standardInput } from "@reflex/runtime"
 import * as Layer from "effect/Layer"

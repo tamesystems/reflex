@@ -6,7 +6,7 @@ import type { InventoryDetail } from "@reflex/example-inventory/features/invento
 
 export const useContracts = (node: NodeOf<typeof InventoryDetail> | null) => {
   const controls = useSession()
-  void controls.reset("inventory-with-products")
+  void controls.reset("production")
   // @ts-expect-error Session resets derive scenario names from the app value.
   void controls.reset("missing-scenario")
   ReflexProvider({

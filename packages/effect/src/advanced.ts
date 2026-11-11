@@ -16,3 +16,10 @@ export {
 } from "./navigation.ts"
 export type { Navigator, NavigationService, NavigatorRequirement } from "./navigation.ts"
 export type { DefinedApp, Scenario } from "./app.ts"
+export { jsonCodec } from "./json-codec.ts"
+export type {
+  EffectContext,
+  EffectActionBuilder,
+  NavigationCommand,
+  StateChanged,
+} from "./author-model.ts"

@@ -59,7 +59,7 @@ A journey drives the app through the real protocol, with inferred inputs and sta
 
 ```ts
 import { createTestAppPool } from "@reflex/test"
-import app from "@reflex/example-inventory"
+import app from "@reflex/example-inventory/scenarios.ts"
 import { InventoryList } from "@reflex/example-inventory/features/inventory-list.ts"
 import { InventoryDetail } from "@reflex/example-inventory/features/inventory-detail.ts"
 const pool = createTestAppPool()
@@ -92,7 +92,7 @@ $ bun install --frozen-lockfile
 $ bun install --frozen-lockfile --cwd apps/mobile
 $ bun install --frozen-lockfile --cwd apps/web
 $ bun run check
-$ bun run reflex start examples/inventory/src/app.ts
+$ bun run reflex start examples/inventory/src/scenarios.ts
 $ bun run reflex do OpenProduct '{"productId":"product-123"}'
 $ bun run reflex ls
 $ bun run reflex stop

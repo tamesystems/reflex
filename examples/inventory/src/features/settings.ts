@@ -1,10 +1,10 @@
-import { SettingsScreen } from "../screens.ts"
+import { Settings } from "../screens.ts"
 import * as Schema from "effect/Schema"
 import * as Effect from "effect/Effect"
 import { LOW_STOCK_THRESHOLD_MAX, SettingsStore } from "../domain.ts"
 
-export const Settings = SettingsScreen.implement({
-  onFocus: (state) =>
+export const SettingsLive = Settings.implement({
+  onFocus: ({ state }) =>
     Effect.gen(function* () {
       const store = yield* SettingsStore
       const loaded = yield* store.load
@@ -14,7 +14,7 @@ export const Settings = SettingsScreen.implement({
     RaiseLowStockThreshold: action.when("ready")({
       available: (state) =>
         state.lowStockThreshold < LOW_STOCK_THRESHOLD_MAX ? true : "Threshold is at its maximum",
-      handler: (_, state) =>
+      handler: (_, { state }) =>
         Effect.gen(function* () {
           const current = yield* state.get
           const store = yield* SettingsStore
@@ -29,7 +29,7 @@ export const Settings = SettingsScreen.implement({
           Schema.isBetween({ minimum: 0, maximum: LOW_STOCK_THRESHOLD_MAX }),
         ),
       }),
-      handler: ({ threshold }, state) =>
+      handler: ({ threshold }, { state }) =>
         Effect.gen(function* () {
           const store = yield* SettingsStore
           yield* store.setLowStockThreshold(threshold)
@@ -38,3 +38,5 @@ export const Settings = SettingsScreen.implement({
     }),
   }),
 })
+
+export { SettingsLive as Settings }

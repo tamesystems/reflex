@@ -29,7 +29,7 @@ $ bun install --frozen-lockfile --cwd apps/web
 **Headless.** A background session, then commands against it:
 
 ```console
-$ bun run reflex start examples/inventory/src/app.ts [--scenario slow-network]
+$ bun run reflex start examples/inventory/src/scenarios.ts [--scenario slow-network]
 $ bun run reflex ls --schema        # focused screen, state, actions and their inputs
 $ bun run reflex do OpenProduct '{"productId":"product-123"}'
 $ bun run reflex watch              # events as JSON lines
@@ -57,7 +57,7 @@ persists in `.reflex/device.token`, so the setting stays valid across bridge res
 **Real inventory services.** Run `bun examples/inventory/server.ts` in another terminal
 (default http://127.0.0.1:8791), then set EXPO_PUBLIC_INVENTORY_API to that URL before
 starting Expo. This development setting adds and selects `live-services`; absent it,
-fixtures remain the default. For Android emulators use http://10.0.2.2:8791 and start the
+offline inventory and in-memory settings remain the default. For Android emulators use http://10.0.2.2:8791 and start the
 API with INVENTORY_HOST=0.0.0.0. Metro must restart after variable changes. The API prints
 its bound URL; INVENTORY_PORT=0 chooses a port safely. On PowerShell set the variables
 with `$env:NAME = 'value'`. See [mobile setup](../apps/mobile/README.md).
@@ -75,7 +75,7 @@ See [packages/cli/README.md](../packages/cli/README.md#mcp).
 
 | Command                                           | What it runs                                                                                                                                                                                        |
 | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `bun run check`                                   | Biome format and lint, all three typechecks, every `bun test` suite. What CI runs first                                                                                                             |
+| `bun run check`                                   | Biome format and lint, the real-package inventory design check, all three typechecks, every `bun test` suite. What CI runs first                                                                    |
 | `bun test path/to/file.test.ts`                   | One suite. `-t "name"` for one test                                                                                                                                                                 |
 | `bun run --cwd apps/mobile e2e`                   | Exports the web app and runs `e2e/journey.ts` in headless Chrome                                                                                                                                    |
 | `bun run --cwd apps/mobile e2e:plain`             | Isolated plain Zustand/Zod Expo screen driven by CLI/MCP, Metro module graph proves no Effect; runs on Linux and Windows                                                                            |
@@ -330,3 +330,20 @@ declared same-name contracts need static distinction. Ordinary unique names need
 `defineStoreApp` registers router-mounted definitions with `screens`; reserve routes for URL
 bindings. Fixture state access lives only in `@reflex/effect/internal`. Navigation queues
 behind the handler, so journeys assert successful SaveAndClose through ordinary actions.
+
+### Effect author API migration (A1)
+
+Inventory uses `Screen`, `defineService`, `defineFixture`, terminal navigation commands
+and ordered app composition. `examples/inventory/src/app.ts` is production-safe;
+`scenarios.ts` adds fixtures and exposes `legacyApp(authoredApp)` to the current
+`@reflex/test` API. The CLI accepts authored apps through their internal host adapter.
+Use `action.navigates` to return `Nav.push(Screen, params)`, `Nav.back` or `Nav.stay`.
+A navigation refusal remains a refused outcome after any `onRefused` state recovery.
+Legacy Effect APIs remain available for their existing consumers.
+
+`bun docs/design/prototypes/check.ts --real` checks spec/example drift and compiles
+all exact inventory author examples against the real package. `bun run check` includes
+this mode and the real-package negative cases in `packages/effect/test/author.types.ts`.
+The full declaration harness remains `bun docs/design/prototypes/check.ts` for the
+consumer tiers that have not migrated. See [ADR 0024](decisions/0024-additive-effect-author-api.md)
+and the [type graph audit](performance/userland-api-a1.md).

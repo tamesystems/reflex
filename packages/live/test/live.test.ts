@@ -8,7 +8,7 @@ import {
 } from "@reflex/protocol"
 import { type AppHost, createRuntime, systemTimers, type Timers } from "@reflex/runtime/internal"
 import { nextTurn, waitUntil } from "@reflex/test"
-import app from "../../../examples/inventory/src/app.ts"
+import app from "../../../examples/inventory/src/scenarios.ts"
 import { createLiveController } from "../src/live-controller.ts"
 import { LiveSessions, liveSessionOf } from "../src/live-sessions.ts"
 

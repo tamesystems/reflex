@@ -1,4 +1,4 @@
-import { InventoryDetailScreen } from "../screens.ts"
+import { InventoryDetail } from "../screens.ts"
 import * as Effect from "effect/Effect"
 import * as Schema from "effect/Schema"
 import { ApiError, InventoryApi, Quantity, QUANTITY_MAX } from "../domain.ts"
@@ -6,7 +6,7 @@ import { Nav } from "../navigation.ts"
 
 const SAVE_TIMEOUT = "5 seconds"
 
-const save = InventoryDetailScreen.when("editing").handler((state) =>
+const save = InventoryDetail.when("editing").handler((_, { state }) =>
   Effect.gen(function* () {
     const api = yield* InventoryApi
     const current = yield* state.get
@@ -26,8 +26,8 @@ const save = InventoryDetailScreen.when("editing").handler((state) =>
   }),
 )
 
-export const InventoryDetail = InventoryDetailScreen.implement({
-  onFocus: (state) =>
+export const InventoryDetailLive = InventoryDetail.implement({
+  onFocus: ({ state }) =>
     Effect.gen(function* () {
       const api = yield* InventoryApi
       const current = yield* state.get
@@ -63,16 +63,20 @@ export const InventoryDetail = InventoryDetailScreen.implement({
     Save: action.when("editing")({
       description: "Persist the quantity; gives up after 5 seconds",
       error: ApiError,
-      handler: (_, state) => save(state),
+      handler: save,
     }),
-    SaveAndClose: action.when("editing")({
+    SaveAndClose: action.when("editing").navigates({
       description: "Persist the quantity and return to the previous screen",
       error: ApiError,
-      handler: (_, state) =>
+      handler: (_, { state }) =>
         Effect.gen(function* () {
-          yield* save(state)
-          yield* Nav.back
+          yield* save(undefined, { state })
+          return Nav.back
         }),
+      onRefused: ({ reason }, { state }) =>
+        state.when("editing").update((current) => ({ ...current, error: reason })),
     }),
   }),
 })
+
+export { InventoryDetailLive as InventoryDetail }

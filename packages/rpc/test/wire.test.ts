@@ -38,7 +38,7 @@ import { nextTurn, waitUntil } from "@reflex/test"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
 import * as Schema from "effect/Schema"
-import app from "../../../examples/inventory/src/app.ts"
+import app from "../../../examples/inventory/src/scenarios.ts"
 
 const cleanups: Array<() => Promise<void> | void> = []
 afterEach(async () => {

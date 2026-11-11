@@ -63,7 +63,7 @@ const json = (...args: Array<string>): CommandOutput => {
 }
 
 beforeAll(() => {
-  const started = reflex("start", "examples/inventory/src/app.ts")
+  const started = reflex("start", "examples/inventory/src/scenarios.ts")
   if (started.code !== 0) {
     throw new Error(started.err)
   }
@@ -202,7 +202,7 @@ test("--stdio speaks the protocol on stdin and stdout", async () => {
       "bun",
       join(root, "packages/cli/src/cli.ts"),
       "serve",
-      "examples/inventory/src/app.ts",
+      "examples/inventory/src/scenarios.ts",
       "--stdio",
     ],
     {
@@ -229,7 +229,7 @@ test("a stdio session ends when its peer sends an endless frame", async () => {
       "bun",
       join(root, "packages/cli/src/cli.ts"),
       "serve",
-      "examples/inventory/src/app.ts",
+      "examples/inventory/src/scenarios.ts",
       "--stdio",
     ],
     { cwd: root, stdin: "pipe", stdout: "ignore", stderr: "ignore" },
@@ -317,7 +317,7 @@ test(
   isolated(async (cli, dir) => {
     const dead = Bun.spawnSync(["bun", "-e", "console.log(process.pid)"]).stdout.toString().trim()
     await Bun.write(join(dir, "session.lock"), dead)
-    expect(cli("start", "examples/inventory/src/app.ts").code).toBe(0)
+    expect(cli("start", "examples/inventory/src/scenarios.ts").code).toBe(0)
     expect(cli("stop").code).toBe(0)
   }),
   15_000,
@@ -328,7 +328,12 @@ test(
   isolated(async (_, dir) => {
     const start = () =>
       Bun.spawn(
-        ["bun", join(root, "packages/cli/src/cli.ts"), "start", "examples/inventory/src/app.ts"],
+        [
+          "bun",
+          join(root, "packages/cli/src/cli.ts"),
+          "start",
+          "examples/inventory/src/scenarios.ts",
+        ],
         {
           cwd: root,
           env: { ...process.env, REFLEX_DIR: dir },
@@ -356,7 +361,7 @@ test(
 test("shutdown is refused inside a batch, so its reply is not lost", async () => {
   const { createConnection } = await import("@reflex/rpc")
   const { createController } = await import("@reflex/runtime/internal")
-  const { default: app } = await import("../../../examples/inventory/src/app.ts")
+  const { default: app } = await import("../../../examples/inventory/src/scenarios.ts")
   const controller = await createController(app)
   let shutdowns = 0
   const lines: Array<unknown> = []
@@ -383,7 +388,12 @@ test(
     await Bun.write(join(dir, "session.lock"), dead)
     const start = () =>
       Bun.spawn(
-        ["bun", join(root, "packages/cli/src/cli.ts"), "start", "examples/inventory/src/app.ts"],
+        [
+          "bun",
+          join(root, "packages/cli/src/cli.ts"),
+          "start",
+          "examples/inventory/src/scenarios.ts",
+        ],
         {
           cwd: root,
           env: { ...process.env, REFLEX_DIR: dir },
@@ -411,7 +421,7 @@ test(
     expect(result.exitCode).toBe(1)
     expect(cli("status").code).toBe(1)
     // The killed child leaves its lock behind, and it must not block a real start.
-    expect(cli("start", "examples/inventory/src/app.ts").code).toBe(0)
+    expect(cli("start", "examples/inventory/src/scenarios.ts").code).toBe(0)
   }),
   15_000,
 )
@@ -455,7 +465,7 @@ test.skipIf(process.platform === "win32")(
   "a session directory others can read is refused",
   isolated((cli, dir) => {
     chmodSync(dir, 0o755)
-    const result = cli("start", "examples/inventory/src/app.ts")
+    const result = cli("start", "examples/inventory/src/scenarios.ts")
     expect(result.code).toBe(1)
     expect(result.err).toContain("accessible only to its owner")
     chmodSync(dir, 0o700)
@@ -478,11 +488,11 @@ test(
 const CLI = join(root, "packages/cli/src/cli.ts")
 
 const appModule = (body: string) => `
-  import inventory from ${JSON.stringify(pathToFileURL(join(root, "examples/inventory/src/app.ts")).href)}
+  import inventory from ${JSON.stringify(pathToFileURL(join(root, "examples/inventory/src/scenarios.ts")).href)}
   ${body}
 `
 
-const inventoryApp = "examples/inventory/src/app.ts"
+const inventoryApp = "examples/inventory/src/scenarios.ts"
 
 test(
   "a mutex left by a crash does not block recovery for long",
@@ -1335,3 +1345,18 @@ test("an action allowlist, from the flag or REFLEX_ACCESS, runs only what it nam
   expect(reflex("--access", "actions:", "ls").err).toContain("names 1 to")
   expect(reflex("--access", "everything", "ls").err).toContain("Access must be")
 })
+
+test(
+  "the CLI adapts the authored production inventory app without mounting fixtures",
+  isolated((cli) => {
+    const started = cli("start", "examples/inventory/src/app.ts")
+    expect(started.code).toBe(0)
+    const tree = cli("tree")
+    expect(tree.code).toBe(0)
+    expect(tree.out).toContain("InventoryList")
+    expect(tree.out).not.toContain("InventoryFixture")
+    const list = cli("ls")
+    expect(list.code).toBe(0)
+    expect(JSON.parse(list.out)).toMatchObject({ state: { _tag: "ready", products: [] } })
+  }),
+)

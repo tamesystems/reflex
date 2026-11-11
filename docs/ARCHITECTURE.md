@@ -81,7 +81,8 @@ packages/
               forwards to whichever app is connected.
   effect/     How an Effect app becomes nodes. capability.ts (defineCapability, mount), screen.ts (contracts before handlers),
               navigation.ts (defineNavigation: the stack, a scope per screen),
-              app.ts (defineApp: scenarios as Layers, virtual time), redaction.ts.
+              app.ts (legacy AppHost lifecycle), author-*.ts (Screen, services, fixtures,
+              action commands and ordered scenario composition), json-codec.ts, redaction.ts.
   test/       createTestApp journeys and explore random walks, through the real protocol.
   cli/        The reflex command. cli.ts parses; commands.ts does; session.ts runs and
               finds daemons; bridge-server.ts accepts apps; mcp.ts serves MCP tools.
@@ -193,8 +194,9 @@ reported as `running`, with `settled: false`, and the command still succeeds. On
 `reflex do OpenProduct '{"productId":"product-123"}'` with the app rendered by Expo.
 
 ```text
-inventory-list.ts   OpenProduct's handler calls nav.push("InventoryDetail", …)
-navigation.ts       build the screen in a scope of its own, push it, set focus (the runtime starts onFocus as a tracked operation); the Navigation
+inventory-list.ts   OpenProduct's action.navigates handler returns Nav.push(InventoryDetail, …)
+author-actions.ts   queue the command after its handler and child scope finish
+navigation.ts       execute the command: build the screen in a scope of its own, push it, set focus (the runtime starts onFocus as a tracked operation); the Navigation
                     node's state (the stack) changes
 react.tsx           useCoreStack sees the new stack; RouterProjection hands it to
 projection-         ProjectionController.onStack ─► syncRouter (pure, projection.ts)

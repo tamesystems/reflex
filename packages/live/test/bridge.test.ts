@@ -9,7 +9,7 @@ import {
 } from "@reflex/protocol"
 import { createController, type Timers } from "@reflex/runtime/internal"
 import { nextTurn } from "@reflex/test"
-import app from "../../../examples/inventory/src/app.ts"
+import app from "../../../examples/inventory/src/scenarios.ts"
 import { type BridgeSocket, type BridgeStatus, connectBridge } from "../src/bridge.ts"
 
 const TOKEN = "t".repeat(43)

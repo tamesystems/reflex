@@ -69,7 +69,7 @@ export declare namespace Screen {
     spec: {
       state: C
       initial: () => C["Type"]
-      actions: (action: M.EffectActionBuilder<NoInfer<C["Type"]>>) => A
+      actions: (action: M.EffectActionBuilder<C["Type"]>) => A
     } & M.ActionMapCheck<NoInfer<A>, C["Type"]> &
       M.JsonCheck<M.Public<NoInfer<C["Encoded"]>>, "Effect state must encode JSON; use jsonCodec">,
   ): OneStep<N, C, A>
@@ -79,7 +79,7 @@ export declare function defineService<const N extends string, const C extends M.
     name: N
     state: C
     initial: () => C["Type"]
-    actions: (action: M.PlainEffectActionBuilder<NoInfer<C["Type"]>>) => A
+    actions: (action: M.PlainEffectActionBuilder<C["Type"]>) => A
   } & M.ActionMapCheck<NoInfer<A>, C["Type"]> &
     M.JsonCheck<M.Public<NoInfer<C["Encoded"]>>, "Effect state must encode JSON; use jsonCodec">,
 ): M.Definition<never, A, M.Public<C["Encoded"]>, M.Requirements<A>, "service"> & {
@@ -93,7 +93,7 @@ export declare function defineFixture<const N extends string, const C extends M.
     name: N
     state: C
     initial: () => C["Type"]
-    actions: (action: M.PlainEffectActionBuilder<NoInfer<C["Type"]>>) => A
+    actions: (action: M.PlainEffectActionBuilder<C["Type"]>) => A
   } & M.ActionMapCheck<NoInfer<A>, C["Type"]> &
     M.JsonCheck<M.Public<NoInfer<C["Encoded"]>>, "Effect state must encode JSON; use jsonCodec">,
 ): M.Definition<never, A, M.Public<C["Encoded"]>, M.Requirements<A>, "fixture"> &
@@ -153,11 +153,13 @@ type CrossRoleNames<S, V> = [Extract<M.Names<S>, M.Names<V>>] extends [never]
 type RoleCheck<D, Allowed, Message extends string> = [D] extends [{ role: Allowed }]
   ? unknown
   : M.Msg<Message>
-type AmbientParams<D> = D extends unknown
-  ? keyof M.Params<D> extends never
-    ? unknown
-    : M.Msg<"Ambient services must not require params">
-  : never
+type AmbientParams<D> = [D] extends [never]
+  ? unknown
+  : D extends unknown
+    ? keyof M.Params<D> extends never
+      ? unknown
+      : M.Msg<"Ambient services must not require params">
+    : never
 type IsUnion<T, C = T> = T extends C ? ([C] extends [T] ? false : true) : never
 export declare function defineApp<
   const N extends string,
@@ -202,40 +204,67 @@ export declare function defineApp<
         ? unknown
         : M.Msg<"Choose navigation or screens, not both">),
 ): M.App<N, Screens<Nav, I>, V[number], Scenarios<S>, Default<S, K>, F[number], LayerOut<L>>
-export declare function defineApp<
-  const N extends string,
-  Nav = undefined,
-  const I extends readonly M.AnyDef[] = readonly [],
-  const V extends readonly M.AnyDef[] = readonly [],
-  L = undefined,
->(
-  spec: {
-    name: N
-    navigation?: Nav
-    screens?: I &
-      M.Unique<I> &
-      RoleCheck<I[number], "screen" | "store", "screens accepts only screens or stores"> &
-      RoleCheck<I[number], "screen" | "store", "screens accepts only screens or stores">
-    services?: V &
-      M.Unique<V> &
-      RoleCheck<V[number], "service" | "store", "services accepts only services or stores"> &
-      AmbientParams<V[number]>
-    scenarios?: never
-    layer?: L
-  } & NoInfer<
-    M.Coverage<
-      { default: M.Empty },
-      DefReq<Screens<Nav, I>> | DefReq<V[number]>,
-      L,
-      never,
-      Nav extends { navigator: infer NN } ? NN : never
-    >["default"]
-  > &
-    M.Unique<[...I, ...V]> &
-    CrossRoleNames<Screens<Nav, I>, V[number]> &
-    (Nav extends undefined
-      ? CheckNavigation<I[number] | V[number], N>
-      : I extends readonly []
+type AppSpec = {
+  readonly name: string
+  readonly navigation?: {
+    readonly screens: M.AnyDef
+    readonly navigator: M.Navigator<string>
+  }
+  readonly screens?: readonly M.AnyDef[]
+  readonly services?: readonly M.AnyDef[]
+  readonly layer?: unknown
+  readonly scenarios?: never
+  readonly root?: never
+}
+type TupleAt<T, K extends PropertyKey> = T extends {
+  readonly [P in K]: infer I extends readonly M.AnyDef[]
+}
+  ? I
+  : readonly []
+type LayerAt<T> = T extends { readonly layer: infer L } ? L : undefined
+type NavAt<T> = T extends { readonly navigation: infer Nav } ? Nav : undefined
+export declare function defineApp<const Spec extends AppSpec>(
+  spec: Spec &
+    NoInfer<
+      M.Coverage<
+        { default: M.Empty },
+        | DefReq<Screens<NavAt<Spec>, TupleAt<Spec, "screens">>>
+        | DefReq<TupleAt<Spec, "services">[number]>,
+        LayerAt<Spec>,
+        never,
+        NavAt<Spec> extends { navigator: infer NN } ? NN : never
+      >["default"]
+    > &
+    M.Unique<[...TupleAt<Spec, "screens">, ...TupleAt<Spec, "services">]> &
+    RoleCheck<
+      TupleAt<Spec, "services">[number],
+      "service" | "store",
+      "services accepts only services or stores"
+    > &
+    RoleCheck<
+      TupleAt<Spec, "screens">[number],
+      "screen" | "store",
+      "screens accepts only screens or stores"
+    > &
+    AmbientParams<TupleAt<Spec, "services">[number]> &
+    CrossRoleNames<
+      Screens<NavAt<Spec>, TupleAt<Spec, "screens">>,
+      TupleAt<Spec, "services">[number]
+    > &
+    (NavAt<Spec> extends undefined
+      ? CheckNavigation<
+          TupleAt<Spec, "screens">[number] | TupleAt<Spec, "services">[number],
+          Spec["name"]
+        >
+      : TupleAt<Spec, "screens"> extends readonly []
         ? unknown
         : M.Msg<"Choose navigation or screens, not both">),
-): M.App<N, Screens<Nav, I>, V[number], { default: M.Empty }, "default", never, LayerOut<L>>
+): M.App<
+  Spec["name"],
+  Screens<NavAt<Spec>, TupleAt<Spec, "screens">>,
+  TupleAt<Spec, "services">[number],
+  { default: M.Empty },
+  "default",
+  never,
+  LayerOut<LayerAt<Spec>>
+>

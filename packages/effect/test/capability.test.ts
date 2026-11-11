@@ -33,7 +33,7 @@ import * as Option from "effect/Option"
 import * as Redacted from "effect/Redacted"
 import * as Schema from "effect/Schema"
 import * as SchemaGetter from "effect/SchemaGetter"
-import app from "../../../examples/inventory/src/app.ts"
+import app from "../../../examples/inventory/src/scenarios.ts"
 
 const pool = createTestAppPool()
 afterEach(pool.disposeAll)

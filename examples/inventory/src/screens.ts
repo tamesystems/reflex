@@ -1,4 +1,4 @@
-import { defineScreen } from "@reflex/effect"
+import { Screen } from "@reflex/effect"
 import * as Schema from "effect/Schema"
 import { Product, Quantity } from "./domain.ts"
 
@@ -11,11 +11,10 @@ const InventoryListState = Schema.Union([
   }),
 ])
 
-export const InventoryListScreen = defineScreen({
-  name: "InventoryList",
+export class InventoryList extends Screen("InventoryList", {
   state: InventoryListState,
   initial: () => ({ _tag: "loading" }),
-})
+}) {}
 
 const Loaded = {
   productId: Schema.String,
@@ -30,12 +29,11 @@ const InventoryDetailState = Schema.Union([
   Schema.TaggedStruct("saving", Loaded),
 ])
 
-export const InventoryDetailScreen = defineScreen({
-  name: "InventoryDetail",
+export class InventoryDetail extends Screen("InventoryDetail", {
   state: InventoryDetailState,
-  params: Schema.Struct({ productId: Schema.String }),
+  params: { productId: Schema.String },
   initial: ({ productId }) => ({ _tag: "loading", productId }),
-})
+}) {}
 
 const SettingsState = Schema.Union([
   Schema.TaggedStruct("loading", {}),
@@ -45,8 +43,13 @@ const SettingsState = Schema.Union([
   }),
 ])
 
-export const SettingsScreen = defineScreen({
-  name: "Settings",
+export class Settings extends Screen("Settings", {
   state: SettingsState,
   initial: () => ({ _tag: "loading" }),
-})
+}) {}
+
+export {
+  InventoryList as InventoryListScreen,
+  InventoryDetail as InventoryDetailScreen,
+  Settings as SettingsScreen,
+}

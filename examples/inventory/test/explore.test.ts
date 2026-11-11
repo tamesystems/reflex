@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { explore } from "@reflex/test"
-import app from "../src/app.ts"
+import app from "../src/scenarios.ts"
 
 const knownInputs = {
   InventoryList: { OpenProduct: [{ productId: "product-123" }, { productId: "product-456" }] },

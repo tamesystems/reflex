@@ -34,6 +34,7 @@ import {
 } from "@reflex/rpc"
 import {
   type AppHost,
+  APP_HOST_ADAPTER,
   type Controller,
   createController,
   reportToConsole,
@@ -353,6 +354,9 @@ const loadHost = async (module: string): Promise<AppHost> => {
 
 const parseHost = (value: unknown, module: string): AppHost => {
   const refuse = () => new Error(`${module} must export an app as "default" or "app"`)
+  if (typeof value === "object" && value !== null && APP_HOST_ADAPTER in value) {
+    value = value[APP_HOST_ADAPTER]
+  }
   if (typeof value !== "object" || value === null) {
     throw refuse()
   }

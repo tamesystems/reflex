@@ -1,5 +1,4 @@
-import { defineCapability } from "@reflex/effect"
-import { mountWithAccess } from "@reflex/effect/internal"
+import { defineFixture } from "@reflex/effect"
 import type * as Duration from "effect/Duration"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
@@ -17,14 +16,14 @@ const FixtureState = Schema.Struct({
 })
 
 /** Test doubles are nodes too, so journeys and agents can observe and steer them. */
-export const InventoryFixture = defineCapability({
+export const InventoryFixture = defineFixture({
   name: "InventoryFixture",
-  type: "fixture",
   state: FixtureState,
+  initial: () => ({ saved: [], failNextSave: false }),
   actions: (action) => ({
     FailNextSave: action({
       description: "Make the next save fail, as a server error would",
-      handler: (_, state) => state.update((s) => ({ ...s, failNextSave: true })),
+      handler: (_, { state }) => state.update((s) => ({ ...s, failNextSave: true })),
     }),
   }),
 })
@@ -44,10 +43,7 @@ export const fixtureApi = (options: ScenarioOptions) =>
     InventoryApi,
     Effect.gen(function* () {
       const products = new Map(options.products.map((product) => [product.id, product]))
-      const { access: state } = yield* mountWithAccess(InventoryFixture, {
-        saved: [],
-        failNextSave: false,
-      })
+      const state = yield* InventoryFixture
 
       const saveQuantity = Effect.fnUntraced(function* (productId: string, quantity: number) {
         if (options.saveDelay !== undefined) {
