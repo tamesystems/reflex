@@ -397,6 +397,7 @@ export const useRouteLease = <N extends OwnedNode>(
     readonly navigationType?: "POP" | "PUSH" | "REPLACE"
     readonly params?: unknown
     readonly enabled?: boolean
+    readonly suspense?: boolean
   },
 ): RouteLease<N> | null => {
   const { runtime } = useRuntimeSession()
@@ -406,20 +407,51 @@ export const useRouteLease = <N extends OwnedNode>(
   }
   const identity = definition.identity ?? definition
   owner.factories.set(identity, (_, signal) => definition.mount(runtime, signal))
-  const lease =
-    options.enabled === false
-      ? null
-      : (owner.registry.acquire(identity, options.key, options.params ?? {}) as RouteLease<N>)
+  const [committed, setCommitted] = React.useState<{
+    identity: object
+    key: string
+    lease: RouteLease<N>
+  } | null>(null)
+  const enabled = options.enabled !== false
+  const suspense = options.suspense !== false
+  const paramsKey = JSON.stringify(options.params ?? {})
+  const lease = !enabled
+    ? null
+    : suspense
+      ? (owner.registry.acquire(identity, options.key, options.params ?? {}) as RouteLease<N>)
+      : committed?.identity === identity && committed.key === options.key
+        ? committed.lease
+        : null
+  const prepared = suspense ? lease : null
   React.useEffect(() => {
-    if (lease === null) {
+    if (!enabled) {
       return undefined
     }
-    const release = lease.retain()
+    const acquired = suspense
+      ? prepared
+      : (owner.registry.acquire(identity, options.key, JSON.parse(paramsKey)) as RouteLease<N>)
+    if (acquired === null) {
+      return undefined
+    }
+    const release = acquired.retain()
+    if (!suspense) {
+      setCommitted({ identity, key: options.key, lease: acquired })
+    }
     if (options.lifetime === "history-entry") {
       owner.registry.visit(options.key, options.navigationType ?? "POP")
     }
     return release
-  }, [owner, lease, options.key, options.lifetime, options.navigationType])
+  }, [
+    owner,
+    identity,
+    enabled,
+    suspense,
+    prepared,
+    options.key,
+    options.lifetime,
+    options.navigationType,
+    paramsKey,
+  ])
   return lease
 }
 

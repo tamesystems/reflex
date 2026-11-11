@@ -19,3 +19,9 @@ export { useRouteLease } from "./react.tsx"
 export { createRouteAdapter, type RouteAdapter } from "./binding.tsx"
 
 export { matchesContract } from "./binding.tsx"
+
+export { route, routeCodec } from "./routes.ts"
+export type { RouteCodec, ValidateRoutes, CheckPath } from "./routes.ts"
+export { usePublishedView } from "./binding.tsx"
+
+export { useSelectedNode } from "./binding.tsx"

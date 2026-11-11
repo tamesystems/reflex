@@ -66,7 +66,7 @@ test("ignored local actions still report defects", async () => {
     createRuntime({ sessionId: "report", onBackgroundError: (error) => messages.push(error) }),
   )
   expect((await node.actions.Crash()).status).toBe("defect")
-  expect(messages.map(String)).toEqual(["Error: Defect: broken action"])
+  expect(messages.map(String)).toEqual(["Error: Broken.Crash: Defect: broken action"])
   node.dispose()
 })
 

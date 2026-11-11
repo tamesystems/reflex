@@ -56,7 +56,7 @@ persists in `.reflex/device.token`, so the setting stays valid across bridge res
 
 **Real inventory services.** Run `bun examples/inventory/server.ts` in another terminal
 (default http://127.0.0.1:8791), then set EXPO_PUBLIC_INVENTORY_API to that URL before
-starting Expo. This development setting adds and selects `live-services`; absent it,
+starting Expo. This development setting adds and selects `device-services`; absent it,
 offline inventory and in-memory settings remain the default. For Android emulators use http://10.0.2.2:8791 and start the
 API with INVENTORY_HOST=0.0.0.0. Metro must restart after variable changes. The API prints
 its bound URL; INVENTORY_PORT=0 chooses a port safely. On PowerShell set the variables
@@ -374,5 +374,48 @@ the default host-neutral entry inert. See ADR 0026 and the package READMEs.
 The real-package harness includes the exact web examples and their negative cases.
 Run `REFLEX_RECORD_TYPE_PERF=1 bun docs/design/prototypes/check.ts --real --performance`
 for measured real-package screen/hook gates. Its fast `--real` mode remains in check.
-Root type diagnostics and incomplete mobile live/services acceptance are recorded in
-[the B1 report](performance/userland-api-b1.md). Mobile and Expo have not migrated.
+B1 measured 459,211 root instantiations. Its real-package 100/200/400-screen checks
+with one hook took 2.49/4.94/8.67 seconds, with slopes 24.50/18.65 ms per screen and
+at most 0.872 ms per additional narrowed hook. The gates are 25 ms per screen and
+5 ms per additional hook; the B2 measurements below supersede that raw snapshot.
+
+### Expo host API migration (B2)
+
+`createReflexExpo` provides destructured hooks, contract Link/href and a Provider that
+owns the bridge and includes Navigation projection. Use `useScreen` inside a local
+Suspense boundary or `useScreenStatus` for explicit pending/error/retry. Status-only
+screen acquisition starts at commit. `@reflex/expo/dev` is Effect-free; Metro aliases
+`@reflex/live/dev` to it for Provider-owned development connections. The author root
+also stays Effect-free, including host-owned store screens.
+
+The mobile Metro config aliases `@inventory-provider`; `REFLEX_E2E=1` selects the
+instrumented Provider, which installs exported testScenarios on the same descriptor
+identity. Normal entries import no instrumentation. Development HTTP and AsyncStorage
+use `device-services`; absent an explicit API setting, production stays offline.
+The plain fixture uses the authored ambient service composition. The legacy screen
+adapter remains named for conformance tests only. See ADR 0027.
+
+The real-package harness includes the exact mobile example files and Expo misuse
+cases. Advanced `route` and `routeCodec` share one implementation in React, re-exported
+from React Router's advanced and Expo's internal entry. Custom codecs own their path
+and array policies. Expected observed action errors do not also report as background
+failures; ignored errors and defects remain visible.
+
+B2 validation on Bun 1.4.4 / TypeScript 5.9.3: root diagnostics recorded 460,241
+instantiations, 533,064 K memory, 1.66 s check and 2.51 s total. The unchanged root
+budget passes (459,211 baseline plus 10%). Exact real-package mobile/web/author
+examples compile with 183,185 instantiations and 41 host negative cases.
+
+The isolated real-package performance run measured 1.05/1.72/3.29 s check time for
+100/200/400 screens with one hook; the incremental slopes were 6.70/7.85 ms per
+screen (25 ms gate). Additional narrowed hooks cost at most 0.050 ms (5 ms gate).
+At one hook the instantiation counts were 561,961 / 1,189,761 / 2,865,361. Raw data
+is in [real-results.json](design/prototypes/real-results.json). Timing is local and
+scheduler-dependent; the fixed instantiation budget remains unchanged.
+
+Validation passed check (671 passed, three Windows-only skips), mobile e2e/plain/live/
+services and web e2e, including production bridge/token/instrumentation exclusion and
+plain's Effect-free Metro graph. The abandoned-status browser probe was verified to
+fail with render-time acquisition restored, then pass with commit-time acquisition.
+Browser probes also cover advanced codec routing/encoding and observed versus ignored
+expected action errors; runtime tests cover ignored errors and defects.

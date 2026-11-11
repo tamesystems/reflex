@@ -2552,9 +2552,12 @@ index signature alone would otherwise permit invalid contracts without an error.
 Authored constructor names are restored from their declared contract name after
 implementation, preserving unchanged legacy adapters in minified bundles.
 
-B1 acceptance remains partial: status-only acquisition still uses render preparation,
-new views retain legacy local action-failure reporting, and the advanced routeCodec
-escape hatch remains to implement. Mobile and Expo files are unchanged. Their live and
-services journeys still assume a fixture-enabled production/default app, while A1's
-production app is offline and its test scenarios are separate. See ADR 0026 and
-performance/userland-api-b1.md for commands, measured gates and the exact failures.
+B2 installs the authored Expo binding and mobile examples alongside retained legacy
+integration internals. Expo exposes its advanced route helpers through the single
+internal entry rather than adding a second integration subpath. The Effect-free dev
+entry is separate; round-3 root aliases remain during the additive migration. Metro
+aliases the host-neutral development helper to Expo's helper.
+The E2E provider additionally retains startup-failure instrumentation and scenario
+selection needed by the existing browser journeys. Plain's legacy adapter remains a
+named conformance fixture; its default is now the authored composition. The real-package
+harness includes exact mobile examples and Expo negative cases. See ADR 0027.

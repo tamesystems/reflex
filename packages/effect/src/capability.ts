@@ -348,6 +348,10 @@ export function defineCapability<
     state: definition.state,
     actions,
     "~reflex": {
+      paramsSchema: () =>
+        Schema.toJsonSchemaDocument(
+          Schema.toCodecJson(definition.params ?? Schema.Record(Schema.String, Schema.Never)),
+        ).schema as JsonSchema,
       decodeParams: (raw) =>
         Schema.decodeUnknownSync(
           Schema.toCodecJson(definition.params ?? Schema.Record(Schema.String, Schema.Never)),
@@ -759,6 +763,7 @@ class NodeInstance<S, A extends ActionsOf<S>, R, P, W>
           }),
         ),
         (error) => this.host.registry.report(error),
+        `${capability.name}.${name}`,
       ),
     )
     this.type = capability.type

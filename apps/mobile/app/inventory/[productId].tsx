@@ -1,11 +1,22 @@
-import { InventoryDetailScreen as InventoryDetailScreenContract } from "@reflex/example-inventory/screens.ts"
-import { useScreen } from "../../src/routes.ts"
+import { InventoryDetail } from "@reflex/example-inventory/screens.ts"
+import { useScreenStatus } from "../../src/routes.ts"
 import { Text } from "react-native"
 import { Action, Screen, styles } from "../../src/ui.tsx"
 
-export default function InventoryDetailScreen() {
-  const node = useScreen(InventoryDetailScreenContract)
+export default function InventoryDetailView() {
+  const node = useScreenStatus(InventoryDetail)
   const { status, state, actions } = node
+  if (status === "error") {
+    return (
+      <Text
+        onPress={() => {
+          void node.retry()
+        }}
+      >
+        {node.error.message} — Retry
+      </Text>
+    )
+  }
   if (status === "pending") {
     return null
   }

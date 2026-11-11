@@ -34,6 +34,10 @@ late results are disposed. History retains at most the protocol budget and relea
 unreachable forward entries. Retry replaces the promise in the existing lease.
 
 The round-3 `ReflexProvider`, `createLegacyReflex`, `useNode`, `useNodeView`, granular
-node hooks and `ScreenView` remain exported for Expo until B2. Their legacy action
+node hooks and `ScreenView` remain exported for legacy consumers. Their legacy action
 outcomes remain unchanged; the new bound views expose completed/error/refused/
 cancelled/defect outcomes.
+
+Status-only acquisition begins at commit. Observed expected action errors are returned
+without duplicate background reporting; ignored errors and defects still report with
+node/action context. Advanced route/routeCodec helpers are shared by host bindings.

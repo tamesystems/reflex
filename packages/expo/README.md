@@ -3,50 +3,36 @@
 Expo Router projection for Reflex, the first platform binding of the application control
 protocol. Generic React bindings live in `@reflex/react`; live serving in `@reflex/live`.
 
-## Responsibilities
-
-- `RouterProjection` keeps Expo Router showing the core Navigation stack and feeds accepted
-  gestures, links and router actions back to the core.
-- `createReflexExpo(app, registration)` from `@reflex/expo` provides bound `Provider`,
-  `RouterProjection`, `useScreen`, `useScreenSuspense`, `useNode` and `useSession`.
-- `developmentBridge()` is exported from the root; the integration `/internal` entry
-  keeps the plain store bundle free of Effect.
-- Router-neutral infrastructure is available through `/internal` and @reflex/navigation,
-  outside the root author surface.
-
-## Does not own
-
-Generic providers/hooks, session lifetime, bridge connections, rendering, application state,
-or navigation decisions. The core owns its stack when RouterProjection is adopted; Expo
-Router decides gesture behavior. Existing routers can use `@reflex/react` independently.
-
-## Start reading
-
-1. `src/react.tsx`: RouterProjection and Expo route hooks.
-2. `../navigation/src/projection.ts`: pure synchronization rules.
-3. `../navigation/src/projection-controller.ts`: state and timing behind ports.
-4. `src/router-actions.ts`: the only Expo Router private-module imports.
-
 ## Using it
 
-```tsx partial: application bindings; app and Stack come from the host
-import { createReflexExpo, developmentBridge } from "@reflex/expo"
-const { Provider, RouterProjection, useScreen, useSession } = createReflexExpo(app, {
+`createReflexExpo(app, registration)` provides Provider, useScreen, useScreenStatus,
+useService, Link, href and useSession. Register every screen with a literal pathname;
+params default to their schema names. Explicit params mappings rename fields. Literal
+placeholder checks share React Router's implementation; generated Expo Href types also
+validate registered pathnames. The author root imports no Effect.
+
+```tsx partial: app and Stack come from the host
+import { createReflexExpo } from "@reflex/expo"
+const { Provider, useScreen, useScreenStatus, Link, href } = createReflexExpo(app, {
   InventoryList: "/",
-  InventoryDetail: { pathname: "/inventory/[id]", params: { productId: "id" } },
+  InventoryDetail: "/inventory/[productId]",
   Settings: "/settings",
 })
-;<Provider bridge={developmentBridge()}>
-  <RouterProjection />
+;<Provider bridge="development">
   <Stack />
 </Provider>
 ```
 
-UI modules import contracts and call `useScreen(InventoryDetailScreen)`. Registration is
-total and mapping targets are unique, checked statically and at runtime. Pending/ready
-views expose state and action controls; `useScreenSuspense` supplies the ready view.
-The bound `useSession()` checks scenario names and provider identity. `/internal` holds
-projection plumbing behind symbols; the plain integration gets its bridge from `/internal`.
+Provider includes the core Navigation projection and owns bridge lifetime. Metro aliases
+`@reflex/live/dev` to the Effect-free `@reflex/expo/dev` implementation. That helper gates
+the setting read and dialler behind **DEV**. Put a Suspense boundary in each screen
+using useScreen; useScreenStatus instead exposes pending/error/retry and acquires at
+commit. Effect and store screens use the same consumer definitions. Store screens
+without core Navigation use Expo entry keys and session-owned route factories.
+
+Link accepts a contract, correlated encoded params and Expo Link props. href returns
+an Expo Href. Integration plumbing and shared route/routeCodec helpers live under the
+single internal entry. Custom codecs own advanced grammar and array policies.
 
 ## How the router is followed
 
@@ -68,9 +54,10 @@ projection plumbing behind symbols; the plain integration gets its bridge from `
 
 - Components using core-owned navigation send actions rather than router.push/replace.
 - Only router-actions.ts imports Expo Router private modules; its exact version is pinned.
-- Production UI bundles contain no bridge or token. The bound factory supports Effect screens.
+- Production UI bundles contain no bridge or token. The bound factory supports Effect and store screens.
 - `e2e:plain` proves the generic store screen's Metro graph has no Effect modules.
 
 See [development.md](../../docs/development.md) for browser, live and Hermes checks.
 
-Registration requires URL string codecs (for numbers use `NumberFromString` and domain checks), checks placeholders and encoded keys, and reports `InvalidRouteParams` with route and cause. Mapping functions are behind an internal symbol used only by RouterProjection.
+Registration requires URL string codecs, total registrations, unique mappings and
+matching placeholders. Projection mapping remains behind an internal symbol.

@@ -1,10 +1,12 @@
-import { SettingsScreen as SettingsScreenContract } from "@reflex/example-inventory/screens.ts"
-import { useScreenSuspense } from "../src/routes.ts"
+import type { ErrorBoundaryProps } from "expo-router"
+import { Suspense } from "react"
+import { Settings } from "@reflex/example-inventory/screens.ts"
+import { useScreen } from "../src/routes.ts"
 import { Text } from "react-native"
 import { Action, Screen, styles } from "../src/ui.tsx"
 
-export default function SettingsScreen() {
-  const node = useScreenSuspense(SettingsScreenContract)
+function SettingsContent() {
+  const node = useScreen(Settings)
   const { state, actions } = node
   if (state._tag === "loading") {
     return null
@@ -17,5 +19,25 @@ export default function SettingsScreen() {
       <Text>Low stock below: {lowStockThreshold}</Text>
       <Action {...actions.RaiseLowStockThreshold} title="Raise threshold" />
     </Screen>
+  )
+}
+
+export default function SettingsView() {
+  return (
+    <Suspense fallback={null}>
+      <SettingsContent />
+    </Suspense>
+  )
+}
+
+export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
+  return (
+    <Text
+      onPress={() => {
+        void retry()
+      }}
+    >
+      Retry Settings: {error.message}
+    </Text>
   )
 }

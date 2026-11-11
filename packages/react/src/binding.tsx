@@ -4,6 +4,7 @@ import {
   APP_HOST_ADAPTER,
   definitionIdentity,
   mountSessionRoute,
+  reportUnobserved,
   type AppHost,
   type Runtime,
   type ConsumerDefinition,
@@ -63,19 +64,27 @@ export const matchesContract = (definition: ConsumerDefinition, contract: object
   (definition["~reflex"].contract === undefined
     ? definitionIdentity(definition) === definitionIdentity(contract)
     : definition["~reflex"].contract === contract)
-const published = async (work: Promise<ActionOutcome<unknown>>) => {
-  const result = await work
-  if (result.status === "domain-error") {
-    return { status: "error" as const, error: result.error.data }
-  }
-  if (result.status === "defect") {
-    return { status: "defect" as const, message: result.error.message }
-  }
-  return result
-}
-const usePublishedView = (
+const published = (work: Promise<ActionOutcome<unknown>>, runtime: Runtime, label: string) =>
+  reportUnobserved(
+    work.then((result) => {
+      if (result.status === "domain-error") {
+        return { status: "error" as const, error: result.error.data }
+      }
+      if (result.status === "defect") {
+        return { status: "defect" as const, message: result.error.message }
+      }
+      return result
+    }),
+    (error) => runtime.report(error),
+    (result) =>
+      result.status === "error"
+        ? new Error(`${label}: ${JSON.stringify(result.error)}`)
+        : undefined,
+  )
+export const usePublishedView = (
   node: NodeHandle<unknown, Calls> | null,
 ): NodeView<ConsumerDefinition<unknown, Calls>> => {
+  const { runtime } = useRuntimeSession()
   const view = useNodeView(node)
   const actions = React.useMemo(
     () =>
@@ -83,11 +92,15 @@ const usePublishedView = (
         ? Object.fromEntries(
             Object.entries(view.actions).map(([name, action]) => [
               name,
-              { ...action, run: (...args: never[]) => published(action.run(...args)) },
+              {
+                ...action,
+                run: (...args: never[]) =>
+                  published(action.run(...args), runtime, `${node?.name}.${name}`),
+              },
             ]),
           )
         : null,
-    [view.actions, view.status],
+    [view.actions, view.status, runtime, node],
   )
   return view.status === "pending"
     ? view
@@ -126,9 +139,16 @@ const waitForNode = (runtime: Runtime, definition: Definition, signal?: AbortSig
     signal?.addEventListener("abort", abort, { once: true })
     check()
   })
-const useSelectedNode = (definition: Definition, suspense: boolean) => {
+export const useSelectedNode = (
+  definition: Definition,
+  suspense: boolean,
+  route?: RouteLocation | null,
+  identity: object = definition,
+  focused = true,
+) => {
   const { runtime } = useRuntimeSession()
-  const location = React.useContext(RouteContext)
+  const context = React.useContext(RouteContext)
+  const location = route === undefined ? context : route
   const ambientDefinition = React.useMemo(
     () => ({
       resolve: (runtime: Runtime) =>
@@ -139,7 +159,7 @@ const useSelectedNode = (definition: Definition, suspense: boolean) => {
   const ambient = useNodeHandle(ambientDefinition)
   const lease = useRouteLease(
     {
-      identity: definition,
+      identity,
       mount: (_, signal) =>
         location === null
           ? waitForNode(runtime, definition, signal)
@@ -151,6 +171,7 @@ const useSelectedNode = (definition: Definition, suspense: boolean) => {
       navigationType: location?.navigationType ?? "POP",
       params: location?.params,
       enabled: location !== null || ambient === null,
+      suspense,
     },
   )
   const snapshot = React.useSyncExternalStore(
@@ -165,7 +186,7 @@ const useSelectedNode = (definition: Definition, suspense: boolean) => {
         : null
   const node =
     lease === null ? ambient : owned ? (definition.resolve(runtime, owned.id) ?? null) : null
-  useNodeFocus(node, location !== null)
+  useNodeFocus(node, location !== null && focused)
   return { node, snapshot, lease }
 }
 const useSelectedState = (
@@ -203,7 +224,12 @@ const featureBinding = (
       legacy.useSession()
       const { node } = useSelectedNode(resolve(definition), true)
       const action = useAction(node, name)
-      return { ...action, run: (...args: never[]) => published(action.run(...args)) }
+      const { runtime } = useRuntimeSession()
+      return {
+        ...action,
+        run: (...args: never[]) =>
+          published(action.run(...args), runtime, `${definition.name}.${name}`),
+      }
     },
   }
 }

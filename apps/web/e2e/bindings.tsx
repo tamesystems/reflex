@@ -1,8 +1,12 @@
+import { routeCodec } from "@reflex/react-router/advanced"
+import { defineStoreNode, defineStoreApp } from "@reflex/runtime"
+import { createStore } from "zustand/vanilla"
 import * as React from "react"
 import { createRoot } from "react-dom/client"
 import { createMemoryRouter, RouterProvider } from "react-router"
 import { createReflexRouter } from "@reflex/react-router"
 import { createReflex } from "@reflex/react"
+import { createRouteAdapter } from "@reflex/react/advanced"
 import { Screen, defineApp, defineService } from "@reflex/effect"
 import * as Schema from "effect/Schema"
 import * as Effect from "effect/Effect"
@@ -31,6 +35,7 @@ const ProbeLive = Probe.implement({
         }),
     }),
     Label: a.reduce({ reducer: (_, s) => ({ ...s, label: "changed" }) }),
+    Fail: a({ error: Schema.String, handler: () => Effect.fail("expected") }),
   }),
 })
 const Metrics = defineService({
@@ -46,7 +51,16 @@ const app = defineApp({
   layer: Layer.succeed(Api, { value: 7 }),
 })
 const instrumented = app.withScenarios({ alternate: {} })
-const reflex = createReflexRouter(app, { Probe: "/:id" })
+const reflex = createReflexRouter(app, {
+  Probe: routeCodec({
+    path: "/:id" as string,
+    decode: (raw) => ({ id: typeof raw.id === "string" ? raw.id : "" }),
+    encode: ({ id }: { id: string }) => `/${encodeURIComponent(id)}`,
+  }),
+})
+if (reflex.href(Probe, { id: "a b" }) !== "/a%20b") {
+  throw new Error("routeCodec encoding failed")
+}
 const feature = reflex.from(ProbeLive)
 let selectionRenders = 0
 const Selected = React.memo(function Selected() {
@@ -64,12 +78,35 @@ function View() {
   const service = reflex.useService(Metrics)
   const session = reflex.useSession()
   const [stale, setStale] = React.useState("")
+  const [observed, setObserved] = React.useState("")
+  const [reports, setReports] = React.useState("")
   React.useEffect(() => {
     originalControls ??= session
   }, [session])
   return (
     <main>
       <h1>Probe {view.state.id}</h1>
+      <button
+        type="button"
+        onClick={() => {
+          void view.actions.Fail.run().then((outcome) => setObserved(outcome.status))
+        }}
+      >
+        Observe expected error
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          void view.actions.Fail.run()
+        }}
+      >
+        Ignore expected error
+      </button>
+      <button type="button" onClick={() => setReports(actionErrors.join(", ") || "none")}>
+        Read action reports
+      </button>
+      <p>Observed: {observed}</p>
+      <p>Reports: {reports}</p>
       <p>
         Builds: {mounts}; status: {status.status}; shared:{" "}
         {status.state === view.state ? "yes" : "no"}
@@ -138,6 +175,10 @@ const bridge = () => {
     closed++
   }
 }
+const actionErrors: string[] = []
+const reportActionError = (error: unknown) => {
+  actionErrors.push(String(error))
+}
 function Harness() {
   const [visible, setVisible] = React.useState(true)
   const [lifecycle, setLifecycle] = React.useState("")
@@ -151,7 +192,7 @@ function Harness() {
       </button>
       <p>{lifecycle}</p>
       {visible && (
-        <reflex.Provider app={instrumented} bridge={bridge}>
+        <reflex.Provider app={instrumented} bridge={bridge} onBackgroundError={reportActionError}>
           <RouterProvider router={router} />
         </reflex.Provider>
       )}
@@ -177,6 +218,57 @@ class StartupBoundary extends React.Component<{ children: React.ReactNode }, { f
     return this.state.failed ? <p>Startup reached boundary</p> : this.props.children
   }
 }
+let statusBuilds = 0
+const StatusProbe = defineStoreNode({
+  name: "StatusProbe",
+  store: () => {
+    statusBuilds++
+    return createStore(() => 0)
+  },
+  actions: () => ({}),
+})
+const statusApp = defineStoreApp({ name: "status-commit", screens: [StatusProbe] })
+const statusBinding = createReflex(statusApp)
+const StatusAdapter = createRouteAdapter(statusBinding, {
+  useLocation: () => ({
+    key: "status-entry",
+    contract: StatusProbe,
+    params: {},
+    navigationType: "POP",
+  }),
+})
+const never = new Promise<never>(() => undefined)
+function AbandonedStatus(): never {
+  statusBinding.useScreenStatus(StatusProbe)
+  throw never
+}
+function CommittedStatus() {
+  return <p>Committed status: {statusBinding.useScreenStatus(StatusProbe).status}</p>
+}
+function StatusHarness() {
+  const [commit, setCommit] = React.useState(false)
+  const [builds, setBuilds] = React.useState("")
+  return (
+    <statusBinding.Provider>
+      <button type="button" onClick={() => setBuilds(`Status builds: ${statusBuilds}`)}>
+        Read status builds
+      </button>
+      <button type="button" onClick={() => setCommit(true)}>
+        Commit status
+      </button>
+      <p>{builds}</p>
+      <StatusAdapter>
+        {commit ? (
+          <CommittedStatus />
+        ) : (
+          <React.Suspense fallback={<p>Abandoned status pending</p>}>
+            <AbandonedStatus />
+          </React.Suspense>
+        )}
+      </StatusAdapter>
+    </statusBinding.Provider>
+  )
+}
 const root = document.getElementById("root")
 if (!root) {
   throw new Error("Missing root")
@@ -185,6 +277,7 @@ createRoot(root).render(
   <>
     <React.StrictMode>
       <Harness />
+      <StatusHarness />
     </React.StrictMode>
     <StartupBoundary>
       <startup.Provider fallback={<p>Starting failure probe</p>}>Unreachable</startup.Provider>

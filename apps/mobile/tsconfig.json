@@ -26,7 +26,10 @@
       "@reflex/expo/internal": ["../../packages/expo/src/internal.ts"],
       "@reflex/effect/internal": ["../../packages/effect/src/internal.ts"],
       "@reflex/runtime/internal": ["../../packages/runtime/src/internal.ts"],
-      "@reflex/effect/advanced": ["../../packages/effect/src/advanced.ts"]
+      "@reflex/effect/advanced": ["../../packages/effect/src/advanced.ts"],
+      "@inventory-provider": ["./provider.tsx"],
+      "@reflex/expo/dev": ["../../packages/expo/src/dev.ts"],
+      "@reflex/live/dev": ["../../packages/live/src/dev.ts"]
     },
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,

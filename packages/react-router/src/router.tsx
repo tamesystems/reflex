@@ -52,6 +52,7 @@ export interface RouterBinding<A extends App> extends ReflexBinding<A> {
   ): RouteObject[]
 }
 type Registration =
+  | import("@reflex/react/advanced").RouteCodec<Record<string, string | undefined>>
   | string
   | {
       readonly path?: string
@@ -59,12 +60,14 @@ type Registration =
       readonly params?: Readonly<Record<string, string>>
     }
 const pathOf = (entry: Registration) =>
-  (typeof entry === "string" ? entry : (entry.path ?? entry.pathname ?? "")).replace(
-    /\[([^\]]+)\]/g,
-    ":$1",
-  )
+  (typeof entry === "string"
+    ? entry
+    : "path" in entry
+      ? entry.path
+      : (entry.pathname ?? "")
+  ).replace(/\[([^\]]+)\]/g, ":$1")
 const mapOf = (entry: Registration): Readonly<Record<string, string>> =>
-  typeof entry === "string" ? {} : (entry.params ?? {})
+  typeof entry === "string" ? {} : "params" in entry ? (entry.params ?? {}) : {}
 class ScreenBoundary extends React.Component<
   { children: React.ReactNode; fallback?: React.ReactNode; retry(): Promise<void> },
   { error: Error | null }
@@ -114,7 +117,9 @@ const RouteScreen = ({
     Object.entries(mapping).map(([source, target]) => [target, source]),
   )
   const paramsKey = JSON.stringify(
-    Object.fromEntries(Object.entries(raw).map(([key, value]) => [reverse[key] ?? key, value])),
+    typeof entry !== "string" && "decode" in entry
+      ? entry.decode(raw)
+      : Object.fromEntries(Object.entries(raw).map(([key, value]) => [reverse[key] ?? key, value])),
   )
   const params = React.useMemo(
     () => definition["~reflex"].decodeParams?.(JSON.parse(paramsKey)) ?? JSON.parse(paramsKey),
@@ -153,6 +158,9 @@ const validateRegistration = (
     if (entry === undefined) {
       throw new Error(`${definition.name} needs a route registration`)
     }
+    if (typeof entry !== "string" && "decode" in entry) {
+      continue
+    }
     const path = pathOf(entry)
     const placeholders = path
       .split("/")
@@ -176,6 +184,9 @@ const makeHref = (
     const entry = entries[contract.name]
     if (!definition || entry === undefined || !matchesContract(definition, contract)) {
       throw new Error(`Screen "${contract.name}" must use the app's registered contract`)
+    }
+    if (typeof entry !== "string" && "encode" in entry) {
+      return entry.encode(params)
     }
     const mapping = mapOf(entry)
     const values = Object.fromEntries(

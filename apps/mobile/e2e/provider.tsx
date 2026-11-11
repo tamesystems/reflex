@@ -1,23 +1,21 @@
-import { ReflexProvider } from "@reflex/react"
-import { developmentBridge } from "@reflex/expo"
+import { Provider } from "../src/routes.ts"
 import { useState, type ReactNode } from "react"
 import { Text } from "react-native"
-import { testHost, E2EBridge } from "./instrumentation.tsx"
+import { testHost, instrumentedApp, E2EBridge } from "./instrumentation.tsx"
 
-const bridge = developmentBridge()
-export const E2EProvider = ({ children }: { readonly children: ReactNode }) => {
+export const AppProvider = ({ children }: { readonly children: ReactNode }) => {
   const [scenario, setScenario] = useState<(typeof testHost.scenarioNames)[number]>(
-    testHost.defaultScenario,
+    __DEV__ && process.env.EXPO_PUBLIC_INVENTORY_API ? "device-services" : testHost.defaultScenario,
   )
   return (
-    <ReflexProvider
-      host={testHost}
+    <Provider
+      app={instrumentedApp}
       scenario={scenario}
-      bridge={bridge}
+      bridge="development"
       fallback={<Text>Starting…</Text>}
     >
       <E2EBridge setScenario={setScenario} />
       {children}
-    </ReflexProvider>
+    </Provider>
   )
 }

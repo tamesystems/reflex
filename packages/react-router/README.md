@@ -25,3 +25,7 @@ while retaining the current URL. See apps/web for the exact compiled spec exampl
 
 This adapter imports no Effect, Expo, React Native or private router modules.
 Core-owned React Router projection remains deferred (ADR 0018).
+
+Use `route` and `routeCodec` from `@reflex/react-router/advanced` for shared literal
+checks or custom path grammar. A codec supplies path, decode and encode; it owns array
+policy and encoding. Ordinary registrations retain the literal placeholder checks.

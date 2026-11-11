@@ -1,20 +1,21 @@
-import { useSession } from "./routes.ts"
-import app from "./app.ts"
-import { useAction, ReflexProvider } from "@reflex/react"
+import { reflex } from "./routes.ts"
+const { useSession, useNode, Provider } = reflex
+import type { ComponentProps } from "react"
+import { useAction } from "@reflex/react"
 import type { NodeOf } from "@reflex/effect/advanced"
-import type { InventoryDetail } from "@reflex/example-inventory/features/inventory-detail.ts"
+import type { InventoryDetailLive } from "@reflex/example-inventory/features/inventory-detail.ts"
 
-export const useContracts = (node: NodeOf<typeof InventoryDetail> | null) => {
+export const useContracts = (node: NodeOf<typeof InventoryDetailLive> | null) => {
   const controls = useSession()
   void controls.reset("production")
   // @ts-expect-error Session resets derive scenario names from the app value.
   void controls.reset("missing-scenario")
-  ReflexProvider({
-    host: app,
+  const props: ComponentProps<typeof Provider> = {
     children: null,
-    // @ts-expect-error Provider scenarios derive from the host, never from this argument.
+    // @ts-expect-error Provider scenarios derive from the app.
     scenario: "missing-scenario",
-  })
+  }
+  void props
   const save = useAction(node, "Save")
   const set = useAction(node, "SetQuantity")
   void save.run()
@@ -30,9 +31,12 @@ export const useContracts = (node: NodeOf<typeof InventoryDetail> | null) => {
 }
 
 import { createReflexExpo } from "@reflex/expo"
-import { InventoryDetailScreen, InventoryListScreen } from "@reflex/example-inventory/screens.ts"
+import {
+  InventoryDetail as InventoryDetailScreen,
+  InventoryList as InventoryListScreen,
+} from "@reflex/example-inventory/screens.ts"
 import { InventoryFixture } from "@reflex/example-inventory/fixtures.ts"
-import { useNode, useScreen } from "./routes.ts"
+import { useScreen } from "./routes.ts"
 // @ts-expect-error A bound URL registration is total over the app's screens.
 createReflexExpo(app, { InventoryList: "/" })
 export const useBoundContracts = () => {

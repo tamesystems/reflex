@@ -486,6 +486,7 @@ export const defineStoreNode = <
     },
     [DEFINITION_IDENTITY]: identity,
     "~reflex": {
+      paramsSchema: () => params?.jsonSchema ?? { type: "object", properties: {}, required: [] },
       decodeParams: (raw: unknown) => params?.decode(raw) ?? {},
       input: (_name: string, args: readonly unknown[]) => args[0] as Json | undefined,
       state: (raw: Json): DeepReadonly<P> => raw as DeepReadonly<P>,
@@ -575,6 +576,7 @@ class StoreNode<S, P, A extends Readonly<Record<string, AnyStoreAction<S>>>>
       reportActionOutcome(
         actionOutcome(() => this.dispatchRaw(name, args[0])),
         (error) => runtime.report(error),
+        `${definition.name}.${name}`,
       ),
     )
     this.name = definition.name

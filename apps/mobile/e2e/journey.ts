@@ -48,6 +48,7 @@ const failures: Array<string> = []
 const pageErrors: Array<string> = []
 
 const recordPageError = (text: string): void => {
+  console.error(text)
   if (pageErrors.length < PAGE_ERRORS_MAX) {
     pageErrors.push(text.slice(0, DIAGNOSTIC_CHARACTERS_MAX))
   }
@@ -342,7 +343,7 @@ const warmDeepLinks = async (browser: Browser) => {
   await coreReady(reused)
   await dispatch(reused, detail("product-123"))
   await visible(reused, "Quantity: 5")
-  await reused.evaluate(() => __reflex.router.setParams({ id: "product-456" }))
+  await reused.evaluate(() => __reflex.router.setParams({ productId: "product-456" }))
   check({ label: "reused instance rebinds", passed: await visible(reused, "Quantity: 40") })
   await reused.close()
 }

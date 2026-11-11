@@ -1,9 +1,8 @@
 import { useRuntime } from "@reflex/react/advanced"
 import { useCoreStack, useShownToken } from "@reflex/expo/internal"
-import production from "@reflex/example-inventory"
+import production from "../src/app.ts"
 import { testScenarios } from "@reflex/example-inventory/scenarios.ts"
 import { InventoryFixture } from "@reflex/example-inventory/fixtures.ts"
-import { mobileServices } from "../src/app.ts"
 import { legacyApp } from "@reflex/effect/internal"
 import * as Effect from "effect/Effect"
 import * as Layer from "effect/Layer"
@@ -17,10 +16,10 @@ const lateFailure = Layer.effectDiscard(
     globals.__failLateStart = () => resume(Effect.die(new Error("late failure")))
   }),
 )
-const app = production.withScenarios(
-  { ...testScenarios, "live-services": { layer: mobileServices, fixtures: [] } },
-  { defaultScenario: "inventory-with-products", fixtures: [InventoryFixture] },
-)
+const app = production.withScenarios(testScenarios, {
+  defaultScenario: "inventory-with-products",
+  fixtures: [InventoryFixture],
+})
 const failureScenarios = {
   [LATE_FAILURE_SCENARIO]: {
     layer: Layer.merge(
@@ -29,7 +28,8 @@ const failureScenarios = {
     ),
   },
 } as const
-export const testHost = legacyApp(app.withScenarios(failureScenarios))
+export const instrumentedApp = app.withScenarios(failureScenarios)
+export const testHost = legacyApp(instrumentedApp)
 
 /** Lets the browser journey read and steer the core. Absent from other builds. */
 const globals = globalThis as Record<string, unknown>

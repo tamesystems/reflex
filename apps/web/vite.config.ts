@@ -5,6 +5,10 @@ export default defineConfig({
   build: { sourcemap: true },
   resolve: {
     alias: {
+      "@reflex/react-router/advanced": resolve(
+        import.meta.dirname,
+        "../../packages/react-router/src/advanced.ts",
+      ),
       "@reflex/react-router": resolve(
         import.meta.dirname,
         "../../packages/react-router/src/index.ts",

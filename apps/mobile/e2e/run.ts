@@ -28,7 +28,7 @@ const run = async (): Promise<number> => {
   const built = Bun.spawnSync(
     ["bunx", "expo", "export", "--platform", "web", "--output-dir", exportDirectory],
     {
-      env: { ...process.env, EXPO_PUBLIC_REFLEX_E2E: "1" },
+      env: { ...process.env, REFLEX_E2E: "1" },
       stdout: "ignore",
       stderr: "inherit",
       timeout: BUILD_TIMEOUT_MS,

@@ -63,7 +63,7 @@ const real = process.argv.includes("--real")
 if (real) {
   const result = tsc(join(home, "real.json"))
   console.log(
-    `Real inventory, plain, live-counter and web examples: passed (${result.instantiations} instantiations)`,
+    `Real inventory, plain, live-counter, web and mobile examples: passed (${result.instantiations} instantiations)`,
   )
   if (!process.argv.includes("--performance")) {
     process.exit(0)
@@ -274,7 +274,11 @@ const results = {
   typescript: ts.version,
   authoredFiles: authored.length,
   negativeCases: real
-    ? ["apps/web/src/api.types.ts", "apps/web/src/bindings.types.tsx"].reduce(
+    ? [
+        "apps/web/src/api.types.ts",
+        "apps/web/src/bindings.types.tsx",
+        "apps/mobile/src/expo.types.tsx",
+      ].reduce(
         (count, file) =>
           count + [...readFileSync(join(root, file), "utf8").matchAll(/@ts-expect-error/g)].length,
         0,

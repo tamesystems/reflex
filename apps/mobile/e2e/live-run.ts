@@ -51,7 +51,7 @@ const build = (outputDirectory: string, setting: string, dev: boolean): boolean 
     ],
     {
       cwd: appDirectory,
-      env: { ...process.env, EXPO_PUBLIC_REFLEX_BRIDGE: setting },
+      env: { ...process.env, REFLEX_E2E: dev ? "1" : "0", EXPO_PUBLIC_REFLEX_BRIDGE: setting },
       stdout: "ignore",
       stderr: "inherit",
       timeout: BUILD_TIMEOUT_MS,
@@ -80,7 +80,7 @@ const bundleText = (directory: string): string =>
 const startMetro = async (port: number, setting: string) => {
   const metro = Bun.spawn(["bunx", "expo", "start", "--web", "--port", String(port)], {
     cwd: appDirectory,
-    env: { ...process.env, CI: "1", EXPO_PUBLIC_REFLEX_BRIDGE: setting },
+    env: { ...process.env, CI: "1", REFLEX_E2E: "1", EXPO_PUBLIC_REFLEX_BRIDGE: setting },
     stdout: "ignore",
     stderr: "inherit",
   })
@@ -241,7 +241,7 @@ const runWithBridge = async (): Promise<number> => {
       }
     }
     const excluded = check(
-      !production.includes(DIALLER_MARKER),
+      !production.includes(DIALLER_MARKER) && !production.includes("__failLateStart"),
       "a production build leaves the bridge out, even with its setting given",
     )
     const tokenless = check(!production.includes(token), "a production build holds no token")

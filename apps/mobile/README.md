@@ -1,6 +1,6 @@
 # Inventory on Expo
 
-Fixture scenarios work with no server: `bun run start`. The same inventory capabilities
+Offline production services work with no server: `bun run start`. The same inventory capabilities
 can use a real local API and persistent settings in development.
 
 From the repository root, in separate terminals:
@@ -25,11 +25,11 @@ androidEmulatorSetting. Start the API with INVENTORY_HOST=0.0.0.0 to accept emul
 LAN connections. A physical device needs the host's LAN address for both services.
 The API is unauthenticated development tooling; use a trusted local network.
 
-With the API setting, `live-services` is selected initially and appears in `reflex
+With the API setting, `device-services` is selected initially and appears in `reflex
 --target device status`. `reflex --target device reset` re-reads server inventory and
-AsyncStorage settings without erasing either. `reset inventory-with-products` returns
-to fixtures; `reset live-services` returns to real services. Without the setting the
-live scenario is unavailable. Production ignores the setting.
+AsyncStorage settings without erasing either. The `REFLEX_E2E=1` provider additionally installs testScenarios;
+`reset inventory-with-products` returns to fixtures there; `reset device-services` returns to real services. Without the setting the
+device scenario uses safe offline services. Production ignores the setting.
 
 The threshold uses AsyncStorage 2.2.0 (SDK 58's bundled version), backed by localStorage
 on web. No credentials are stored. The API keeps data in memory until stopped; its

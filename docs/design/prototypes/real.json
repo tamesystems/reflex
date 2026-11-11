@@ -9,7 +9,26 @@
       "react-router": ["../../../apps/web/node_modules/react-router/dist/production/index.d.ts"],
       "@reflex/react": ["../../../packages/react/src/index.ts"],
       "@reflex/react/advanced": ["../../../packages/react/src/advanced.ts"],
-      "@reflex/react-router": ["../../../packages/react-router/src/index.ts"]
+      "@reflex/react-router": ["../../../packages/react-router/src/index.ts"],
+      "expo-router": ["../../../apps/mobile/node_modules/expo-router"],
+      "@react-native-async-storage/async-storage": [
+        "../../../apps/mobile/node_modules/@react-native-async-storage/async-storage"
+      ],
+      "expo/metro-config": ["../../../apps/mobile/node_modules/expo/metro-config.d.ts"],
+      "@inventory-provider": ["examples/apps/mobile/provider.tsx"],
+      "@reflex/example-inventory": ["examples/examples/inventory/src/app.ts"],
+      "@reflex/example-inventory/*": ["examples/examples/inventory/src/*"],
+      "@reflex/example-plain": ["examples/examples/plain/src/app.ts"],
+      "@reflex/expo": ["../../../packages/expo/src/index.ts"],
+      "@reflex/runtime": ["../../../packages/runtime/src/index.ts"],
+      "@reflex/effect": ["../../../packages/effect/src/index.ts"],
+      "@reflex/live": ["../../../packages/live/src/index.ts"],
+      "@reflex/expo/dev": ["../../../packages/expo/src/dev.ts"],
+      "@reflex/react-router/advanced": ["../../../packages/react-router/src/advanced.ts"],
+      "@reflex/runtime/internal": ["../../../packages/runtime/src/internal.ts"],
+      "@reflex/effect/internal": ["../../../packages/effect/src/internal.ts"],
+      "@reflex/effect/advanced": ["../../../packages/effect/src/advanced.ts"],
+      "@reflex/live/dev": ["../../../packages/live/src/dev.ts"]
     }
   },
   "include": [
@@ -19,6 +38,11 @@
     "examples/apps/web/src/**/*.ts",
     "examples/apps/web/src/**/*.tsx",
     "../../../apps/web/src/api.types.ts",
-    "../../../apps/web/src/bindings.types.tsx"
+    "../../../apps/web/src/bindings.types.tsx",
+    "examples/apps/mobile/**/*.ts",
+    "examples/apps/mobile/**/*.tsx",
+    "../../../apps/mobile/src/api.types.ts",
+    "../../../apps/mobile/src/expo.types.tsx",
+    "examples/apps/mobile/**/*.js"
   ]
 }

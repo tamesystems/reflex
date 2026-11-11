@@ -37,4 +37,4 @@ export const plainBackend = defineStoreApp({
 })
 export const addSchema = z.strictObject({ by: z.int() })
 export const addInput = standardInput(addSchema)
-export default plainBackend
+export default authoredApp

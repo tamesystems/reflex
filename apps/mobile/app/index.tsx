@@ -1,12 +1,23 @@
-import { InventoryListScreen as InventoryListScreenContract } from "@reflex/example-inventory/screens.ts"
+import { InventoryList } from "@reflex/example-inventory/screens.ts"
 import { isLowStock } from "@reflex/example-inventory/domain.ts"
-import { useScreen } from "../src/routes.ts"
+import { useScreenStatus } from "../src/routes.ts"
 import { Pressable, Text } from "react-native"
 import { Action, Screen, styles } from "../src/ui.tsx"
 
-export default function InventoryListScreen() {
-  const node = useScreen(InventoryListScreenContract)
+export default function InventoryListView() {
+  const node = useScreenStatus(InventoryList)
   const { status, state, actions } = node
+  if (status === "error") {
+    return (
+      <Text
+        onPress={() => {
+          void node.retry()
+        }}
+      >
+        {node.error.message} — Retry
+      </Text>
+    )
+  }
   if (status === "pending") {
     return null
   }

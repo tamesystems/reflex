@@ -28,7 +28,8 @@
       "@reflex/react/advanced": ["../../packages/react/src/advanced.ts"],
       "@reflex/effect/internal": ["../../packages/effect/src/internal.ts"],
       "@reflex/runtime/internal": ["../../packages/runtime/src/internal.ts"],
-      "@reflex/effect/advanced": ["../../packages/effect/src/advanced.ts"]
+      "@reflex/effect/advanced": ["../../packages/effect/src/advanced.ts"],
+      "@reflex/react-router/advanced": ["../../packages/react-router/src/advanced.ts"]
     }
   },
   "include": ["src", "vite.config.ts", "../../packages/react-router/src", "e2e"]

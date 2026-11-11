@@ -46,7 +46,7 @@ try {
   await page.goto(`http://localhost:${process.env.PORT}/`, { timeout: 150_000 })
   await page.getByText("Blue T-Shirt").first().waitFor({ timeout: 150_000 })
   const status = await reflex("status")
-  assert.equal(status.scenario, "live-services")
+  assert.equal(status.scenario, "device-services")
   const journey = createJourneyClient({
     inspect: async (name) => {
       const { nodes, focus } = await reflex("tree")
@@ -125,7 +125,7 @@ try {
       match: { lowStockThreshold: 10, products: [{ quantity: 5 }, {}, {}] },
     }),
   )
-  await reflex("reset", "live-services")
+  await reflex("reset", "device-services")
   await reflex(
     "wait",
     JSON.stringify({

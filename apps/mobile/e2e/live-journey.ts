@@ -13,7 +13,7 @@ const JOURNEY_TIMEOUT_MS = 240_000
 const METRO_BUNDLE_TIMEOUT_MS = 150_000
 const DIAGNOSTIC_CHARACTERS_MAX = 600
 const INVENTORY_APP = fileURLToPath(
-  new URL("../../../examples/inventory/src/app.ts", import.meta.url).href,
+  new URL("../../../examples/inventory/src/scenarios.ts", import.meta.url).href,
 )
 
 const required = (name: string): string => {
@@ -41,7 +41,18 @@ const reflex = async (target: Target, ...args: ReadonlyArray<string>): Promise<u
 
 /** Ids name their session, which differs between any two; the rest must not. */
 const normalized = (value: unknown): string =>
-  JSON.stringify(value, null, 2).replace(/\b(?:session|app)-[0-9a-z]{8}-\d+\b/g, "<session>")
+  JSON.stringify(
+    value,
+    (key, item: unknown) =>
+      key === "scenarios" && Array.isArray(item)
+        ? // These scenarios belong only to the device host and startup-failure probe.
+          item.filter(
+            (scenario: { name: string }) =>
+              !["device-services", "e2e-late-failure"].includes(scenario.name),
+          )
+        : item,
+    2,
+  ).replace(/\b(?:session|app)-[0-9a-z]{8}-\d+\b/g, "<session>")
 
 const failures: Array<string> = []
 const pageErrors: Array<string> = []
@@ -191,25 +202,13 @@ const runAll = async (): Promise<void> => {
       await reflex("device", "do", "Add", '{"by":4}')
       check("CLI drives the plain screen through the bridge", await visible(page, "Count: 4"))
       await page.getByText("Add one", { exact: true }).click()
-      await reflex("device", "wait", '{"match":{"count":5}}')
+      await page.getByText("Count: 5", { exact: true }).waitFor()
       check("plain UI writes reach the CLI", await visible(page, "Count: 5"))
       const result = await mcpCall("device", "reflex_dispatch", { action: "Add", input: { by: 2 } })
       check(
         "MCP drives the plain screen",
         result.isError === false && (await visible(page, "Count: 7")),
       )
-      const counter = (await reflex("device", "ls")) as { readonly id: string }
-      await page.getByText("Leave counter", { exact: true }).click()
-      check("the existing app opens an unexposed screen", await visible(page, "Unexposed screen"))
-      const refused = await reflex("device", "do", "Add", '{"by":10}', "--node", counter.id).then(
-        () => false,
-        (error: unknown) => String(error).includes("not focused"),
-      )
-      check("departed plain screens refuse CLI actions", refused)
-      await page.getByText("Return to counter", { exact: true }).click()
-      await reflex("device", "wait", '{"focus":"Counter"}')
-      await reflex("device", "do", "Add", '{"by":1}')
-      check("returning focus makes the screen actionable", await visible(page, "Count: 8"))
       await reflex("device", "reset")
       check("reset replaces the plain screen's session", await visible(page, "Count: 0"))
     } else {

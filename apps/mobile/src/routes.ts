@@ -1,9 +1,10 @@
 import { createReflexExpo } from "@reflex/expo"
 import app from "./app.ts"
 
-export const { Provider, useScreen, useScreenSuspense, useNode, useSession, RouterProjection } =
-  createReflexExpo(app, {
-    InventoryList: "/",
-    InventoryDetail: { pathname: "/inventory/[id]", params: { productId: "id" } },
-    Settings: "/settings",
-  })
+export const reflex = createReflexExpo(app, {
+  InventoryList: "/",
+  InventoryDetail: "/inventory/[productId]",
+  Settings: "/settings",
+})
+
+export const { Provider, useScreen, useScreenStatus, useService, Link, href } = reflex

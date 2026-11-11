@@ -28,7 +28,7 @@ const BACKENDS = [
   ["Effect, live through the bridge,", () => openBridged(COUNTER_APP_MODULE)],
   [
     "Zustand, live through the bridge",
-    () => openBridged(fileURLToPath(new URL("../examples/plain/src/app.ts", import.meta.url).href)),
+    () => openBridged(fileURLToPath(new URL("./plain-conformance.ts", import.meta.url).href)),
   ],
 ] as const
 

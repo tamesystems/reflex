@@ -157,6 +157,8 @@ runtime + live ◄── examples/live-counter
   `@reflex/react`; no Expo, React Native or Effect.
 - An app core never imports React, Expo or a device API.
 - Only `packages/expo/src/router-actions.ts` imports Expo Router's private modules.
+- Expo consumes generic definition resolvers and session route factories; its author
+  root and dev entry import no Effect. Metro selects E2E providers by alias.
 
 `test/boundaries.test.ts` enforces each package's allowed imports; change it in the same
 change as a rule. It allows the private router modules anywhere in `packages/expo`, so

@@ -106,6 +106,7 @@ export interface ConsumerDefinition<S = unknown, A = unknown> {
   readonly "~reflex": {
     readonly contract?: object
     decodeParams?(raw: unknown): unknown
+    paramsSchema?(): import("@reflex/protocol").JsonSchema
     input(action: string, args: readonly unknown[]): import("@reflex/protocol").Json | undefined
     state(raw: import("@reflex/protocol").Json): S
     actions(
@@ -157,14 +158,79 @@ export const decodeActionInput = <I>(
   }
 }
 
-/** Local actions always report defects, even when an event handler ignores the promise. */
-export const reportActionOutcome = async <E>(
+/** A Promise subclass lets await/then distinguish observed outcomes from ignored UI work. */
+export const reportUnobserved = <A>(
+  work: Promise<A>,
+  report: (error: unknown) => void,
+  failure: (value: A) => Error | undefined,
+): Promise<A> => {
+  let observed = false
+  class ObservedPromise extends Promise<A> {
+    static override get [Symbol.species]() {
+      return Promise
+    }
+    // biome-ignore lint/suspicious/noThenProperty: Deliberately observes Promise consumption through await and then.
+    override then<T = A, E = never>(
+      fulfilled?: ((value: A) => T | PromiseLike<T>) | null,
+      rejected?: ((reason: unknown) => E | PromiseLike<E>) | null,
+    ): Promise<T | E> {
+      observed = true
+      return super.then(fulfilled, rejected)
+    }
+  }
+  const result = new ObservedPromise((resolve, reject) => {
+    void work.then(resolve, reject)
+  })
+  // Install a rejection handler without marking the application's result observed.
+  void Promise.prototype.then.call(
+    result,
+    () => undefined,
+    () => undefined,
+  )
+  void work.then(
+    (value) => {
+      const error = failure(value)
+      if (error) {
+        setTimeout(() => {
+          if (!observed) {
+            report(error)
+          }
+        }, 0)
+      }
+    },
+    (error: unknown) => {
+      setTimeout(() => {
+        if (!observed) {
+          report(error)
+        }
+      }, 0)
+    },
+  )
+  return result
+}
+
+/** Defects always report; expected errors report only when nobody observes the outcome. */
+export const reportActionOutcome = <E>(
   work: Promise<ActionOutcome<E>>,
   report: (error: unknown) => void,
-): Promise<ActionOutcome<E>> => {
-  const outcome = await work
-  if (outcome.status === "defect" || outcome.status === "domain-error") {
-    report(new Error(`${outcome.error.tag}: ${outcome.error.message}`))
-  }
-  return outcome
-}
+  context?: string,
+): Promise<ActionOutcome<E>> =>
+  reportUnobserved(
+    work.then((outcome) => {
+      if (outcome.status === "defect") {
+        report(
+          new Error(
+            `${context === undefined ? "" : `${context}: `}${outcome.error.tag}: ${outcome.error.message}`,
+          ),
+        )
+      }
+      return outcome
+    }),
+    report,
+    (outcome) =>
+      outcome.status === "domain-error"
+        ? new Error(
+            `${context === undefined ? "" : `${context}: `}${outcome.error.tag}: ${outcome.error.message}`,
+          )
+        : undefined,
+  )

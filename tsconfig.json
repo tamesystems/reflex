@@ -44,6 +44,8 @@
     "packages/react/src/binding.tsx",
     "packages/react/src/binding-types.ts",
     "packages/react-router/src/router.tsx",
-    "packages/react-router/src/route-types.ts"
+    "packages/react-router/src/route-types.ts",
+    "packages/react/src/routes.ts",
+    "packages/react-router/src/advanced.ts"
   ]
 }
