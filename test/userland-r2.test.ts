@@ -137,7 +137,7 @@ test("store app membership includes router-mounted definitions without eagerly m
     project: (value) => value,
     actions: () => ({}),
   })
-  const host = defineStoreApp({ name: "routes", screens: { Route } })
+  const host = defineStoreApp({ name: "routes", screens: [Route] })
   expect(host.nodes.Route).toBe(Route)
   const session = await host.start("default", { sessionId: "routes" })
   expect(session.runtime.inspect().node).toBeNull()

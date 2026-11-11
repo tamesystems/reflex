@@ -3,7 +3,7 @@ import type { ConsumerDefinition } from "./node-handle.ts"
 import { DEFINITION_IDENTITY, definitionIdentity } from "./definition-identity.ts"
 import { STORE_AUTHOR, type JsonShape } from "./store-node.ts"
 import {
-  defineLegacyStoreApp,
+  createStoreHost,
   type MountableNode,
   type StoreApp,
   type StoreScenario,
@@ -85,26 +85,8 @@ export function defineStoreApp<
     readonly defaultScenario?: keyof S & string
   } & Unique<readonly [...D, ...V]>,
 ): AuthorStoreApp<D, V, S>
-export function defineStoreApp<
-  const N extends Record<string, MountableNode> = Record<never, never>,
-  const R extends Record<string, MountableNode> = Record<never, never>,
-  const S extends Record<string, StoreScenario<N & R>> = { default: Record<string, never> },
->(spec: {
-  readonly name: string
-  readonly nodes?: N
-  readonly screens?: R
-  readonly scenarios?: S
-  readonly defaultScenario?: NoInfer<keyof S & string>
-}): StoreApp<N & R, S, R>
-export function defineStoreApp(spec: object): unknown {
-  if (
-    !("services" in spec) &&
-    !("screens" in spec && Array.isArray(spec.screens)) &&
-    ("nodes" in spec || "screens" in spec)
-  ) {
-    return defineLegacyStoreApp(spec as Parameters<typeof defineLegacyStoreApp>[0])
-  }
-  return authorApp(spec as AuthorSpec)
+export function defineStoreApp(spec: AuthorSpec): unknown {
+  return authorApp(spec)
 }
 interface AuthorSpec {
   readonly name: string
@@ -131,7 +113,7 @@ function authorApp(spec: AuthorSpec): unknown {
     }
   }
   const scenarios = spec.scenarios ?? { default: {} }
-  const legacyScenarios = Object.fromEntries(
+  const hostScenarios = Object.fromEntries(
     Object.entries(scenarios).map(([name, scenario]) => {
       const stores = Object.fromEntries(
         (scenario.stores ?? []).map((override) => {
@@ -144,12 +126,11 @@ function authorApp(spec: AuthorSpec): unknown {
       return [name, { ...scenario, stores }]
     }),
   )
-  const app = defineLegacyStoreApp({
+  const app = createStoreHost({
     name: spec.name,
-    ambientType: "service",
-    nodes: Object.fromEntries(services.map((d) => [d.name, d])),
+    services: Object.fromEntries(services.map((d) => [d.name, d])),
     screens: Object.fromEntries(screens.map((d) => [d.name, d])),
-    scenarios: legacyScenarios,
+    scenarios: hostScenarios,
     ...(spec.defaultScenario === undefined ? {} : { defaultScenario: spec.defaultScenario }),
   })
   return Object.assign(app, {

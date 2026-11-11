@@ -8,6 +8,17 @@ const Counter = defineStoreNode({
   store: () => createStore(() => ({ count: 0 })),
   actions: (a) => ({
     Add: a({ input: z.number(), handler: (count, { store }) => store.setState({ count }) }),
+    Parse: a({
+      input: z.string().transform(Number),
+      handler: (value, { store }) => store.setState({ count: value }),
+    }),
+    Reject: a({
+      error: z.strictObject({ _tag: z.literal("Rejected") }),
+      handler: (_, { fail }) => {
+        // @ts-expect-error Store failures match their declared schema.
+        fail({ _tag: "Wrong" })
+      },
+    }),
     Empty: a({
       handler: (_, ctx) => {
         // @ts-expect-error No failure helper without an error declaration.
@@ -91,6 +102,11 @@ export async function owned() {
     const published: string = outcome.error
     void published
   }
+  await counter.actions.Parse.run("12")
+  // @ts-expect-error Transformed input consumers take encoded strings.
+  await counter.actions.Parse.run(12)
+  // @ts-expect-error Unknown action.
+  await counter.actions.Missing.run()
   const count: number = counter.state.count
   await counter.actions.Add.run(count)
   // @ts-expect-error The action input retains its inferred number type.
@@ -102,4 +118,12 @@ export const opaque = defineStoreNode({
   name: "Opaque",
   store: () => createStore(() => 0),
   actions: (a) => ({ Set: a({ input: Opaque, handler: (n, { store }) => store.setState(n) }) }),
+})
+
+defineStoreApp({
+  name: "invalid-default",
+  services: [Counter],
+  scenarios: { valid: {} },
+  // @ts-expect-error Store app defaults name an existing scenario.
+  defaultScenario: "missing",
 })

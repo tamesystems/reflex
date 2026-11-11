@@ -32,7 +32,8 @@ otherwise supply an explicit safe JSON projection. Inputs and params accept Stan
 Schema validators directly, including Zod. `standardInput(schema, jsonSchema)` supplies
 an explicit wire schema for opaque validators. Handlers receive decoded inputs and
 `{ store, signal }`; declared errors add `fail`. `projectError` publishes rich failures
-as JSON. Undeclared or invalid failures are defects.
+as JSON. Undeclared or invalid failures are defects. Mounting belongs to definitions;
+expected failures can be created only through the invocation’s declared `fail` helper.
 
 `defineStoreApp({ name, screens, services })` checks roles, unique names, JSON state and
 params. Services mount immediately and cannot require params; screens mount on demand.

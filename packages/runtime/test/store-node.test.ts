@@ -7,7 +7,7 @@ import {
   NODE_STATE_DEPTH_MAX,
   type RuntimeEvent,
 } from "@reflex/protocol"
-import { createRuntime, mountStore, standardInput, StoreFailure } from "@reflex/runtime/internal"
+import { createRuntime, defineStoreNode, standardInput } from "@reflex/runtime/internal"
 import Ajv from "ajv/dist/2020.js"
 import { createStore, type StoreApi } from "zustand/vanilla"
 import { z } from "zod"
@@ -18,22 +18,22 @@ const setup = () => {
   const store = createStore(() => ({ count: 0, secret: "hidden" }))
   const events: RuntimeEvent[] = []
   runtime.subscribe((event) => events.push(event))
-  const node = mountStore(runtime, {
+  const node = defineStoreNode({
     name: "Counter",
-    store,
+    store: () => store,
     project: ({ count }) => ({ count }),
-    actions: {
-      Add: {
+    actions: (action) => ({
+      Add: action({
         input: standardInput(addSchema),
         handler: ({ by }: z.infer<typeof addSchema>) =>
           store.setState(({ count }) => ({ count: count + by })),
-      },
-      Reset: {
+      }),
+      Reset: action({
         available: ({ count }) => (count === 0 ? "Already zero" : true),
         handler: () => store.setState({ count: 0 }),
-      },
-    },
-  })
+      }),
+    }),
+  }).mount(runtime)
   return { runtime, store, events, node }
 }
 
@@ -93,19 +93,18 @@ test("async Standard Schema is explicitly refused without starting work or leaki
     z.string().refine(async () => true),
     { type: "string" },
   )
-  const node = mountStore(runtime, {
+  const node = defineStoreNode({
     name: "Async",
-    store: createStore(() => 0),
-    project: (s) => s,
-    actions: {
-      Run: {
+    store: () => createStore(() => 0),
+    actions: (action) => ({
+      Run: action({
         input,
         handler: () => {
           called = true
         },
-      },
-    },
-  })
+      }),
+    }),
+  }).mount(runtime)
   const sequence = runtime.sequence
   await expect(node.dispatchRaw("Run", "ok")).rejects.toMatchObject({
     code: ErrorCode.InvalidInput,
@@ -130,20 +129,19 @@ test("promise work completes only after settlement; cancellation and disposal ab
   const runtime = createRuntime({ sessionId: "promises" })
   const pending = deferred<void>()
   let signal: AbortSignal | undefined
-  const node = mountStore(runtime, {
+  const node = defineStoreNode({
     name: "Async",
-    store: createStore(() => 0),
-    project: (s) => s,
-    actions: {
-      Barrier: { handler: () => undefined },
-      Run: {
+    store: () => createStore(() => 0),
+    actions: (action) => ({
+      Barrier: action({ handler: () => undefined }),
+      Run: action({
         handler: (_, context) => {
           signal = context.signal
           return pending.promise
         },
-      },
-    },
-  })
+      }),
+    }),
+  }).mount(runtime)
   const op = await runtime.dispatch({ action: "Run" })
   await node.dispatchRaw("Barrier") // A later synchronous operation settles while Run remains pending.
   expect(runtime.operation(op.operationId).status).toBe("running")
@@ -151,19 +149,18 @@ test("promise work completes only after settlement; cancellation and disposal ab
   expect((await runtime.wait({ operationId: op.operationId })).operation?.status).toBe("completed")
   // A fresh unresolved promise for another registered owner.
   const never = deferred<void>()
-  const other = mountStore(runtime, {
+  const other = defineStoreNode({
     name: "Other",
-    store: createStore(() => 0),
-    project: (s) => s,
-    actions: {
-      Wait: {
+    store: () => createStore(() => 0),
+    actions: (action) => ({
+      Wait: action({
         handler: (_, context) => {
           signal = context.signal
           return never.promise
         },
-      },
-    },
-  })
+      }),
+    }),
+  }).mount(runtime)
   const cancelled = await runtime.dispatch({ action: "Wait" })
   runtime.cancel(cancelled.operationId)
   expect(signal?.aborted).toBe(true)
@@ -180,30 +177,29 @@ test("promise work completes only after settlement; cancellation and disposal ab
   node.dispose()
 })
 
-test("declared failures and synchronous or asynchronous defects remain distinct", async () => {
+test("unbranded thrown values and synchronous or asynchronous errors are defects", async () => {
   const runtime = createRuntime({ sessionId: "failures" })
-  const node = mountStore(runtime, {
+  const node = defineStoreNode({
     name: "Errors",
-    store: createStore(() => 0),
-    project: (s) => s,
-    actions: {
-      Declared: {
+    store: () => createStore(() => 0),
+    actions: (action) => ({
+      Declared: action({
         handler: () => {
-          throw new StoreFailure("Rejected", "expected")
+          throw { _tag: "Rejected", message: "expected" }
         },
-      },
-      Sync: {
+      }),
+      Sync: action({
         handler: () => {
           throw new Error("bug")
         },
-      },
-      Async: {
+      }),
+      Async: action({
         handler: async () => {
           throw new Error("async bug")
         },
-      },
-    },
-  })
+      }),
+    }),
+  }).mount(runtime)
   expect(await node.dispatchRaw("Declared")).toMatchObject({
     status: "failed",
     error: { tag: "Defect", defect: true },
@@ -239,14 +235,26 @@ test("JSON, depth, size and escaped size are checked before registration and eac
     const runtime = createRuntime({ sessionId: "limits", onBackgroundError: () => undefined })
     const store = createStore<unknown>(() => invalid)
     expect(() =>
-      mountStore(runtime, { name: "Invalid", store, project: (s) => s, actions: {} }),
+      defineStoreNode({
+        name: "Invalid",
+        store: () => store,
+        // Deliberately bypass static JSON checking to exercise publication at runtime.
+        project: (s): string => s as string,
+        actions: () => ({}),
+      }).mount(runtime),
     ).toThrow()
     expect(runtime.sequence).toBe(0)
     store.setState("valid")
-    const node = mountStore(runtime, { name: "Valid", store, project: (s) => s, actions: {} })
+    const node = defineStoreNode({
+      name: "Valid",
+      store: () => store,
+      // Deliberately bypass static JSON checking to exercise runtime publication.
+      project: (s): string => s as string,
+      actions: () => ({}),
+    }).mount(runtime)
     const sequence = runtime.sequence
     store.setState(invalid, true)
-    expect(node.getSnapshot()).toBe("valid")
+    expect(node.getSnapshot() as unknown).toBe("valid")
     expect(runtime.sequence).toBe(sequence)
     node.dispose()
   }
@@ -271,12 +279,12 @@ test("structural Redux-style store needs no Zustand adapter", async () => {
     },
   }
   const runtime = createRuntime({ sessionId: "redux" })
-  const node = mountStore(runtime, {
+  const node = defineStoreNode({
     name: "Redux",
-    store,
+    store: () => store,
     project: (s) => ({ count: s }),
-    actions: { Increment: { handler: () => store.dispatch() } },
-  })
+    actions: (action) => ({ Increment: action({ handler: () => store.dispatch() }) }),
+  }).mount(runtime)
   await node.dispatchRaw("Increment")
   expect(node.getSnapshot()).toEqual({ count: 1 })
   node.dispose()
@@ -296,23 +304,26 @@ test("projection accessors are rejected without invoking them and invalid writes
     },
   }
   expect(() =>
-    mountStore(runtime, {
+    defineStoreNode({
       name: "Getter",
-      store: createStore(() => 0),
+      store: () => createStore(() => 0),
       project: () => accessor,
-      actions: {},
-    }),
+      actions: () => ({}),
+    }).mount(runtime),
   ).toThrow("accessors")
   expect(read).toBe(false)
   const store = createStore<unknown>(() => null)
-  const node = mountStore(runtime, {
+  const node = defineStoreNode({
     name: "Limits",
-    store,
-    project: (s) => s,
-    actions: {
-      Overflow: { handler: () => store.setState("x".repeat(NODE_STATE_CHARACTERS_MAX), true) },
-    },
-  })
+    store: () => store,
+    // Deliberately bypass static JSON checking to exercise runtime publication.
+    project: (s): string => s as string,
+    actions: (action) => ({
+      Overflow: action({
+        handler: () => store.setState("x".repeat(NODE_STATE_CHARACTERS_MAX), true),
+      }),
+    }),
+  }).mount(runtime)
   expect(await node.dispatchRaw("Overflow")).toMatchObject({
     status: "failed",
     error: { tag: "ResourceExhausted", defect: false },
@@ -327,13 +338,14 @@ test("state fits exactly at character and depth boundaries", () => {
     "x".repeat(NODE_STATE_CHARACTERS_MAX - 2),
     deep(NODE_STATE_DEPTH_MAX - 1),
   ]) {
-    const node = mountStore(runtime, {
+    const node = defineStoreNode({
       name: "Fits",
-      store: createStore(() => initial),
-      project: (s) => s,
-      actions: {},
-    })
-    expect(node.getSnapshot()).toEqual(initial)
+      store: () => createStore(() => initial),
+      // Deliberately bypass static JSON checking to exercise runtime publication.
+      project: (s): string => s as string,
+      actions: () => ({}),
+    }).mount(runtime)
+    expect(node.getSnapshot() as unknown).toEqual(initial)
     node.dispose()
   }
 })
@@ -364,12 +376,11 @@ test("no-input actions reject payloads before acceptance and listeners are bound
 test("public snapshots are detached from application-owned nested objects", () => {
   const raw = { nested: { count: 1 } }
   const runtime = createRuntime({ sessionId: "detached" })
-  const node = mountStore(runtime, {
+  const node = defineStoreNode({
     name: "Detached",
-    store: createStore(() => raw),
-    project: (s) => s,
-    actions: {},
-  })
+    store: () => createStore(() => raw),
+    actions: () => ({}),
+  }).mount(runtime)
   expect(Object.isFrozen(raw.nested)).toBe(false)
   raw.nested.count = 2
   expect(node.getSnapshot()).toEqual({ nested: { count: 1 } })
@@ -386,12 +397,12 @@ test("public arrays cannot execute a custom JSON encoder", () => {
     },
   })
   expect(() =>
-    mountStore(runtime, {
+    defineStoreNode({
       name: "Array",
-      store: createStore(() => value),
-      project: (s) => s,
-      actions: {},
-    }),
+      store: () => createStore(() => value),
+      project: (state): readonly number[] => state,
+      actions: () => ({}),
+    }).mount(runtime),
   ).toThrow("named properties")
   expect(encoded).toBe(false)
 })
@@ -403,12 +414,15 @@ test("state that cannot be published never breaks the application's own store wr
     onBackgroundError: (error) => reported.push(error),
   })
   const store = createStore<{ count: number; extra?: unknown }>(() => ({ count: 0 }))
-  const node = mountStore(runtime, {
+  const node = defineStoreNode({
     name: "Counter",
-    store,
-    project: (state) => state,
-    actions: { Add: { handler: () => store.setState(({ count }) => ({ count: count + 1 })) } },
-  })
+    store: () => store,
+    // Deliberately allow malformed writes to reach runtime publication.
+    project: (state) => state as { count: number },
+    actions: (action) => ({
+      Add: action({ handler: () => store.setState(({ count }) => ({ count: count + 1 })) }),
+    }),
+  }).mount(runtime)
   // Subscribed after Reflex, as an app's UI usually is.
   let uiNotified = 0
   store.subscribe(() => {
@@ -444,12 +458,11 @@ test("a refused input says what is wrong, within a bound", async () => {
   node.dispose()
 
   const runtime = createRuntime({ sessionId: "many-issues" })
-  const many = mountStore(runtime, {
+  const many = defineStoreNode({
     name: "Many",
-    store: createStore(() => 0),
-    project: (state) => state,
-    actions: {
-      Run: {
+    store: () => createStore(() => 0),
+    actions: (action) => ({
+      Run: action({
         input: standardInput(
           {
             "~standard": {
@@ -466,9 +479,9 @@ test("a refused input says what is wrong, within a bound", async () => {
           { type: "object" },
         ),
         handler: () => undefined,
-      },
-    },
-  })
+      }),
+    }),
+  }).mount(runtime)
   const bounded = (await many.dispatchRaw("Run", {}).catch((error: unknown) => error)) as Error
   expect(bounded.message).toContain("field0: ")
   expect(bounded.message).not.toContain("field5: ")
@@ -482,12 +495,11 @@ test("cancelled handlers lose store methods before abort listeners and late cont
   const settled = deferred<void>()
   let abortWrite: unknown
   let lateWrite: unknown
-  const node = mountStore(runtime, {
+  const node = defineStoreNode({
     name: "Counter",
-    store,
-    project: (state) => state,
-    actions: {
-      Run: {
+    store: () => store,
+    actions: (action) => ({
+      Run: action({
         handler: async (_, { store, signal }) => {
           const write = (store as StoreApi<{ count: number }>).setState
           signal.addEventListener("abort", () => {
@@ -506,9 +518,9 @@ test("cancelled handlers lose store methods before abort listeners and late cont
             settled.resolve()
           }
         },
-      },
-    },
-  })
+      }),
+    }),
+  }).mount(runtime)
   const operation = await runtime.dispatch({ action: "Run" })
   runtime.cancel(operation.operationId)
   expect(abortWrite).toMatchObject({ code: ErrorCode.SessionClosed })
@@ -529,12 +541,11 @@ test("disposing a store generation revokes handler access while a fresh store st
   const barrier = deferred<void>()
   const settled = deferred<void>()
   let lateWrite: unknown
-  const node = mountStore(runtime, {
+  const node = defineStoreNode({
     name: "Counter",
-    store,
-    project: (state) => state,
-    actions: {
-      Run: {
+    store: () => store,
+    actions: (action) => ({
+      Run: action({
         handler: async (_, { store }) => {
           await barrier.promise
           try {
@@ -545,21 +556,20 @@ test("disposing a store generation revokes handler access while a fresh store st
             settled.resolve()
           }
         },
-      },
-    },
-  })
+      }),
+    }),
+  }).mount(runtime)
   const operation = await runtime.dispatch({ action: "Run" })
   node.dispose()
   expect((await runtime.wait({ operationId: operation.operationId })).operation?.status).toBe(
     "cancelled",
   )
   const nextStore = createStore(() => ({ count: 5 }))
-  const next = mountStore(runtime, {
+  const next = defineStoreNode({
     name: "Counter",
-    store: nextStore,
-    project: (state) => state,
-    actions: {},
-  })
+    store: () => nextStore,
+    actions: () => ({}),
+  }).mount(runtime)
   const sequence = runtime.sequence
   barrier.resolve()
   await settled.promise
@@ -596,12 +606,11 @@ test("guarded handlers preserve frozen class stores and stable extracted methods
   }
   const runtime = createRuntime({ sessionId: "class-store" })
   const store = Object.freeze(new CounterStore())
-  const node = mountStore(runtime, {
+  const node = defineStoreNode({
     name: "Counter",
-    store,
-    project: (state) => state,
-    actions: {
-      Increment: {
+    store: () => store,
+    actions: (action) => ({
+      Increment: action({
         handler: (_, { store }) => {
           const counter = store as CounterStore
           expect(counter.increment).toBe(counter.increment)
@@ -609,9 +618,9 @@ test("guarded handlers preserve frozen class stores and stable extracted methods
           increment()
           expect(counter.getState()).toEqual({ count: 1 })
         },
-      },
-    },
-  })
+      }),
+    }),
+  }).mount(runtime)
   expect((await node.dispatchRaw("Increment")).status).toBe("completed")
   expect(node.getSnapshot()).toEqual({ count: 1 })
   node.dispose()

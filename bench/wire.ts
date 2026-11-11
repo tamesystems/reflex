@@ -1,13 +1,10 @@
 /** What a request costs through the protocol, and what events cost to log and encode. */
-import { defineApp, defineCapability } from "@reflex/effect"
-import { mount } from "@reflex/effect/advanced"
-import { Registry } from "@reflex/effect/internal"
+import { defineApp, defineService } from "@reflex/effect"
+import { APP_HOST_ADAPTER, type AppHost } from "@reflex/runtime/internal"
 import { type RuntimeEvent, toNodeId } from "@reflex/protocol"
 import { createEventEncoder, createLoopbackClient } from "@reflex/rpc"
 import { createController } from "@reflex/runtime/internal"
 import { EventLog } from "../packages/runtime/src/event-log.ts"
-import * as Effect from "effect/Effect"
-import * as Layer from "effect/Layer"
 import * as Schema from "effect/Schema"
 import inventory from "../examples/inventory/src/scenarios.ts"
 
@@ -60,33 +57,27 @@ await measure("logging a 1 MiB event", FRAME_COUNT, async () => {
 })
 
 // Rows are the case to watch: every value is a step for all that walks them.
-const Rows = defineCapability({
+const Rows = defineService({
   name: "Rows",
   state: Schema.Struct({
     version: Schema.Int,
     rows: Schema.Array(Schema.Struct({ id: Schema.String, n: Schema.Int, on: Schema.Boolean })),
   }),
+  initial: () => ({ version: 0, rows }),
   actions: (action) => ({
-    Touch: action({
-      handler: (_, state) =>
-        state.update((current) => ({ ...current, version: current.version + 1 })),
+    Touch: action.reduce({
+      reducer: (_, current) => ({ ...current, version: current.version + 1 }),
     }),
   }),
 })
 const rows = Array.from({ length: ROW_COUNT }, (_, n) => ({ id: `row-${n}`, n, on: n % 2 === 0 }))
 const rowsApp = defineApp({
   name: "rows",
-  defaultScenario: "default",
-  root: Layer.effectDiscard(
-    Effect.gen(function* () {
-      const node = yield* mount(Rows, { version: 0, rows })
-      const registry = yield* Registry
-      registry.setFocus(node.id)
-    }),
-  ),
-  scenarios: { default: { layer: Layer.empty } },
+  services: [Rows],
 })
-const rowsController = await createController(rowsApp)
+const rowsController = await createController(
+  (rowsApp as unknown as { readonly [APP_HOST_ADAPTER]: AppHost })[APP_HOST_ADAPTER],
+)
 const rowsClient = createLoopbackClient(rowsController)
 await rowsClient.request("app.subscribe", {})
 await measure(`one change to ${ROW_COUNT} rows, to a subscriber`, ROW_RUN_COUNT, async () => {

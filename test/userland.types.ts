@@ -4,7 +4,7 @@ import {
 } from "@reflex/effect/internal"
 import { defineCapability, defineScreen } from "@reflex/effect"
 import type { NodeOf } from "@reflex/effect/advanced"
-import { defineStoreApp, defineStoreNode, standardInput } from "@reflex/runtime"
+import { defineStoreNode, standardInput } from "@reflex/runtime"
 import * as Layer from "effect/Layer"
 import * as Schema from "effect/Schema"
 import { z } from "zod"
@@ -93,73 +93,6 @@ export const contracts = async (node: NodeOf<typeof Detail>) => {
   await explore(app, { knownInputs: { Detail: { Save: [{}] } } })
   await node.actions.SetQuantity({ quantity: 2 })
   await pool.disposeAll()
-}
-
-export const Store = defineStoreNode({
-  name: "Store",
-  store: () => ({ getState: () => ({ count: 0 }), subscribe: () => () => undefined }),
-  project: (state) => state,
-  actions: (action) => ({
-    Parse: action({
-      input: standardInput(z.string().transform(Number)),
-      handler: (input) => {
-        const number: number = input
-        return number
-      },
-    }),
-    Fail: action({
-      error: z.strictObject({ _tag: z.literal("Rejected"), message: z.string() }),
-      handler: (_, { fail }) => fail({ _tag: "Rejected", message: "no" }),
-    }),
-    BadFailure: action({
-      error: z.strictObject({ _tag: z.literal("Rejected") }),
-      handler: (_, { fail }) => {
-        // @ts-expect-error Store failures match their declared schema.
-        return fail({ _tag: "Wrong" })
-      },
-    }),
-  }),
-})
-export const storeConsumer = (node: ReturnType<typeof Store.mount>) => {
-  void node.actions.Parse("12")
-  // @ts-expect-error A transformed input's consumer uses the wire input, not the decoded number.
-  void node.actions.Parse(12)
-  // @ts-expect-error Unknown action.
-  void node.actions.Missing()
-  const count: number = node.getSnapshot().count
-  return count
-}
-
-const storeApp = defineStoreApp({ name: "store", nodes: { Store } })
-export const scenarioContracts = () => {
-  const extended = storeApp.withScenarios(
-    {
-      seeded: {
-        stores: {
-          Store: () => ({ getState: () => ({ count: 12 }), subscribe: () => () => undefined }),
-        },
-      },
-    },
-    { defaultScenario: "seeded" },
-  )
-  defineStoreApp({
-    name: "bad",
-    nodes: { Store },
-    scenarios: { valid: {} },
-    // @ts-expect-error A store app default must name a scenario.
-    defaultScenario: "missing",
-  })
-  // @ts-expect-error Composed defaults must name an existing or added scenario.
-  storeApp.withScenarios({ seeded: {} }, { defaultScenario: "missing" })
-  storeApp.withScenarios({
-    bad: {
-      stores: {
-        // @ts-expect-error Store overrides retain the definition's state type.
-        Store: () => ({ getState: () => ({ count: "wrong" }), subscribe: () => () => undefined }),
-      },
-    },
-  })
-  return extended
 }
 
 // Round two: contracts establish state and routes before any handlers import navigation.

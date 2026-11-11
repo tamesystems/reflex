@@ -150,8 +150,8 @@ test("route factories use the session's scenario overrides", async () => {
   })
   const host = defineStoreApp({
     name: "seeded",
-    screens: { Detail },
-    scenarios: { seeded: { stores: { Detail: () => store(42) } } },
+    screens: [Detail],
+    scenarios: { seeded: { stores: [Detail.withStore(() => store(42))] } },
   })
   const session = await host.start("seeded", { sessionId: "seeded" })
   try {

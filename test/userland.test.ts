@@ -3,6 +3,7 @@ import { ErrorCode, SUBSCRIBERS_MAX } from "@reflex/protocol"
 import { createTestAppPool } from "@reflex/test"
 import { defineStoreApp, defineStoreNode, standardInput } from "@reflex/runtime"
 import { z } from "zod"
+import { mountSessionRoute } from "@reflex/runtime/internal"
 import { createStore } from "zustand/vanilla"
 import app from "../examples/inventory/src/scenarios.ts"
 const screens = app.screens
@@ -59,23 +60,25 @@ test("store handles retain transformed inputs, projected state, errors and focus
       }),
     }),
   })
-  const host = defineStoreApp({ name: "counter", nodes: { Counter } })
+  const host = defineStoreApp({ name: "counter", screens: [Counter] })
   const extended = host.withScenarios(
     {
       full: {
         description: "Seeded counter",
-        stores: { Counter: () => createStore(() => ({ count: 99, token: "private" })) },
+        stores: [Counter.withStore(() => createStore(() => ({ count: 99, token: "private" })))],
       },
     },
     { defaultScenario: "full" },
   )
   const seeded = await pool.open(extended, { scenario: "full" })
-  expect(await (await seeded.node(Counter)).state()).toEqual({ count: 99 })
-  await seeded.reset("default")
-  expect(await (await seeded.node(Counter)).state()).toEqual({ count: 0 })
+  expect(await (await seeded.open(Counter)).state()).toEqual({ count: 99 })
+  const reset = await seeded.reset("default")
+  expect(await (await reset.open(Counter)).state()).toEqual({ count: 0 })
   const session = await host.start("default", { sessionId: "store-contract" })
   try {
-    const node = Counter.resolve(session.runtime)
+    const route = await mountSessionRoute(session.runtime, Counter, {})
+    session.runtime.setFocus(route.id)
+    const node = Counter.resolve(session.runtime, route.id)
     expect(node).toBeDefined()
     if (node === undefined) {
       throw new Error("Counter must be mounted")

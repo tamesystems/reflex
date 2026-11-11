@@ -21,18 +21,4 @@ export const Counter = defineStoreNode({
 })
 export const authoredApp = defineStoreApp({ name: "plain-counter", services: [Counter] })
 
-// Compatibility host for existing screen-based conformance and mobile consumers (step B).
-export const plainBackend = defineStoreApp({
-  name: "counter",
-  nodes: {
-    Counter: {
-      ...Counter,
-      type: "screen",
-      mount: (
-        runtime: Parameters<typeof Counter.mount>[0],
-        store?: ReturnType<typeof createCounterStore>,
-      ) => Counter.mount(runtime, store, "screen"),
-    },
-  },
-})
 export default authoredApp

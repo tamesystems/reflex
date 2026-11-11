@@ -1,39 +1,28 @@
-/** The conformance suite's Effect app, in a module of its own so a device can load it too. */
-import { defineApp, defineCapability } from "@reflex/effect"
-import { mount } from "@reflex/effect/advanced"
-import { Registry } from "@reflex/effect/internal"
-import * as Effect from "effect/Effect"
-import * as Layer from "effect/Layer"
+/** The conformance suite's Effect app, loadable by the live device worker too. */
+import { defineApp, defineNavigation, Screen } from "@reflex/effect"
+import { APP_HOST_ADAPTER, type AppHost } from "@reflex/runtime/internal"
 import * as Schema from "effect/Schema"
 
 export const COUNTER_APP_MODULE = import.meta.path
 
-const Counter = defineCapability({
-  name: "Counter",
+const Counter = Screen.define("Counter", {
   state: Schema.Struct({ count: Schema.Int }),
+  initial: () => ({ count: 0 }),
   actions: (action) => ({
-    Add: action({
+    Add: action.reduce({
       input: Schema.Struct({ by: Schema.Int }),
-      handler: ({ by }, state) => state.update((s) => ({ count: s.count + by })),
+      reducer: ({ by }, state) => ({ count: state.count + by }),
     }),
-    Reset: action({
+    Reset: action.reduce({
       available: (s) => (s.count === 0 ? "Already zero" : true),
-      handler: (_, state) => state.update(() => ({ count: 0 })),
+      reducer: () => ({ count: 0 }),
     }),
   }),
 })
-
-const effectBackend = defineApp({
+const Nav = defineNavigation({ Counter })
+export const app = defineApp({
   name: "counter",
-  defaultScenario: "default",
-  root: Layer.effectDiscard(
-    Effect.gen(function* () {
-      const node = yield* mount(Counter, { count: 0 })
-      const registry = yield* Registry
-      registry.setFocus(node.id)
-    }),
-  ),
-  scenarios: { default: { layer: Layer.empty } },
+  navigation: Nav.implement([Counter], { initial: Counter }),
 })
-
-export default effectBackend
+// Workers/controllers consume the infrastructure host; authors compose the descriptor above.
+export default (app as unknown as { readonly [APP_HOST_ADAPTER]: AppHost })[APP_HOST_ADAPTER]

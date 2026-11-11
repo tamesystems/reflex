@@ -133,7 +133,7 @@ const schemaOf = (schema: unknown): JsonSchema => {
 }
 
 /** Explicit expected failure. Messages are public; never put secrets in them. */
-export class StoreFailure extends Error {
+class DeclaredStoreError extends Error {
   constructor(
     readonly tag: string,
     message: string,
@@ -172,7 +172,7 @@ export interface StoreAction<
 
 const invoke = (
   handler: (signal: AbortSignal) => unknown,
-  validatedFailures: WeakSet<StoreFailure>,
+  validatedFailures: WeakSet<DeclaredStoreError>,
 ): Invocation => {
   const controller = new AbortController()
   let finish!: (outcome: OperationOutcome) => void
@@ -246,7 +246,7 @@ const guardedStore = <T extends object>(store: T, active: () => boolean): T => {
 
 const failedOutcome = (
   error: unknown,
-  validatedFailures: WeakSet<StoreFailure>,
+  validatedFailures: WeakSet<DeclaredStoreError>,
 ): OperationOutcome => {
   try {
     const limited = error instanceof ProtocolError && error.code === ErrorCode.ResourceExhausted
@@ -255,12 +255,12 @@ const failedOutcome = (
       error: {
         tag: limited
           ? "ResourceExhausted"
-          : error instanceof StoreFailure && validatedFailures.has(error)
+          : error instanceof DeclaredStoreError && validatedFailures.has(error)
             ? boundedText(error.tag)
             : "Defect",
         message: boundedText(error instanceof Error ? error.message : String(error)),
-        defect: !limited && !(error instanceof StoreFailure && validatedFailures.has(error)),
-        ...(error instanceof StoreFailure &&
+        defect: !limited && !(error instanceof DeclaredStoreError && validatedFailures.has(error)),
+        ...(error instanceof DeclaredStoreError &&
         validatedFailures.has(error) &&
         error.data !== undefined
           ? { data: publishJson(error.data) }
@@ -405,14 +405,6 @@ export interface StoreActionBuilder<S, T extends Store<S> = Store<S>> {
   ): BuiltStoreAction<S, T, I, E, StoreErrorOutput<E>>
 }
 
-type CheckedStoreActions<A> = {
-  readonly [K in keyof A]: A[K] extends { readonly input: StoreInput<infer I, unknown> }
-    ? { readonly handler: (input: I, ...rest: never[]) => unknown }
-    : A[K] extends { readonly input?: StoreInput<infer I, unknown> }
-      ? { readonly handler: (input: I, ...rest: never[]) => unknown }
-      : { readonly handler: (input: undefined, ...rest: never[]) => unknown }
-}
-
 const checkInitialState = <S>(
   name: string,
   store: Store<S>,
@@ -468,9 +460,7 @@ export const defineStoreNode = <
   readonly params?: Params
   readonly store: (params: NoInfer<DecodedStoreInput<Params>>) => T
   readonly project?: (state: ReturnType<T["getState"]>) => P & Json
-  readonly actions: (
-    action: StoreActionBuilder<ReturnType<T["getState"]>, T>,
-  ) => A & CheckedStoreActions<A>
+  readonly actions: (action: StoreActionBuilder<ReturnType<T["getState"]>, T>) => A
 }) => {
   const identity = {}
   const project = definition.project ?? ((state: ReturnType<T["getState"]>) => state as P)
@@ -533,7 +523,7 @@ export const defineStoreNode = <
       type = definition.type ?? "service",
     ) {
       checkInitialState(definition.name, store, project, definition.project !== undefined)
-      return mountStore(runtime, {
+      return new StoreNode(runtime, {
         identity,
         name: definition.name,
         type,
@@ -552,7 +542,7 @@ export const defineStoreNode = <
   }
 }
 
-export interface StoreDefinition<S, P = unknown, A = Readonly<Record<string, AnyStoreAction<S>>>> {
+interface StoreDefinition<S, P = unknown, A = Readonly<Record<string, AnyStoreAction<S>>>> {
   readonly identity?: object
   readonly name: string
   readonly type?: NodeType
@@ -562,11 +552,6 @@ export interface StoreDefinition<S, P = unknown, A = Readonly<Record<string, Any
 }
 
 /** Register existing behavior; ownership of the store stays with the application. */
-export const mountStore = <S, P, A extends Readonly<Record<string, AnyStoreAction<S>>>>(
-  runtime: Runtime,
-  definition: StoreDefinition<S, P, A>,
-) => new StoreNode(runtime, definition)
-
 class StoreNode<S, P, A extends Readonly<Record<string, AnyStoreAction<S>>>>
   implements NodeAdapter, NodeHandle<DeepReadonly<P>, StoreActions<A>>
 {
@@ -698,7 +683,7 @@ class StoreNode<S, P, A extends Readonly<Record<string, AnyStoreAction<S>>>>
     )
     const declaredError = action.error
     return () => {
-      const validatedFailures = new WeakSet<StoreFailure>()
+      const validatedFailures = new WeakSet<DeclaredStoreError>()
       const work = invoke(
         (signal) =>
           Promise.resolve(
@@ -734,7 +719,7 @@ class StoreNode<S, P, A extends Readonly<Record<string, AnyStoreAction<S>>>>
                           isRecord(data) && typeof data._tag === "string" ? data._tag : "Failure"
                         const message =
                           isRecord(data) && typeof data.message === "string" ? data.message : tag
-                        const failure = new StoreFailure(tag, message, data)
+                        const failure = new DeclaredStoreError(tag, message, data)
                         validatedFailures.add(failure)
                         throw failure
                       },

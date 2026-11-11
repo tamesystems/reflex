@@ -291,7 +291,9 @@ Intentionally partial snippets use `ts partial: reason` or `tsx partial: reason`
 
 `bun docs/design/prototypes/check.ts --real` also compares the exact type and value
 export-name sets for the React, React Router and Expo root/advanced entries against the
-spec declarations. Effect/runtime/live/test export cleanup remains in progress. Run
+spec declarations. Effect/runtime/live/test export cleanup remains in progress. The store author entry now
+accepts only screen/service arrays and withStore overrides; conformance tests drive the
+wire client directly. Raw store mounting and throwable failure exports have been removed. Run
 `bun docs/design/prototypes/check.ts` for the declaration examples, diagnostic locations
 and reference performance gates. Run `bun docs/design/prototypes/check.ts --real --performance`
 for the real-package gates. Measurements print to stdout; no generated reports are tracked.
@@ -324,3 +326,8 @@ instantiations. The real-package screen gate measured 1.22/2.41/3.75 s for
 11.90/6.70 ms per screen and additional hooks at most 0.223 ms. Reference declarations
 passed at 8.80 ms per screen and at most 0.912 ms per additional hook. These local runs
 included concurrent browser work; the root instantiation ceiling remains unchanged.
+
+The partial D2 store/conformance cleanup passes the unchanged root type gate at 504,641
+instantiations. Regression tests construct store definitions directly; overlapping store
+inference cases live in `packages/runtime/test/store-author.types.ts`. See ADR 0020 for
+remaining cleanup and source counts; this checkpoint does not meet final acceptance.

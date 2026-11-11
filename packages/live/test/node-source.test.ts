@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
-import { ErrorCode } from "@reflex/protocol"
-import { createRuntime, mountStore } from "@reflex/runtime/internal"
+import { defined, ErrorCode } from "@reflex/protocol"
+import { createRuntime, defineStoreNode } from "@reflex/runtime/internal"
 import { nodeSource, reportFocus } from "../src/node-source.ts"
 
 test("generic source binds an adapter without a live object and caches by revision", async () => {
@@ -41,13 +41,13 @@ test("external router focus gates screens; old cleanup cannot clear newer focus"
   const runtime = createRuntime({ sessionId: "focus" })
   const store = { getState: () => 0, subscribe: () => () => undefined }
   const mount = (name: string) =>
-    mountStore(runtime, {
+    defineStoreNode({
       name,
       type: "screen",
-      store,
+      store: () => store,
       project: (s) => s,
-      actions: { Run: { handler: () => undefined } },
-    })
+      actions: (action) => ({ Run: action({ handler: () => undefined }) }),
+    }).mount(runtime)
   const first = mount("First")
   const second = mount("Second")
   await expect(first.dispatchRaw("Run")).rejects.toMatchObject({
@@ -68,33 +68,37 @@ test("external router focus gates screens; old cleanup cannot clear newer focus"
 })
 
 test("existing-router focus starts Effect onFocus once per arrival", async () => {
-  const { defineCapability } = await import("@reflex/effect")
-  const { mount } = await import("@reflex/effect/advanced")
-  const { Registry } = await import("@reflex/effect/internal")
-  const Effect = await import("effect/Effect")
+  const { Screen, defineApp } = await import("@reflex/effect")
+  const { APP_HOST_ADAPTER, mountSessionRoute } = await import("@reflex/runtime/internal")
   const Schema = await import("effect/Schema")
-  const runtime = createRuntime({ sessionId: "external-focus" })
-  const Screen = defineCapability({
-    name: "Screen",
-    state: Schema.Number,
+  const Contract = Screen("Screen", { state: Schema.Number, initial: () => 0 })
+  const definition = Contract.implement({
     actions: () => ({}),
-    onFocus: (state) => state.update((count) => count + 1),
+    onFocus: ({ state }) => state.update((count) => count + 1),
   })
-  await Effect.runPromise(
-    Effect.scoped(
-      Effect.gen(function* () {
-        const node = yield* mount(Screen, 0)
-        const leave = reportFocus(runtime, node.id)
-        yield* Effect.promise(() => runtime.wait({ idle: true }))
-        expect(node.getSnapshot()).toBe(1)
-        reportFocus(runtime, node.id)
-        yield* Effect.promise(() => runtime.wait({ idle: true }))
-        expect(node.getSnapshot()).toBe(1)
-        leave()
-        reportFocus(runtime, node.id)
-        yield* Effect.promise(() => runtime.wait({ idle: true }))
-        expect(node.getSnapshot()).toBe(2)
-      }).pipe(Effect.provideService(Registry, runtime)),
-    ),
+  const app = defineApp({ name: "external-focus", screens: [definition] })
+  const host = (
+    app as unknown as { readonly [APP_HOST_ADAPTER]: import("@reflex/runtime/internal").AppHost }
+  )[APP_HOST_ADAPTER]
+  const session = await defined(host, "Effect descriptor carries its infrastructure host").start(
+    "default",
+    { sessionId: "external-focus" },
   )
+  const { runtime } = session
+  try {
+    const node = await mountSessionRoute(runtime, definition, {})
+    const leave = reportFocus(runtime, node.id)
+    await runtime.wait({ idle: true })
+    expect(runtime.inspect({ nodeId: node.id }).node?.state).toBe(1)
+    reportFocus(runtime, node.id)
+    await runtime.wait({ idle: true })
+    expect(runtime.inspect({ nodeId: node.id }).node?.state).toBe(1)
+    leave()
+    reportFocus(runtime, node.id)
+    await runtime.wait({ idle: true })
+    expect(runtime.inspect({ nodeId: node.id }).node?.state).toBe(2)
+  } finally {
+    runtime.close()
+    await session.dispose()
+  }
 })

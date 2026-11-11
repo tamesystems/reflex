@@ -155,3 +155,43 @@ waived deviations; the remaining 5,104-line gap reflects unfinished cleanup, not
 that the final budget is impossible. The implementation branch must not land on
 `userland-api` until these and every required verification pass. The spec remains
 explicitly in progress. This status is narrower than the final design decision.
+
+### D2 store and conformance cleanup
+
+The store composition now accepts only the authored screen/service arrays. Its internal
+host builder no longer has the eager-screen branch or a second scenario extension
+implementation. Store mounting is private to definitions; the exported raw mount helper
+and throwable failure constructor are removed. Expected errors can originate only from
+a declared action's validated `fail` helper. Store regression tests now build definitions,
+including limits, invalid publication, cancellation, extracted methods and late writes.
+The builder already checks action inputs and brands its results, so the duplicate mapped
+handler check is removed. Overlapping store type cases are consolidated in the store
+author suite, retaining encoded-input, declared-error, scenario and override checks.
+
+The conformance Effect app uses Screen and contract navigation; the large-row benchmark
+uses a service reducer. The production plain example no longer exports a compatibility
+screen host. A test host opens its declared store screen through the session route factory.
+All five conformance backends use the wire client directly, with event recording beginning
+after startup. This retains malformed input, state, revision, wait and access-policy
+assertions independently of the old TestApp facade. The external-focus regression uses
+an authored Effect screen and the session's route factory. No experiment is deleted.
+
+This is a partial item 1 checkpoint. Effect/test/Expo legacy deletion, remaining consumer
+migration, complete declaration parity, the source budget, final docs audit and full
+acceptance still block landing. The protocol and CLI/MCP implementations are unchanged.
+
+Source lines after this partial D2 checkpoint (all files under each package's src):
+
+| Package      | D start | D2 checkpoint |
+| ------------ | ------: | ------------: |
+| effect       |   4,096 |         4,096 |
+| runtime      |   3,727 |         3,671 |
+| react        |   1,115 |         1,115 |
+| expo         |     766 |           766 |
+| react-router |     290 |           290 |
+| live         |     821 |           821 |
+| test         |   1,889 |         1,889 |
+| Total        |  12,704 |        12,648 |
+
+These counts do not justify an exception to the final budget: most legacy Effect/test
+machinery still remains. A final per-package budget assessment is premature.
