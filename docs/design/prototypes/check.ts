@@ -304,7 +304,10 @@ const measurements: {
   instantiations: number
   checkSeconds: number
 }[] = []
-for (const n of [0, 100, 200, 400]) {
+const sizes = process.argv.includes("--ci")
+  ? ([0, 50, 100] as const)
+  : ([0, 100, 200, 400] as const)
+for (const n of sizes) {
   for (const hooks of [0, 1, 10]) {
     let source = `import {Screen,defineApp,defineNavigation} from "@reflex/effect"\nimport {createReflexRouter} from "@reflex/react-router"\nimport * as Schema from "effect/Schema"\n`
     for (let i = 0; i < n; i++) {
@@ -319,7 +322,7 @@ for (const n of [0, 100, 200, 400]) {
     for (let i = 0; i < n && hooks > 0; i++) {
       source += `const feature${i}=reflex.from(S${i})\n`
       for (let j = 0; j < hooks; j++) {
-        source += `export function View${i}_${j}(){const v=feature${i}.useScreen();if(v.state._tag==="ready"){const count:number=v.state.count;void count;void v.actions.Add.run({by:"1"})}return null}\n`
+        source += `export function View${i}_${j}(){const v=reflex.useScreen(S${i});const picked=feature${i}.useNodeState(s=>({hook${j}:s}));void picked;if(v.state._tag==="ready"){const count:number=v.state.count;void count;void v.actions.Add.run({by:"1"})}return null}\n`
       }
     }
     const config = join(generated, "tsconfig.json")
@@ -343,8 +346,8 @@ for (const n of [0, 100, 200, 400]) {
 const slopes = []
 for (const hooks of [0, 1, 10]) {
   for (const [from, to] of [
-    [100, 200],
-    [200, 400],
+    [sizes[1], sizes[2]],
+    ...(sizes.length > 3 ? [[sizes[2], 400] as const] : []),
   ] as const) {
     const a = measurements.find((m) => m.screens === from && m.hooks === hooks)
     const b = measurements.find((m) => m.screens === to && m.hooks === hooks)
@@ -398,6 +401,16 @@ const maxInstantiationSlope = Math.max(
 )
 if (maxInstantiationSlope > 12_000) {
   throw new Error(`Screen instantiation gate failed: ${maxInstantiationSlope}`)
+}
+if (
+  measurements
+    .filter((m) => m.screens > 0 && m.hooks === 10)
+    .some((m) => {
+      const single = measurements.find((s) => s.screens === m.screens && s.hooks === 1)
+      return single === undefined || m.instantiations <= single.instantiations
+    })
+) {
+  throw new Error("Hook workload must instantiate distinct selector types")
 }
 if (
   measurements

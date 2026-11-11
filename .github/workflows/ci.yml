@@ -38,6 +38,7 @@ jobs:
       - run: bun install --frozen-lockfile
         working-directory: apps/web
       - run: bun run check
+      - run: bun docs/design/prototypes/check.ts --real --performance --ci
 
   browser:
     strategy:

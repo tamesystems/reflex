@@ -52,41 +52,22 @@ export type CheckPath<P, Path extends string, Map> = string extends Path
         : Msg<`URL param ${BadEncoding<P>} must encode a string; use a string codec`>
       : Msg<`Repeated path placeholder ${Parse<Path>["repeat"]}`>
 
-type ByName<D, N> = Table<D>[N & keyof Table<D>]
-type OrdinaryPath<E> = E extends { decode: unknown }
-  ? never
-  : E extends string
-    ? E
-    : E extends { path: infer P extends string }
-      ? P
-      : E extends { pathname: infer P extends string }
-        ? P
-        : never
-type IsUnion<T, C = T> = T extends C ? ([C] extends [T] ? false : true) : never
-// Group names by path once rather than comparing every pair of registrations.
-type NamesByPath<R> = { [K in keyof R as OrdinaryPath<R[K]>]: K }
-type UniquePaths<R, Groups = NamesByPath<R>> = {
-  [K in keyof R]: OrdinaryPath<R[K]> extends keyof Groups
-    ? true extends IsUnion<Groups[OrdinaryPath<R[K]>]>
-      ? Msg<`Duplicate route path ${OrdinaryPath<R[K]>}`>
-      : unknown
-    : unknown
-}
+type ByName<D extends { readonly name: string }, N> = N extends keyof Table<D> ? Table<D>[N] : never
 export type ValidateRoutes<A extends App, R> = {
   [K in Exclude<keyof R, keyof Table<Screens<A>>>]: Msg<`Unknown route registration ${K & string}`>
-} & UniquePaths<R> & {
-    [N in keyof Table<Screens<A>>]: N extends keyof R
-      ? R[N] extends RouteCodec<URLParams<ByName<Screens<A>, N>>>
-        ? unknown
-        : R[N] extends string
-          ? CheckPath<URLParams<ByName<Screens<A>, N>>, R[N], Empty>
-          : R[N] extends { path: infer P extends string; params: infer Map }
+} & {
+  [N in keyof Table<Screens<A>>]: N extends keyof R
+    ? R[N] extends RouteCodec<URLParams<ByName<Screens<A>, N>>>
+      ? unknown
+      : R[N] extends string
+        ? CheckPath<URLParams<ByName<Screens<A>, N>>, R[N], Empty>
+        : R[N] extends { path: infer P extends string; params: infer Map }
+          ? CheckPath<URLParams<ByName<Screens<A>, N>>, P, Map>
+          : R[N] extends { pathname: infer P extends string; params?: infer Map }
             ? CheckPath<URLParams<ByName<Screens<A>, N>>, P, Map>
-            : R[N] extends { pathname: infer P extends string; params?: infer Map }
-              ? CheckPath<URLParams<ByName<Screens<A>, N>>, P, Map>
-              : Msg<"Use a literal route or routeCodec">
-      : Msg<`${N & string} needs a route registration`>
-  }
+            : Msg<"Use a literal route or routeCodec">
+    : Msg<`${N & string} needs a route registration`>
+}
 
 export interface RouteCodec<P> {
   readonly path: string
@@ -96,10 +77,15 @@ export interface RouteCodec<P> {
 export const routeCodec = <P>(spec: RouteCodec<P>): RouteCodec<P> => spec
 
 /** Widened registrations must obey the same rules as literal registrations. */
-export const validateRouteKeys = (names: readonly string[], entries: Record<string, unknown>) => {
-  const paths = new Set<string>()
+export const validateRouteKeys = (
+  names: readonly string[],
+  entries: Record<string, unknown>,
+  caseSensitive = true,
+) => {
+  const registered = new Set(names)
+  const paths = new Map<string, string>()
   for (const [name, entry] of Object.entries(entries)) {
-    if (!names.includes(name)) {
+    if (!registered.has(name)) {
       throw new Error(`Unknown route registration ${name}`)
     }
     if (typeof entry === "object" && entry !== null && "decode" in entry) {
@@ -118,10 +104,17 @@ export const validateRouteKeys = (names: readonly string[], entries: Record<stri
     if (typeof path !== "string") {
       throw new Error("Use a literal route or routeCodec")
     }
-    const normalized = path.replace(/\[([^\]]+)\]/g, ":$1")
+    const pattern =
+      path
+        .replace(/(^|\/)\[[^/\]]+\](?=\/|$)/g, "$1:param")
+        .replace(/(^|\/):[^/]+/g, "$1:param")
+        .replace(/\/+$/, "") || "/"
+    const normalized = caseSensitive ? pattern : pattern.toLowerCase()
     if (paths.has(normalized)) {
-      throw new Error(`Duplicate route path ${path}`)
+      throw new Error(
+        `Duplicate route pattern ${path}: screens ${paths.get(normalized)} and ${name}`,
+      )
     }
-    paths.add(normalized)
+    paths.set(normalized, name)
   }
 }

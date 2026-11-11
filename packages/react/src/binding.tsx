@@ -11,7 +11,6 @@ import {
   type NodeHandle,
   type ActionOutcome,
 } from "@reflex/runtime/internal"
-import { developmentBridge } from "@reflex/live/dev"
 import {
   SessionProvider,
   useBoundSession,
@@ -266,9 +265,10 @@ export function createBinding<A extends App>(
       throw new Error(`${contract.name} is not a screen of app '${app.name}'`)
     }
     if (
-      definition["~reflex"].contract !== undefined &&
-      definition["~reflex"].contract !== contract &&
-      "~reflex" in contract
+      definition?.["~reflex"].contract !== contract &&
+      "~reflex" in contract &&
+      (contract as typeof definition)?.["~reflex"].contract === definition?.["~reflex"].contract &&
+      definition?.["~reflex"].contract !== undefined
     ) {
       throw new Error(
         `Pass the contract \`${contract.name}\` from screens.ts, not its implementation`,
@@ -312,11 +312,7 @@ export function createBinding<A extends App>(
       if (definitionIdentity(target) !== definitionIdentity(host)) {
         throw new Error(`Provider app must be a withScenarios variant of '${app.name}'`)
       }
-      const ownedBridge = React.useMemo(
-        () => (bridge === "development" ? developmentBridge() : bridge),
-        [bridge],
-      )
-      return <SessionProvider {...props} host={target} bridge={ownedBridge} />
+      return <SessionProvider {...props} host={target} bridge={bridge} />
     },
     useScreen: (contract: { name: string }) => useView(useSelection(contract, true)),
     useScreenStatus: (contract: { name: string }) => useView(useSelection(contract, false)),

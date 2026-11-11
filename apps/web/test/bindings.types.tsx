@@ -151,5 +151,18 @@ const SecondPath = Screen.define("SecondPath", {
   actions: () => ({}),
 })
 const pathApp = defineApp({ name: "paths", screens: [FirstPath, SecondPath] })
-// @ts-expect-error Ordinary literal paths must be unique.
+// Duplicate patterns are checked when the binding is created.
 createReflexRouter(pathApp, { FirstPath: "/", SecondPath: "/" })
+
+const rebound = router.withApp(app.withScenarios({ seeded: {} }))
+rebound.href(Count, { count: "2" })
+rebound.routes({ Count: { Component: () => null } })
+const reboundLink = <rebound.Link to={Count} params={{ count: "2" }} />
+void reboundLink
+export const useExtendedSession = () => rebound.useSession().reset("seeded")
+// @ts-expect-error The legacy development string is no longer a bridge.
+const oldBridge = <core.Provider bridge="development" />
+void oldBridge
+const single = createReflex(pathApp)
+single.from(FirstPath)
+export const useOneStep = () => single.useScreen(FirstPath)

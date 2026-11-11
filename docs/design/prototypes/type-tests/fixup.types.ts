@@ -40,8 +40,8 @@ defineStoreNode({
   name: "errors",
   store: () => createStore(() => 0),
   actions: (action) => ({
-    // @ts-expect-error Standard Schema cannot invert transformed errors.
-    Reject: action({ error: z.string().transform(Number), handler: () => {} }),
+    // @ts-expect-error Rich errors need a JSON projection.
+    Reject: action({ error: z.date(), handler: () => {} }),
   }),
 })
 const Home = Screen.define("Home", { state: Schema.Number, initial: () => 0, actions: () => ({}) })

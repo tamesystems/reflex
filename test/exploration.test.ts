@@ -1,12 +1,11 @@
 import { expect, test } from "bun:test"
-import type { InspectResult } from "@reflex/protocol"
 import { defineApp, defineService } from "@reflex/effect"
 import { APP_HOST_ADAPTER } from "@reflex/runtime/internal"
 import { explore } from "@reflex/test"
 import * as Effect from "effect/Effect"
 import * as Schema from "effect/Schema"
 import inventoryDefinition from "../examples/inventory/src/scenarios.ts"
-const app = inventoryDefinition[APP_HOST_ADAPTER]
+const app = inventoryDefinition
 
 const hostWithInput = (inputs: Array<unknown>) => {
   const Recording = defineService({
@@ -41,8 +40,7 @@ const knownInputs = {
   InventoryList: { OpenProduct: [{ productId: "product-123" }, { productId: "product-456" }] },
 }
 
-const quantityNeverNegative = ({ node }: InspectResult) => {
-  const state = node?.state
+const quantityNeverNegative = (state: unknown) => {
   if (typeof state !== "object" || state === null || !("quantity" in state)) {
     return undefined
   }
@@ -55,7 +53,7 @@ test("random walks hold the invariants and reach every screen's actions", async 
     steps: 25,
     seed: 7,
     inputs: knownInputs,
-    invariants: quantityNeverNegative,
+    invariants: { InventoryDetail: quantityNeverNegative },
   })
   expect(result.failure).toBeUndefined()
   expect(result.actionsCovered).toEqual(
@@ -89,7 +87,7 @@ test("a violated invariant is reported with a shrunk reproduction", async () => 
     runCount: 20,
     steps: 25,
     seed: 11,
-    invariants: ({ node }) => (node?.name === "Settings" ? "Reached Settings" : undefined),
+    invariants: { Settings: () => "Reached Settings" },
   })
   expect(result.failure?.message).toBe("Reached Settings")
   expect(result.failure?.steps.map((step) => step.action).at(-1)).toMatch(/OpenSettings|Navigate/)
@@ -102,7 +100,7 @@ test("shrinking removes a push and its back together, across seeds", async () =>
       runCount: 20,
       steps: 25,
       seed,
-      invariants: ({ node }) => (node?.name === "Settings" ? "Reached Settings" : undefined),
+      invariants: { Settings: () => "Reached Settings" },
     })
     expect(result.failure?.steps.length).toBeLessThanOrEqual(2)
   }
@@ -120,9 +118,11 @@ test("the invariant is checked before the first step", async () => {
   const result = await explore(app, {
     runCount: 1,
     steps: 1,
-    invariants: () => {
-      checkCount++
-      return checkCount === 1 ? "Bad from the start" : undefined
+    invariants: {
+      InventoryList: () => {
+        checkCount++
+        return checkCount === 1 ? "Bad from the start" : undefined
+      },
     },
   })
   expect(result.failure).toMatchObject({ message: "Bad from the start", steps: [] })

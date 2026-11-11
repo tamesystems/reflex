@@ -107,7 +107,7 @@ harness remains a separate check for consumer and store tiers that have not migr
    from the validator. JSON-state checking occurs at composition, naming the store and
    suggesting project; it does not intersect the factory spec and break param inference. Infer the whole Effect codec or Standard Schema validator; use
    decoded output for handlers and encoded input for consumers. Standard Schema only
-   validates: it cannot invert an arbitrary transform. Transformed store errors require
+   validates: it cannot invert an arbitrary transform. Value-changing store error validation requires
    projectError to explicitly encode their decoded domain error; the codecs example does
    so. An automatic inverse for Standard Schema is **unproven and not promised**.
    Opaque validators use standardInput(validator, jsonSchema), including for error and
@@ -346,7 +346,7 @@ missing component property; none relies on exactOptionalPropertyTypes wording.
 | effect-rich-state         | `Effect state must encode JSON; use jsonCodec`                                                                                                                                                                                                                 | [case](prototypes/negative/cases.ts#L288)   |
 | fixture-navigates         | `Property 'navigates' does not exist on type 'PlainEffectActionBuilder<number, number, never>'.`                                                                                                                                                               | [case](prototypes/negative/cases.ts#L295)   |
 | readonly-state            | `Cannot assign to 'count' because it is a read-only property.`                                                                                                                                                                                                 | [case](prototypes/negative/cases.ts#L301)   |
-| transformed-error-encoder | `Property 'projectError' is missing in type`                                                                                                                                                                                                                   | [case](prototypes/negative/cases.ts#L308)   |
+| rich-error-encoder        | `Store error must be JSON; provide projectError`                                                                                                                                                                                                               | [case](prototypes/negative/cases.ts#L308)   |
 | unknown-input-presence    | `Expected 1 arguments, but got 0.`                                                                                                                                                                                                                             | [case](prototypes/negative/cases.ts#L323)   |
 | invalid-action            | `Actions must be built for this state with the action builder`                                                                                                                                                                                                 | [case](prototypes/negative/fixes.ts#L14)    |
 | wrong-action-state        | `Actions must be built for this state with the action builder`                                                                                                                                                                                                 | [case](prototypes/negative/fixes.ts#L17)    |
@@ -1086,7 +1086,10 @@ export const testScenarios = {
     layer: services(seedProducts, "1 second"),
     virtualTime: true,
   },
-} as const
+} satisfies Record<
+  string,
+  { layer: unknown; virtualTime?: boolean; description?: string; fixtures?: readonly unknown[] }
+>
 
 export default app.withScenarios(testScenarios, {
   defaultScenario: "inventory-with-products",
@@ -1147,12 +1150,6 @@ export class Settings extends Screen("Settings", {
   state: SettingsState,
   initial: () => ({ _tag: "loading" }),
 }) {}
-
-export {
-  InventoryList as InventoryListScreen,
-  InventoryDetail as InventoryDetailScreen,
-  Settings as SettingsScreen,
-}
 ```
 
 ### examples/inventory/src/settings-store.ts
@@ -2388,7 +2385,7 @@ export function DetailView() {
   const count = feature.useNodeState((s) => s.count)
   const saveAction = feature.useAction("Save")
   return (
-    <Provider bridge="development">
+    <Provider>
       <Link
         to={Detail}
         params={{ id: state.id }}
@@ -2452,10 +2449,7 @@ export async function exploreCounter() {
   await explore(storeApp, {
     steps: 10,
     inputs: { Counter: { Set: [1, 2] } },
-    invariants: async (session) => {
-      const node = await session.node(Counter)
-      expect((await node.state()).count).toBeGreaterThanOrEqual(0)
-    },
+    invariants: { Counter: (state) => (state.count < 0 ? "Negative count" : undefined) },
   })
 }
 export async function protocol() {
@@ -2541,13 +2535,15 @@ export const Metrics = defineService({
 
 Review item 11 remains incomplete: the real-package check now asserts all 97 negative
 locations/messages and real/example/spec drift, but full two-way declaration type parity
-is not gated. The explicit scale mode uses instantiation budgets and currently exceeds its
-screen budget; root instantiations remain within the unchanged check budget. See ADR 0020.
+is not gated. The explicit scale mode now passes the unchanged instantiation budgets;
+CI also gates 50/100-screen sizes. Root instantiations remain within the unchanged check
+budget. See ADR 0020.
 
 The review fix-up makes Effect screens/services arrays and store services a tuple; public
 fixtures/provided phantom fields live only under the author metadata symbol. Store overrides
-are branded, distributive pairs produced by withStore, and transformed store errors require
-an explicit projectError. defineApp rejects non-Layers and non-fixtures before coverage.
+are branded, distributive pairs produced by withStore. Rich errors require projectError;
+without it, runtime validation rejects a changed public JSON error value (including
+same-type transforms), while brands, unchanged defaults and key reordering remain valid. defineApp rejects non-Layers and non-fixtures before coverage.
 Both scenario tiers reject extension collisions and require an explicit default for multiple
 initial scenarios; fixture-only extensions retain the existing default.
 
@@ -2555,11 +2551,15 @@ from takes a membership-checked contract. All Expo hook variants share route-awa
 selection. useService suspends and useServiceStatus exposes status; useScreenSuspense is
 removed. ActionView is public and action controls retain identity across unchanged renders.
 Journey actions use the callable completion assertion, expectError, expectRefusal, run and
-start; parallel node maps and expectCompleted are removed. Explore uses inputs, invariants
-and steps. Route registrations have exact keys and reject duplicate ordinary paths.
+start; parallel node maps and expectCompleted are removed. Explore uses inputs, a record of node-keyed state invariants,
+and steps. Route registrations have exact keys. Binding construction rejects duplicate ordinary route patterns after replacing parameter names and stripping trailing slashes. React Router folds case; Expo preserves it.
 React Router renders an app errorElement in full, with an overridable default retry UI.
-withApp binds an identity-compatible scenario extension, including Expo's projection.
-The E2E-only public @reflex/expo/testing hook replaces direct internal instrumentation.
+withApp binds an identity-compatible scenario extension and preserves each host's complete
+runtime surface and type, including Expo's projection. Screen.define is its own registered
+consumer contract. Implicit-default apps retain and validate top-level fixture definitions;
+inline Layer.merge scenario extensions infer their literal keys.
+The E2E-only public @reflex/expo/testing hook returns a narrow observation/interception
+facade instead of the internal Runtime.
 
 Store journey `open` takes the validator's encoded input params. Standard Schema has no
 inverse for arbitrary one-way transforms; Effect routes retain decoded params and encode
@@ -2574,8 +2574,7 @@ Readable diagnostics also carry a fixed `Reflex type error` property so widened 
 cannot bypass template-index checks. Author phantom metadata is packed under a symbol.
 
 The development bridge is an explicit value: import developmentBridge from
-@reflex/expo/dev or @reflex/live/vite and pass it as Provider.bridge. The host-neutral
-string stub warns; neither example requires a bridge alias. Sibling integration plumbing uses
+@reflex/expo/dev or @reflex/live/vite and pass it as Provider.bridge. The host-neutral @reflex/live/dev entry has the same controller-to-disposer Bridge shape and is a no-op; neither example requires a bridge alias. Provider.bridge accepts only a Bridge value. Sibling integration plumbing uses
 internal entries; Expo's specified advanced entry exposes `routeCodec`. The E2E provider
 retains startup-failure probes and scenario selection in its separate instrumented module.
 

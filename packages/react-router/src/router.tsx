@@ -44,6 +44,7 @@ type BoundLinkProps<C> = C extends unknown
       Omit<LinkProps, "to" | "href" | "params" | "asChild">
   : never
 export interface RouterBinding<A extends App> extends ReflexBinding<A> {
+  withApp<B extends Pick<A, "name" | "screens" | "services"> & App>(app: B): RouterBinding<B>
   href(...args: RouteArgs<Contract<Screens<A>>>): string
   Link(props: BoundLinkProps<Contract<Screens<A>>>): React.ReactElement
   routes(
@@ -160,6 +161,7 @@ const validateRegistration = (
   validateRouteKeys(
     screens.map((d) => d.name),
     entries,
+    false,
   )
   for (const definition of screens) {
     const entry = entries[definition.name]
@@ -244,6 +246,10 @@ export function createReflexRouter<A extends App, const R>(
   const href = makeHref(byName, entries)
   return {
     ...bound,
+    withApp: (next: A) => {
+      bound.withApp(next)
+      return createReflexRouter(next, registration)
+    },
     href,
     // biome-ignore lint/correctness/noComponentHookFactories: Explicit module-scope binding factory.
     Link: ({ to, params, ...props }: { to: { name: string }; params?: Record<string, string> }) => (

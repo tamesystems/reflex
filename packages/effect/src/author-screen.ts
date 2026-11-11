@@ -99,6 +99,7 @@ export const Screen = Object.assign(makeScreen, {
   define: (name: string, spec: Erased) => {
     const definition = implement(makeScreen(name, spec), "screen", spec)
     definition[AUTHOR].contract = definition
+    definition["~reflex"].contract = definition
     return definition
   },
 }) as unknown as typeof Contract.screenContract

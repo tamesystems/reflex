@@ -320,10 +320,28 @@ These cover production bridge/token/instrumentation exclusion and the plain Metr
 graph's Effect exclusion as well as browser behavior. All three frozen installs are
 required before checking a checkout.
 
-Current local root diagnostics after the review fix-up: 504,864 instantiations under the
-unchanged 505,132 ceiling. All 97 real-package negatives assert diagnostic locations and
-message fragments, and extracted examples are diffed against the real app files.
-The scale mode gates at 12,000 instantiations per added screen and 2,000 per extra narrowed
-hook; timings are informational. It currently fails the screen gate (43,517.9). Two-way
-reference declaration type parity also remains unfinished; the ordinary check currently
-compares export names. See ADR 0020 for this explicitly incomplete part of review item 11.
+Current local root diagnostics after the second review fix-up: 504,667 instantiations
+under the unchanged 505,132 ceiling. All 97 real-package negatives assert diagnostic
+locations and message fragments, and extracted examples are diffed against real app files.
+The scale mode gates at 12,000 instantiations per added screen and 2,000 per extra
+narrowed hook; timings are informational. The corrected workload varies selector result
+types across screens and fails if one and ten hooks instantiate identically.
+
+For 100/200/400 screens, the one-hook curve is 635,281 / 1,328,781 / 3,135,781
+instantiations (1.25 / 2.10 / 5.40 s locally). Incremental screen slopes are 6,935 / 9,035,
+within the unchanged budget. Hook/binding work over the zero-hook case costs
+813.74 / 812.87 / 812.435 instantiations per screen; additional distinct selectors cost
+40 instantiations each. The original bcbfe26 workload measured
+1,176,086 / 3,577,886 / 12,281,486, with identical counts for one and ten hooks.
+Run `bun docs/design/prototypes/check.ts --real --performance --ci` for the 50/100-screen
+CI subset; both check jobs run it after `bun run check`.
+
+Two-way reference declaration type parity remains unfinished; the ordinary check currently
+compares export names. See ADR 0020 for this remaining part of review item 11.
+
+A matched rerun of bcbfe26 with the corrected workload measured
+1,666,955 / 5,519,555 / 20,004,755 instantiations at 100/200/400 screens (one hook),
+with slopes 38,526 / 72,426. The corresponding post-fix counts are
+635,281 / 1,328,781 / 3,135,781. This comparison uses the same direct-hook and
+distinct-selector generator on both revisions; the earlier cached-hook figures above
+are retained only as historical evidence of the broken gate.

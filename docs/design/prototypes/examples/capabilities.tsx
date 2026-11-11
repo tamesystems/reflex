@@ -47,7 +47,7 @@ export function DetailView() {
   const count = feature.useNodeState((s) => s.count)
   const saveAction = feature.useAction("Save")
   return (
-    <Provider bridge="development">
+    <Provider>
       <Link
         to={Detail}
         params={{ id: state.id }}
@@ -111,10 +111,7 @@ export async function exploreCounter() {
   await explore(storeApp, {
     steps: 10,
     inputs: { Counter: { Set: [1, 2] } },
-    invariants: async (session) => {
-      const node = await session.node(Counter)
-      expect((await node.state()).count).toBeGreaterThanOrEqual(0)
-    },
+    invariants: { Counter: (state) => (state.count < 0 ? "Negative count" : undefined) },
   })
 }
 export async function protocol() {

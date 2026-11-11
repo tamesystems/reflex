@@ -129,7 +129,7 @@ pairs carry a private brand and remain correlated over unions. Transformed store
 require a public encoder. Descriptor collections reflect runtime arrays; fixture and layer
 phantoms move behind the author symbol. App arguments validate layers and fixture roles.
 Store and Effect scenario extensions reject collisions, retain defaults and accept fixture
-options without changing the default. Routes require exact keys and distinct ordinary paths.
+options without changing the default. Routes require exact keys; ordinary pattern uniqueness is checked at runtime.
 
 from accepts contracts and shares each host's selection across all hook variants. Services
 have the same suspending/status pair as screens; the redundant Suspense alias is removed.
@@ -138,7 +138,7 @@ have one action map and explore uses inputs/invariants/steps. React Router honor
 errorElement; its documented default owns retry only when none is supplied.
 
 Development bridges are explicit Bridge values imported from @reflex/expo/dev or
-@reflex/live/vite, without host aliases. The legacy string stub warns. withApp preserves
+@reflex/live/vite, without host aliases. The host-neutral @reflex/live/dev entry is also a Bridge value (an inert adapter); the legacy Provider string is removed. withApp preserves
 identity and Expo projection when binding test variants. A public E2E-only Expo testing hook
 replaces imports of internal instrumentation. Examples use a real offline inventory service,
 shared memory settings and typed storage errors; type-only tests live outside app src.
@@ -161,7 +161,7 @@ errors originate from a declared action's checked fail helper. Effect compositio
 one author implementation over the internal session engine. Explicit Effect ownership
 uses scoped mountEffect. Definition/scenario extensions preserve stable identity.
 
-The original 7,600-source-line allocation is no longer a landing requirement. Current
+The original 7,600-source-line allocation is no longer a landing requirement. The first review fix-up retained the following
 physical source lines (all files recursively under each package's src, including entry
 files, comments and shared types) are:
 
@@ -220,13 +220,69 @@ persistence across reset/reload. All three frozen installs pass. The protocol pa
 CLI/MCP implementations are unchanged; the CLI example assertion now expects the real
 offline inventory's seeded products.
 
-Review item 11 is incomplete. Export names are gated, but two-way declaration type parity
-is not: the independent reference declarations still differ from implementation types
-(including Bridge's callable shape and the authored descriptor metadata). The real-package
-scale run also fails the new instantiation gate: 43,517.9 instantiations per added screen
-against 12,000, although additional narrowed hooks remain within their 2,000 budget.
-Wall-clock measurements are informational. The root budget remains enforced by check;
-the scale mode remains an explicit `--real --performance` command. Do not treat this
-partial fix-up as satisfying the full item 11 acceptance contract.
+Review item 11's two-way declaration type parity remains incomplete. Export names and
+negative diagnostics are gated; the independent reference declarations still differ from
+implementation types, including authored descriptor metadata. The second fix-up below
+fixes the scale gate and bridge shape; it does not claim full declaration type parity.
 
 The six Ubuntu/Windows check, browser and Hermes jobs remain the remote gate.
+
+### Second merge-blocker fix-up
+
+Registered one-step Screen.define definitions are their own consumer contract, including
+runtime metadata. Two-step consumers still pass the constructor contract; diagnostics
+distinguish a foreign definition from its implementation. Both host withApp methods
+rebuild their complete binding, preserve host methods in their return types and validate
+scenario-extension identity before rebinding.
+
+Ordinary route uniqueness is a runtime registration check, using a map of normalized
+patterns. Parameter names become placeholders and trailing slashes are removed. React
+Router's default matching folds case; Expo Router 58's getStateFromPath matcher creates
+regular expressions without the case-insensitive flag, so Expo preserves case. Custom
+routeCodec grammar remains the codec author's responsibility. The quadratic type-level
+UniquePaths check is removed.
+
+Implicit-default apps validate top-level fixture roles and retain fixture inference,
+coverage and journey membership. Scenario-extension validation is deferred until the
+argument is inferred, so inline generic Layer.merge calls retain their literal keys;
+widened scenario maps still receive runtime validation.
+
+Standard Schema does not describe whether a validator changes values. Brands and
+defaults therefore do not imply a transform. Without projectError, fail validates both
+values as JSON and checks equality (ignoring object-key order); a changed value fails
+with a clear projectError diagnostic, including same-type transforms and normalization.
+Rich errors still require a JSON projection statically. This deliberately moves the
+value-changing JSON transform check from an unreliable type approximation to runtime.
+
+Exploration invariants have one shape: a node-keyed record of public state predicates.
+The Expo testing hook returns a small observation/interception facade for stateOf,
+dispatch and wait plus projection observations; it never returns the Runtime registry or
+lifecycle owner. Development bridge entries all accept a controller and return a disposer.
+
+The second fix-up precomputes concrete from/screen/service hook signatures once per
+binding. Ordinary calls select those signatures without recomputing the full app table;
+a generic fallback preserves union destinations and the existing membership diagnostics.
+Name-indexed fallback lookups no longer intersect a contract name with all table keys.
+The corrected hook workload uses direct screen hooks and unique per-screen selector
+result types, and fails if one and ten hooks produce identical instantiation counts.
+
+The unchanged 12,000-per-screen and 2,000-per-additional-hook gates pass at 100/200/400
+screens. Current one-hook counts are 635,281 / 1,328,781 / 3,135,781, with incremental
+slopes 6,935 / 9,035. The binding/hook increment over no hooks is 813.74 / 812.87 / 812.435
+instantiations per screen; each additional distinct selector costs 40 instantiations.
+No gate was raised. CI runs the same instantiation checks at 50/100 screens on both
+Ubuntu and Windows. The original cached-hook workload at bcbfe26 measured
+1,176,086 / 3,577,886 / 12,281,486 and failed at 43,518 per added screen.
+
+Local acceptance: bun run check passes (694 tests, four platform skips), all three
+frozen installs pass, mobile e2e/e2e:plain/e2e:live/e2e:services and web e2e pass with
+production token/bridge/instrumentation and plain Effect exclusions. Root instantiations
+are 504,667 under the unchanged 505,132 ceiling. Performance details and rerun commands
+are in development.md; the six remote CI jobs remain the publication gate.
+
+A matched rerun of bcbfe26 with the corrected workload measured
+1,666,955 / 5,519,555 / 20,004,755 instantiations at 100/200/400 screens (one hook),
+with slopes 38,526 / 72,426. The corresponding post-fix counts are
+635,281 / 1,328,781 / 3,135,781. This comparison uses the same direct-hook and
+distinct-selector generator on both revisions; the earlier cached-hook figures above
+are retained only as historical evidence of the broken gate.

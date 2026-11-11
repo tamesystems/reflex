@@ -63,3 +63,48 @@ test("production inventory is a real session-local offline service", async () =>
     (await saved.state()).products.find((product) => product.id === "product-123")?.quantity,
   ).toBe(12)
 })
+
+test("JSON error brands/defaults pass while changed values require an explicit projection", async () => {
+  const { z } = await import("zod")
+  const Brand = z.string().brand<"Code">()
+  const Errors = defineStoreNode({
+    name: "Errors",
+    store: () => createStore(() => 0),
+    actions: (a) => ({
+      Brand: a({ error: Brand, handler: (_, { fail }) => fail(Brand.parse("code")) }),
+      Default: a({ error: z.string().default("default"), handler: (_, { fail }) => fail("code") }),
+      Transform: a({
+        error: z.number().transform((n) => n + 1),
+        handler: (_, { fail }) => fail(1),
+      }),
+      Trim: a({ error: z.string().trim(), handler: (_, { fail }) => fail(" code ") }),
+      Projected: a({
+        error: z.number().transform((n) => n + 1),
+        projectError: (n) => n,
+        handler: (_, { fail }) => fail(1),
+      }),
+    }),
+  })
+  await using session = await createTestApp(
+    defineStoreApp({ name: "error-validation", services: [Errors] }),
+  )
+  const errors = await session.service(Errors)
+  expect((await errors.actions.Brand.expectError()).error).toEqual(Brand.parse("code"))
+  expect((await errors.actions.Default.expectError()).error).toEqual(Brand.parse("code"))
+  for (const action of [errors.actions.Transform, errors.actions.Trim]) {
+    expect(await action.run()).toMatchObject({
+      status: "defect",
+      message: expect.stringContaining("Transformed store errors require projectError"),
+    })
+  }
+  expect((await errors.actions.Projected.expectError()).error).toBe(1)
+})
+
+test("host-neutral developmentBridge has the same controller-to-disposer shape as host helpers", async () => {
+  const { developmentBridge } = await import("@reflex/live/dev")
+  expect(developmentBridge).toBeFunction()
+  // The no-op has no reason to inspect its controller.
+  const dispose = Reflect.apply(developmentBridge, undefined, [{}])
+  expect(dispose).toBeFunction()
+  expect(dispose()).toBeUndefined()
+})

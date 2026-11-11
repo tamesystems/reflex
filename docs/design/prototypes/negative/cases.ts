@@ -304,8 +304,8 @@ const serviceDefinition = defineStoreNode({
   name: "TransformedError",
   store: () => createStore(() => ({ count: 0 })),
   actions: (action) => ({
-    // @case transformed-error-encoder | Property 'projectError' is missing in type
-    Save: action({ error: z.string().transform(Number), handler: () => {} }),
+    // @case rich-error-encoder | Store error must be JSON; provide projectError
+    Save: action({ error: z.date(), handler: () => {} }),
   }),
 })
 void NoNavigationFixture

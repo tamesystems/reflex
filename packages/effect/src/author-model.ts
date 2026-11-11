@@ -231,11 +231,15 @@ export type Contracts<D> = D extends { [authorTypes]: { role: "store" } }
     ? C
     : never
 export type DefinitionMap<D> = {
-  [Item in Extract<D, { readonly name: string }> as Item["name"]]: Item
+  [Item in D as Item extends { readonly name: infer N extends string } ? N : never]: Item
 }
-export type Selected<D, C extends { readonly name: string }> = DefinitionMap<D>[C["name"] &
-  keyof DefinitionMap<D>]
-export type SelectedFromTable<T, C extends { readonly name: string }> = T[C["name"] & keyof T]
+export type Selected<
+  D,
+  C extends { readonly name: string },
+> = C["name"] extends keyof DefinitionMap<D> ? DefinitionMap<D>[C["name"]] : never
+export type SelectedFromTable<T, C extends { readonly name: string }> = C["name"] extends keyof T
+  ? T[C["name"]]
+  : never
 export type MemberFromTable<T, C extends { readonly name: string }, N extends string> = Member<
   C,
   Contracts<SelectedFromTable<T, C>>,
@@ -379,11 +383,15 @@ export interface App<
     const FF extends readonly AnyDef[] | undefined = undefined,
   >(
     extra: Extra &
-      NoInfer<ScenarioChecks<Extra>> &
-      NoInfer<StoreOverrideCheck<Extra, D | V>> & {
-        [P in keyof Extra &
-          keyof Sc]: Msg<`Scenario ${P & string} already exists; choose a new name`>
-      } & NoInfer<ScenarioCoverage<Extra, D, V, FixtureDefault<F, FF>, Common>>,
+      NoInfer<
+        ScenarioMap extends Extra
+          ? unknown
+          : ScenarioChecks<Extra> &
+              StoreOverrideCheck<Extra, D | V> & {
+                [P in keyof Extra &
+                  keyof Sc]: Msg<`Scenario ${P & string} already exists; choose a new name`>
+              } & ScenarioCoverage<Extra, D, V, FixtureDefault<F, FF>, Common>
+      >,
     options: { defaultScenario?: K; fixtures?: FF & FixtureChecks<FF> } & ([K] extends [
       keyof Sc | keyof NoInfer<Extra>,
     ]
@@ -400,11 +408,15 @@ export interface App<
   >
   withScenarios<const Extra extends ScenarioMap>(
     extra: Extra &
-      NoInfer<ScenarioChecks<Extra>> &
-      NoInfer<StoreOverrideCheck<Extra, D | V>> & {
-        [P in keyof Extra &
-          keyof Sc]: Msg<`Scenario ${P & string} already exists; choose a new name`>
-      } & NoInfer<ScenarioCoverage<Extra, D, V, F, Common>>,
+      NoInfer<
+        ScenarioMap extends Extra
+          ? unknown
+          : ScenarioChecks<Extra> &
+              StoreOverrideCheck<Extra, D | V> & {
+                [P in keyof Extra &
+                  keyof Sc]: Msg<`Scenario ${P & string} already exists; choose a new name`>
+              } & ScenarioCoverage<Extra, D, V, F, Common>
+      >,
   ): App<N, D, V, Normalize<Sc, F> & Normalize<Extra, F>, Default, F, Common>
 }
 

@@ -239,6 +239,7 @@ type AppSpec = {
   }
   readonly screens?: readonly M.AnyDef[]
   readonly services?: readonly M.AnyDef[]
+  readonly fixtures?: readonly M.AnyDef[]
   readonly layer?: unknown
   readonly scenarios?: never
   readonly root?: never
@@ -261,7 +262,7 @@ export declare function appContract<const Spec extends AppSpec>(
         | DefReq<Screens<NavAt<Spec>, TupleAt<Spec, "screens">>>
         | DefReq<TupleAt<Spec, "services">[number]>,
         LayerAt<Spec>,
-        never,
+        TupleAt<Spec, "fixtures">[number],
         NavAt<Spec> extends { navigator: infer NN } ? NN : never
       >["default"]
     > &
@@ -276,6 +277,7 @@ export declare function appContract<const Spec extends AppSpec>(
       "screen" | "store",
       "screens accepts only screens or stores"
     > &
+    RoleCheck<TupleAt<Spec, "fixtures">[number], "fixture", "fixtures accepts only fixtures"> &
     AmbientParams<TupleAt<Spec, "services">[number]> &
     CrossRoleNames<
       Screens<NavAt<Spec>, TupleAt<Spec, "screens">>,
@@ -295,6 +297,6 @@ export declare function appContract<const Spec extends AppSpec>(
   TupleAt<Spec, "services">[number],
   { default: M.Empty },
   "default",
-  never,
+  TupleAt<Spec, "fixtures">[number],
   LayerOut<LayerAt<Spec>>
 >

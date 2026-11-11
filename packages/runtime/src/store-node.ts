@@ -392,12 +392,8 @@ export interface StoreActionBuilder<S, T extends Store<S> = Store<S>> {
   >(
     action: StoreActionSpec<S, T, I, E, StoreErrorOutput<NoInfer<E>>, O> & {
       readonly projectError?: never
-    } & (E extends StandardValidator<infer Out, infer In>
-        ? [Out] extends [In]
-          ? [In] extends [Out]
-            ? JsonCheck<Out, "Store error must be JSON; provide projectError">
-            : { readonly "Transformed store errors require projectError": never }
-          : { readonly "Transformed store errors require projectError": never }
+    } & (E extends StandardValidator<infer Out, unknown>
+        ? JsonCheck<Out, "Store error must be JSON; provide projectError">
         : unknown),
   ): BuiltStoreAction<S, T, I, E, StoreErrorOutput<E>>
 }
@@ -709,6 +705,24 @@ class StoreNode<S, P, A extends Readonly<Record<string, AnyStoreAction<S>>>>
                             throw invalid
                           }
                           validated = validateStandard(declaredError, projected)
+                        }
+                        if (action.projectError === undefined) {
+                          // Validators may reorder object keys without changing the JSON value.
+                          const canonical = (value: unknown) =>
+                            JSON.stringify(publishJson(value), (_, item) =>
+                              isRecord(item)
+                                ? Object.fromEntries(
+                                    Object.keys(item)
+                                      .sort()
+                                      .map((key) => [key, item[key]]),
+                                  )
+                                : item,
+                            )
+                          if (canonical(validated) !== canonical(error)) {
+                            throw new Error(
+                              "Transformed store errors require projectError: validation changed the value passed to fail",
+                            )
+                          }
                         }
                         const data = publishJson(
                           action.projectError === undefined ? validated : projected,

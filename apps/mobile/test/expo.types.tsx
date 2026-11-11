@@ -91,3 +91,25 @@ custom.href(InventoryDetail, { productId: "one" })
 declare const target: typeof InventoryDetail | typeof Settings
 // @ts-expect-error Contract unions cannot be paired with just one member's params.
 expo.href(target, { productId: "one" })
+
+const rebound = expo.withApp(app.withScenarios({ seeded: { layer: productionServices } }))
+rebound.href(InventoryDetail, { productId: "one" })
+const reboundLink = <rebound.Link to={InventoryDetail} params={{ productId: "one" }} />
+void reboundLink
+export const useExtendedSession = () => rebound.useSession().reset("seeded")
+import { useTesting } from "@reflex/expo/testing"
+export const useNarrowTesting = () => {
+  const handle = useTesting()
+  // @ts-expect-error Testing does not expose the runtime's mutable registry.
+  handle.runtime.register
+  // @ts-expect-error Testing does not expose runtime lifecycle ownership.
+  handle.runtime.close
+}
+
+import { productionServices } from "@reflex/example-inventory"
+
+import type { developmentBridge as neutralBridge } from "@reflex/live/dev"
+import { developmentBridge as expoBridge } from "@reflex/expo/dev"
+import { developmentBridge as viteBridge } from "@reflex/live/vite"
+const bridges: readonly (typeof neutralBridge)[] = [expoBridge, viteBridge]
+void bridges

@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import { explore } from "@reflex/test"
 import app from "../src/scenarios.ts"
 
-const knownInputs = {
+const inputs = {
   InventoryList: { OpenProduct: [{ productId: "product-123" }, { productId: "product-456" }] },
 }
 
@@ -11,7 +11,7 @@ test("exploration keeps quantities nonnegative", async () => {
     runCount: 15,
     steps: 25,
     seed: 7,
-    inputs: knownInputs,
+    inputs,
     invariants: {
       InventoryDetail: (state) =>
         state._tag === "editing" || state._tag === "saving"
@@ -33,7 +33,7 @@ test("the slow-network scenario explores under virtual time", async () => {
     runCount: 5,
     steps: 15,
     seed: 3,
-    inputs: knownInputs,
+    inputs,
   })
   expect(result.failure).toBeUndefined()
 }, 30_000)

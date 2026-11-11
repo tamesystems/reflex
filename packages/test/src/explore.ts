@@ -11,8 +11,7 @@ import {
   type ConsumerDefinition,
   type ScenarioName,
 } from "@reflex/runtime/internal"
-import type { JourneyApp, JourneyClientFor, Scenarios } from "./app-types.ts"
-import { bindAppJourney, type AuthorApp, type AnySession } from "./app-journey.ts"
+import type { JourneyApp } from "./app-types.ts"
 import type { InferState } from "./journey-client.ts"
 import { createTestApp, type TestApp } from "./test-app.ts"
 
@@ -104,11 +103,7 @@ export type ExploreOptions<H, K extends ScenarioName<H> = ScenarioName<H>> = Omi
 > & {
   readonly scenario?: K
   readonly inputs?: ExplorationInputs<H>
-  readonly invariants?:
-    | ExplorationInvariants<H>
-    | (H extends JourneyApp & { readonly services: unknown }
-        ? (session: JourneyClientFor<H, Extract<K, Scenarios<H>>>) => Promise<void>
-        : (snapshot: InspectResult) => string | undefined)
+  readonly invariants?: ExplorationInvariants<H>
 }
 export const explore = async <
   H extends AppHost | JourneyApp,
@@ -120,7 +115,7 @@ export const explore = async <
   input: ExploreOptions<NoInfer<H>, K> = {},
 ): Promise<ExploreResult> => {
   const host = (APP_HOST_ADAPTER in app ? app[APP_HOST_ADAPTER] : app) as AppHost
-  const options = walkOptions(app, host, input)
+  const options = walkOptions(app, input)
   const runCount = requireCount("runCount", options.runCount ?? RUN_COUNT_DEFAULT, RUN_COUNT_MAX)
   const stepCount = requireCount("steps", options.steps ?? STEP_COUNT_DEFAULT, STEP_COUNT_MAX)
   const firstSeed = requireSeed(options.seed ?? SEED_DEFAULT, runCount)
@@ -149,7 +144,6 @@ export const explore = async <
 
 const walkOptions = <H extends AppHost | JourneyApp, K extends ScenarioName<H>>(
   app: H,
-  host: AppHost,
   input: ExploreOptions<NoInfer<H>, K>,
 ): WalkOptions => {
   const options: WalkOptions = {
@@ -173,26 +167,7 @@ const walkOptions = <H extends AppHost | JourneyApp, K extends ScenarioName<H>>(
         ),
       }
     }),
-    journeyInvariant: async (session) => {
-      if ("services" in app && typeof input.invariants === "function") {
-        const journey = bindAppJourney(
-          app as AuthorApp,
-          session as unknown as AnySession,
-          input.scenario ?? host.defaultScenario,
-        )
-        await (input.invariants as (session: unknown) => Promise<void>)(journey)
-      }
-    },
     invariant: (snapshot) => {
-      const failure =
-        "services" in app || typeof input.invariants !== "function"
-          ? undefined
-          : (input.invariants as ((snapshot: InspectResult) => string | undefined) | undefined)?.(
-              snapshot,
-            )
-      if (failure !== undefined) {
-        return failure
-      }
       const definitions = ("nodes" in app ? app.nodes : {}) as Record<string, ConsumerDefinition>
       for (const node of snapshot.tree ?? (snapshot.node === null ? [] : [snapshot.node])) {
         const entry = Object.entries(definitions).find(

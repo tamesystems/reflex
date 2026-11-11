@@ -196,7 +196,7 @@ test("Duration.Input values drive virtual scenarios", async () => {
   }
 })
 
-test("keyed exploration checks ambient services and accepts the compiled journey invariant", async () => {
+test("keyed exploration checks ambient services before and after actions", async () => {
   const result = await explore(counterApp, {
     steps: 3,
     runCount: 1,
@@ -208,8 +208,11 @@ test("keyed exploration checks ambient services and accepts the compiled journey
     steps: 1,
     runCount: 1,
     inputs: { Counter: { Set: [2] } },
-    invariants: async (session) => {
-      expect(await (await session.node(Counter)).state()).toHaveProperty("count")
+    invariants: {
+      Counter: (state) => {
+        expect(state).toHaveProperty("count")
+        return undefined
+      },
     },
   })
   expect(checked.failure).toBeUndefined()

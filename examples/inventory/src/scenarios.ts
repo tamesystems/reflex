@@ -23,7 +23,10 @@ export const testScenarios = {
     layer: services(seedProducts, "1 second"),
     virtualTime: true,
   },
-} as const
+} satisfies Record<
+  string,
+  { layer: unknown; virtualTime?: boolean; description?: string; fixtures?: readonly unknown[] }
+>
 
 export default app.withScenarios(testScenarios, {
   defaultScenario: "inventory-with-products",

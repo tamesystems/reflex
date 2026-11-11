@@ -13,17 +13,21 @@ export interface App {
 }
 export type Definitions<D> = D extends { readonly name: string }
   ? D
-  : D extends readonly unknown[]
-    ? D[number]
-    : D[keyof D]
+  : D extends readonly (infer Item extends { readonly name: string })[]
+    ? Item
+    : D extends Readonly<Record<string, { readonly name: string }>>
+      ? D[keyof D]
+      : never
 export type Screens<A extends App> = Definitions<A["screens"]>
 export type Services<A extends App> = A extends { services: infer V }
   ? Definitions<V>
   : A extends { nodes: infer N }
     ? Exclude<Definitions<N>, Screens<A>>
     : never
-export type Table<D> = { [Item in Extract<D, { readonly name: string }> as Item["name"]]: Item }
-export type Selected<T, C extends { readonly name: string }> = T[C["name"] & keyof T]
+export type Table<D extends { readonly name: string }> = { [Item in D as Item["name"]]: Item }
+export type Selected<T, C extends { readonly name: string }> = C["name"] extends keyof T
+  ? T[C["name"]]
+  : never
 type Meta<D> = D[keyof D & symbol]
 export type Contract<D> = D extends unknown
   ? Extract<Meta<D>, { contract: unknown }> extends infer M
@@ -105,11 +109,41 @@ export type NodeView<D> =
       readonly error: Error
       retry(): Promise<void>
     }
+type Intersect<U> = (U extends unknown ? (value: U) => void : never) extends (
+  value: infer I,
+) => void
+  ? I
+  : never
+type ScreenHooks<D, Suspense extends boolean> = Intersect<
+  D extends unknown
+    ? (contract: Contract<D>) => Suspense extends true ? ReadyNodeView<D> : NodeView<D>
+    : never
+>
+type Features<D> = Intersect<
+  D extends unknown ? (contract: Contract<D>) => FeatureBinding<D> : never
+>
+type ServiceHooks<D, Suspense extends boolean> = Intersect<
+  D extends unknown
+    ? (definition: D) => Suspense extends true ? ReadyNodeView<D> : NodeView<D>
+    : never
+>
+
+// Precompute concrete overloads once. The generic fallback preserves union contracts
+// and diagnostics without expanding the full definition table for ordinary calls.
 export type Hook<A extends App, T, Suspense extends boolean> = <
   const C extends { readonly name: string },
 >(
   contract: C & NoInfer<Member<C, Contract<Selected<T, C>>, A["name"]>>,
 ) => Suspense extends true ? ReadyNodeView<Selected<T, C>> : NodeView<Selected<T, C>>
+type ServiceHookFallback<A extends App, D, Suspense extends boolean> = <
+  C extends { readonly name: string },
+>(
+  definition: C &
+    NoInfer<
+      Member<C, Selected<Table<Extract<D, { readonly name: string }>>, C>, A["name"], "service">
+    >,
+) => Suspense extends true ? ReadyNodeView<C> : NodeView<C>
+
 export type Scenario<A> = A extends { scenarioNames: readonly (infer N extends string)[] }
   ? N
   : string
@@ -129,22 +163,19 @@ export interface ReflexBinding<A extends App, T = Table<Screens<A>>> {
   Provider: ComponentType<{
     app?: Pick<A, "name" | "screens" | "services">
     scenario?: Scenario<A>
-    bridge?: "development" | Bridge | undefined
+    bridge?: Bridge | undefined
     fallback?: ReactNode
     onBackgroundError?: (error: unknown) => void
     children?: ReactNode
   }>
-  useScreen: Hook<A, T, true>
-  useScreenStatus: Hook<A, T, false>
-  useService<D extends { readonly name: string }>(
-    definition: D & NoInfer<Member<D, Selected<Table<Services<A>>, D>, A["name"], "service">>,
-  ): ReadyNodeView<D>
-  useServiceStatus<D extends { readonly name: string }>(
-    definition: D & NoInfer<Member<D, Selected<Table<Services<A>>, D>, A["name"], "service">>,
-  ): NodeView<D>
-  from<const C extends { readonly name: string }>(
-    contract: C & NoInfer<Member<C, Contract<Selected<T, C>>, A["name"]>>,
-  ): FeatureBinding<Selected<T, C>>
+  useScreen: ScreenHooks<Screens<A>, true> & Hook<A, T, true>
+  useScreenStatus: ScreenHooks<Screens<A>, false> & Hook<A, T, false>
+  useService: ServiceHooks<Services<A>, true> & ServiceHookFallback<A, Services<A>, true>
+  useServiceStatus: ServiceHooks<Services<A>, false> & ServiceHookFallback<A, Services<A>, false>
+  from: Features<Screens<A>> &
+    (<const C extends { readonly name: string }>(
+      contract: C & NoInfer<Member<C, Contract<Selected<T, C>>, A["name"]>>,
+    ) => FeatureBinding<Selected<T, C>>)
   useSession(): SessionControls<A>
 }
 

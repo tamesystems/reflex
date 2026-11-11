@@ -42,6 +42,7 @@ type LinkProps<C> = C extends unknown
       Omit<React.ComponentProps<typeof HostLink>, "href" | "to" | "params">
   : never
 export interface ExpoBinding<A extends App> extends ReflexBinding<A> {
+  withApp<B extends Pick<A, "name" | "screens" | "services"> & App>(app: B): ExpoBinding<B>
   href(...args: Args<Contract<Screens<A>>>): Href
   Link(props: LinkProps<Contract<Screens<A>>>): React.ReactElement
 }
@@ -116,9 +117,10 @@ function createRoutes(app: App, registration: unknown) {
   const resolve = (contract: { name: string }) => {
     const definition = definitions.find((d) => d.name === contract.name)
     if (
-      definition?.["~reflex"].contract !== undefined &&
-      definition["~reflex"].contract !== contract &&
-      "~reflex" in contract
+      definition?.["~reflex"].contract !== contract &&
+      "~reflex" in contract &&
+      (contract as typeof definition)?.["~reflex"].contract === definition?.["~reflex"].contract &&
+      definition?.["~reflex"].contract !== undefined
     ) {
       throw new Error(
         `Pass the contract \`${contract.name}\` from screens.ts, not its implementation`,
